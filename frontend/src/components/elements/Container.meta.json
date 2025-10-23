@@ -1,0 +1,12 @@
+{
+  "name": "Container",
+  "type": "container",
+  "category": "layout",
+  "icon": "⬛",
+  "editableProps": {
+    "style": {
+      "backgroundColor": "#1A1A1D",
+      "borderRadius": "12px"
+    }
+  }
+}

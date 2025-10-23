@@ -1,0 +1,14 @@
+{
+  "name": "AppBar",
+  "type": "appbar",
+  "category": "layout",
+  "icon": "🧭",
+  "editableProps": {
+    "label": "App Header",
+    "style": {
+      "backgroundColor": "#000000",
+      "color": "#FFFFFF",
+      "fontSize": "18px"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "ControlButton",
+  "type": "button",
+  "category": "controls",
+  "icon": "🔘",
+  "editableProps": {
+    "label": "Button",
+    "style": {
+      "backgroundColor": "#7C3AED",
+      "color": "#FFFFFF",
+      "borderRadius": "8px",
+      "padding": "16px"
+    }
+  }
+}

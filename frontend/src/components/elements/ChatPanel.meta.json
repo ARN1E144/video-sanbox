@@ -1,0 +1,12 @@
+{
+  "name": "ChatPanel",
+  "type": "chatpanel",
+  "category": "media",
+  "icon": "💬",
+  "editableProps": {
+    "style": {
+      "backgroundColor": "#1A1A1D",
+      "color": "#FFFFFF"
+    }
+  }
+}

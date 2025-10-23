@@ -1,0 +1,13 @@
+{
+  "name": "VideoFeed",
+  "type": "videofeed",
+  "category": "media",
+  "icon": "🎥",
+  "editableProps": {
+    "label": "Video Feed",
+    "style": {
+      "backgroundColor": "#000000",
+      "borderRadius": "12px"
+    }
+  }
+}
