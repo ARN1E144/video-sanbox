@@ -106,6 +106,32 @@ export default function ${name}({ label, style }) {
 }
 `,
 
+  textbox: (name) => `import React from "react";
+import { useTheme } from "../../context/ThemeContext";
+
+export default function ${name}({ label, style }) {
+  const theme = useTheme();
+  return (
+    <input
+      type="text"
+      placeholder={label || "Enter text..."}
+      className="w-full h-full px-3 py-2 text-sm outline-none"
+      style={{
+        backgroundColor: style?.backgroundColor || theme.colors.surface,
+        color: style?.color || theme.colors.textPrimary,
+        borderRadius: style?.borderRadius || theme.radius.md,
+        fontFamily: theme.typography.fontFamily,
+      }}
+      onInput={(e) => {
+        // 🪄 Later this will be wired to Inspector Actions
+        console.log("✏️ TextBox input:", e.target.value);
+      }}
+    />
+  );
+}
+`,
+
+
   button: (name) => `import React from "react";
 import { useTheme } from "../../context/ThemeContext";
 
@@ -221,6 +247,18 @@ const defaultMeta = {
       style: { backgroundColor: "#000000", color: "#FFFFFF", fontSize: "18px" },
     },
   },
+  textbox: {
+    category: "text",
+    icon: "⌨️",
+    editableProps: {
+      label: "Enter text...",
+      style: {
+        backgroundColor: "#2C2C2E",
+        color: "#FFFFFF",
+        borderRadius: "8px",
+      },
+    },
+  },
   default: {
     category: "misc",
     icon: "🧩",
@@ -239,6 +277,7 @@ const coreElements = [
   { name: "ControlButton", type: "button" },
   { name: "Container", type: "container" },
   { name: "AppBar", type: "appbar" },
+  { name: "TextBox", type: "textbox" },
 ];
 
 // 📁 Ensure directory exists

@@ -1,0 +1,13 @@
+{
+  "name": "Text",
+  "type": "text",
+  "category": "text",
+  "icon": "🔤",
+  "editableProps": {
+    "label": "Text",
+    "style": {
+      "color": "#FFFFFF",
+      "fontSize": "16px"
+    }
+  }
+}
