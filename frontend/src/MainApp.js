@@ -1,212 +1,144 @@
-import { useState } from "react";
-import PromptForm from "./components/PromptForm";
-import LiveEditorWrapper from "./components/LiveEditor";
-import ProjectSidebar from "./components/ProjectSidebar";
-import Canvas from "./components/Canvas"; // 👈 now your main builder area
-import useProject from "./hooks/useProject";
+import React, { useState } from "react";
+import Canvas from "./components/Canvas";
 import { usePreviewMode } from "./context/PreviewContext";
+import { useProjectContext } from "./context/ProjectContext";
+import { useCanvasState } from "./context/CanvasContext";
+import NewProjectModal from "./components/NewProjectModal";
+import ProjectSidebar from "./components/ProjectSidebar";
+import { v4 as uuid } from "uuid";
 
-
-import mock_liveStream from "./mockTemplates/mock_liveStream";
-import mock_videoCall from "./mockTemplates/mock_videoCall";
-import mock_tiktokFeed from "./mockTemplates/mock_tiktokFeed";
-import mock_classroom from "./mockTemplates/mock_classroom";
-
-function MainApp() {
-  const [editorCode, setEditorCode] = useState("");
-  const [templateName, setTemplateName] = useState("");
-  const [showEditor, setShowEditor] = useState(false);
-  const [activeProjectId, setActiveProjectId] = useState(null);
+export default function MainApp() {
   const { isPreviewMode, setIsPreviewMode } = usePreviewMode();
+  const {
+    projectType,
+    projectName,
+    setProjectName,
+    saveProject,
+    setActiveRole,
+  } = useProjectContext();
+  const { elements } = useCanvasState();
+  const [viewMode, setViewMode] = useState("host"); // host | client | split
 
-
-  const { projects, saveProject, loadProject, deleteProject } = useProject();
-
-  const handleTemplateGenerated = (prompt) => {
-    const lower = prompt.toLowerCase();
-    let codeStr = "";
-    let name = "";
-
-    if (lower.includes("stream")) {
-      codeStr = mock_liveStream;
-      name = "Mock Live Stream";
-    } else if (lower.includes("tiktok")) {
-      codeStr = mock_tiktokFeed;
-      name = "Mock TikTok Feed";
-    } else if (lower.includes("classroom")) {
-      codeStr = mock_classroom;
-      name = "Mock Classroom";
-    } else if (lower.includes("call")) {
-      codeStr = mock_videoCall;
-      name = "Mock Video Call";
-    } else {
-      codeStr = "// ⚠️ No template matches this prompt";
-      name = "Untitled";
-    }
-
-    setEditorCode(codeStr);
-    setTemplateName(name);
-  };
-
+  // 💾 Handle Save
   const handleSave = () => {
-    if (!editorCode) return alert("No code to save.");
-    const name = prompt("Enter a project name:", templateName || "New Project");
-    if (!name) return;
-    saveProject(name, templateName, editorCode);
-    alert(`✅ Project "${name}" saved!`);
+    let name = projectName;
+    if (!name) {
+      const userName = window.prompt(
+        "Enter a name for this project:",
+        `Untitled-${uuid().slice(0, 4)}`
+      );
+      if (!userName) return;
+      name = userName.trim();
+      setProjectName(name);
+    }
+
+    saveProject({
+      name,
+      type: projectType || "client-host",
+      elements,
+    });
+
+    alert(`✅ Project "${name}" saved successfully!`);
   };
 
-  const handleLoad = (id) => {
-    const proj = loadProject(id);
-    if (proj) {
-      setEditorCode(proj.code);
-      setTemplateName(proj.template);
-      setActiveProjectId(id);
-    }
-  };
+  if (!projectType) return <NewProjectModal />;
+
+  const isClientHost = projectType === "client-host";
 
   return (
-    <div className="flex flex-col h-screen bg-cream-50 text-dark">
-      {/* --- Header --- */}
-      <header className="flex items-center justify-between px-6 py-3 bg-panel text-text-primary shadow-soft border-b border-border">
-        {/* Brand */}
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold">🎥 So Real Video Studio</span>
-        </div>
-
-        {/* Mode toggle */}
-        <div className="flex items-center gap-2">
-          <button
-          className={`px-3 py-1 rounded-md text-sm font-medium transition ${
-            !isPreviewMode
-              ? "bg-accent text-white"
-              : "bg-surface border border-border text-text-primary"
-          }`}
-          onClick={() => setIsPreviewMode(false)}
-        >
-          Editor
-        </button>
-        <button
-          className={`px-3 py-1 rounded-md text-sm font-medium transition ${
-            isPreviewMode
-              ? "bg-accent text-white"
-              : "bg-surface border border-border text-text-primary"
-          }`}
-          onClick={() => setIsPreviewMode(true)}
-        >
-          Preview
-        </button>
-
-        </div>
-
-        {/* Action buttons */}
+    <div className="w-full h-screen flex flex-col bg-background text-text-primary">
+      {/* 🧭 Toolbar */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-panel">
         <div className="flex items-center gap-3">
-          {/* Save */}
+          <h1 className="text-sm font-semibold">
+            🎬 So Real Video Studio {projectName && `— ${projectName}`}
+          </h1>
+
+          {/* 🪄 Toggle Editor / Preview */}
+          <button
+            onClick={() => setIsPreviewMode((prev) => !prev)}
+            className={`px-3 py-1 rounded text-white transition ${
+              isPreviewMode
+                ? "bg-green-600 hover:bg-green-500"
+                : "bg-gray-700 hover:bg-gray-600"
+            }`}
+          >
+            {isPreviewMode ? "Preview Mode ✅" : "Editor Mode ✍️"}
+          </button>
+
+          {/* 🧭 Host/Client view selector */}
+          {isClientHost && (
+            <select
+              value={viewMode}
+              onChange={(e) => {
+                setViewMode(e.target.value);
+                setActiveRole(e.target.value);
+              }}
+              className="bg-panel text-text-primary border border-border rounded px-2 py-1"
+            >
+              <option value="host">Host Only</option>
+              <option value="client">Client Only</option>
+              <option value="split">Host / Client Split</option>
+            </select>
+          )}
+        </div>
+
+        {/* 💾 Save */}
+        <div className="flex items-center gap-2">
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-accent hover:bg-accent-light text-white rounded-lg text-sm font-medium transition"
+            disabled={elements.length === 0}
+            className={`px-2 py-1 rounded text-sm text-white transition ${
+              elements.length === 0
+                ? "bg-gray-500 cursor-not-allowed"
+                : "bg-gray-700 hover:bg-gray-600"
+            }`}
           >
             💾 Save
           </button>
-
-          {/* Export */}
-          <button
-            onClick={() => {
-              const current = projects.find(
-                (p) => p.code === editorCode && p.template === templateName
-              );
-              if (!current)
-                return alert("Please save the project before exporting.");
-              import("./utils/exportProject").then(({ exportProject }) => {
-                exportProject(current);
-              });
-            }}
-            className="px-4 py-2 bg-accent hover:bg-accent-light text-white rounded-lg text-sm font-medium transition"
-          >
-            ⬇️ Export
-          </button>
-
-          {/* Show Editor Toggle */}
-          <button
-            onClick={() => setShowEditor(!showEditor)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition border
-              ${
-                showEditor
-                  ? "border-accent text-accent bg-surface hover:bg-border"
-                  : "border-border text-text-primary bg-surface hover:bg-border"
-              }`}
-          >
-            {showEditor ? "Hide Code" : "Show Code"}
-          </button>
         </div>
-      </header>
-
-      {/* --- Main Layout --- */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-       {!isPreviewMode && ( 
-        <aside className="w-64 bg-cream-100 border-r border-sorrel-100 overflow-y-auto">
-          <ProjectSidebar
-            projects={projects}
-            onLoad={handleLoad}
-            onDelete={deleteProject}
-            activeProjectId={activeProjectId}
-          />
-        </aside>
-       )}
-        {/* Main content */}
-        <main className="flex-1 flex flex-col p-6 overflow-auto">
-          <PromptForm onTemplateGenerated={handleTemplateGenerated} />
-
-          {/* --- EDITOR MODE --- */}
-          {!isPreviewMode && (
-  <>
-    <div className="mt-6 flex justify-center">
-      <Canvas />
-    </div>
-    {showEditor && editorCode && (
-      <div className="mt-6 border border-sorrel-200 rounded-xl overflow-hidden transition-all duration-500">
-        <LiveEditorWrapper key={editorCode} code={editorCode} />
       </div>
-    )}
-  </>
-)}
 
-{isPreviewMode && editorCode && (
-  <div className="mt-6 grid grid-cols-2 gap-4 h-[60vh]">
-    {/* Host Preview */}
-    <div className="border border-sorrel-200 rounded-xl shadow-inner overflow-hidden">
-      <LiveEditorWrapper
-        key={`${editorCode}-host`}
-        code={editorCode}
-        previewOnly
-      />
-    </div>
+      {/* 🖼 Layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {!isPreviewMode && <ProjectSidebar />}
 
-    {/* Client Preview */}
-    <div className="border border-sorrel-200 rounded-xl shadow-inner overflow-hidden">
-      <LiveEditorWrapper
-        key={`${editorCode}-client`}
-        code={editorCode}
-        previewOnly
-      />
-    </div>
-  </div>
-)}
+        <div className="flex flex-1 overflow-hidden p-4 gap-4">
+          {/* Single-user project: normal canvas */}
+          {!isClientHost && <Canvas role={null} />}
 
+          {/* Client-Host project: host/client/split */}
+          {isClientHost && viewMode === "host" && (
+            <div className="flex-1 border border-border rounded-lg overflow-hidden">
+              <h3 className="bg-panel text-xs px-2 py-1 border-b border-border">🧑 Host View</h3>
+              <Canvas role="host" />
+            </div>
+          )}
+          {isClientHost && viewMode === "client" && (
+            <div className="flex-1 border border-border rounded-lg overflow-hidden">
+              <h3 className="bg-panel text-xs px-2 py-1 border-b border-border">🙋 Client View</h3>
+              <Canvas role="client" />
+            </div>
+          )}
+          {isClientHost && viewMode === "split" && (
+  <>
+          <div className="flex-1 border border-border rounded-lg overflow-hidden">
+            <h3 className="bg-panel text-xs px-2 py-1 border-b border-border">
+              🧑 Split View — Host
+            </h3>
+            <Canvas role="host" />
+          </div>
+          <div className="flex-1 border border-border rounded-lg overflow-hidden">
+            <h3 className="bg-panel text-xs px-2 py-1 border-b border-border">
+              🙋 Split View — Client
+            </h3>
+            <Canvas role="client" />
+          </div>
+        </>
+      )}
 
-        {/* --- PREVIEW MODE --- */}
-{isPreviewMode && (
-  <div className="mt-6 flex justify-center">
-    <Canvas />
-  </div>
-)}
-
-
-        </main>
+        </div>
       </div>
     </div>
   );
 }
-
-export default MainApp;

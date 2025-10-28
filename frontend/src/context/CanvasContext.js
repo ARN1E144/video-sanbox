@@ -15,9 +15,15 @@ export function CanvasProvider({ children }) {
     },
   ]);
 
+  // 🧱 Add Element
+  const addElement = (newEl) => {
+    setElements((prev) => [...prev, newEl]);
+  };
+
+  // ✏️ Update Element
   const updateElement = (id, updates) => {
-    setElements(prev =>
-      prev.map(el =>
+    setElements((prev) =>
+      prev.map((el) =>
         el.id === id
           ? { ...el, ...updates, props: { ...el.props, ...updates.props } }
           : el
@@ -25,17 +31,36 @@ export function CanvasProvider({ children }) {
     );
   };
 
+  // 🗑 Remove Element
   const removeElement = (id) => {
-    setElements(prev => prev.filter(el => el.id !== id));
+    setElements((prev) => prev.filter((el) => el.id !== id));
   };
 
-  const addElement = (newEl) => {
-    setElements(prev => [...prev, newEl]);
+  // 🧼 Clear Canvas
+  const clearCanvas = () => {
+    setElements([]);
+  };
+
+  // 🪄 Restore Elements from Project
+  const loadElements = (savedElements) => {
+    if (Array.isArray(savedElements)) {
+      setElements(savedElements);
+    } else {
+      console.warn("⚠️ Tried to load invalid elements:", savedElements);
+    }
   };
 
   return (
     <CanvasContext.Provider
-      value={{ elements, setElements, updateElement, removeElement, addElement }}
+      value={{
+        elements,
+        setElements,
+        addElement,
+        updateElement,
+        removeElement,
+        clearCanvas,
+        loadElements, // ✅ now available to restore saved projects
+      }}
     >
       {children}
     </CanvasContext.Provider>
