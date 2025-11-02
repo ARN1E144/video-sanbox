@@ -6,6 +6,7 @@ import { useCanvasState } from "./context/CanvasContext";
 import NewProjectModal from "./components/NewProjectModal";
 import ProjectSidebar from "./components/ProjectSidebar";
 import { v4 as uuid } from "uuid";
+import { useEffect } from "react";
 
 export default function MainApp() {
   const { isPreviewMode, setIsPreviewMode } = usePreviewMode();
@@ -18,6 +19,16 @@ export default function MainApp() {
   } = useProjectContext();
   const { elements } = useCanvasState();
   const [viewMode, setViewMode] = useState("host"); // host | client | split
+
+  // ✅ Prevent accidental tab closing
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = ""; // shows native confirmation dialog
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
 
   // 💾 Handle Save
   const handleSave = () => {
