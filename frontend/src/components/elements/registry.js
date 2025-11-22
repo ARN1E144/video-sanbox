@@ -1,21 +1,23 @@
-import AppBar from "./AppBar.js";
-import ChatPanel from "./ChatPanel.js";
-import Container from "./Container.js";
-import ControlButton from "./ControlButton.js";
-import MicButton from "./MicButton.js";
-import Text from "./Text.js";
-import TextBox from "./TextBox.js";
-import TextLabel from "./TextLabel.js";
-import VideoFeed from "./VideoFeed.js";
+import VideoFeed from './VideoFeed';
+import ChatPanel from './ChatPanel';
+import TextBox from './TextBox';
+import MicButton from './MicButton';
+import ControlButton from './ControlButton';
+import AppBar from './AppBar';
+import Container from './Container';
+import Text from './Text';
 
-export const COMPONENTS = {
-  AppBar,
-  ChatPanel,
-  Container,
-  ControlButton,
-  MicButton,
-  Text,
-  TextBox,
-  TextLabel,
-  VideoFeed,
+
+const registry = {
+VideoFeed,
+ChatPanel,
+TextBox,
+MicButton,
+ControlButton,
+AppBar,
+Container,
+Text,
 };
+
+
+export default registry;

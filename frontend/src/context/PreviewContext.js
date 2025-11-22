@@ -5,16 +5,16 @@ const PreviewContext = createContext();
 export const PreviewProvider = ({ children }) => {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
 
-  // 👇 NEW: previewMode lets you switch between 'single' and 'host-client'
-  const [previewMode, setPreviewMode] = useState("single");
+  // Possible values: 'client', 'host', 'split'
+  const [previewView, setPreviewView] = useState("client");
 
   return (
     <PreviewContext.Provider
       value={{
         isPreviewMode,
         setIsPreviewMode,
-        previewMode,
-        setPreviewMode,
+        previewView,
+        setPreviewView,
       }}
     >
       {children}

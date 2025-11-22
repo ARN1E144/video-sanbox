@@ -1,42 +1,22 @@
-import React, { useState } from "react";
-import MockLiveStream from "../mockTemplates/mock_liveStream";
-import MockVideoCall from "../mockTemplates/mock_videoCall";
-import MockTikTokFeed from "../mockTemplates/mock_tiktokFeed";
-import MockClassroom from "../mockTemplates/mock_classroom";
+import React, { useMemo } from 'react';
+import RenderFromSchema from '../engine/renderFromSchema';
+import { validateSchema } from '../utils/validateSchema';
 
-const templates = {
-  live: <MockLiveStream />,
-  call: <MockVideoCall />,
-  tiktok: <MockTikTokFeed />,
-  classroom: <MockClassroom />,
-};
 
-export default function TemplatePreview() {
-  const [selected, setSelected] = useState("live");
-
-  return (
-    <div style={{ padding: 20 }}>
-      <h2>🎬 Select Mock Template</h2>
-      <select
-        onChange={(e) => setSelected(e.target.value)}
-        value={selected}
-        style={{ marginBottom: 20 }}
-      >
-        <option value="live">Live Stream</option>
-        <option value="call">Video Call</option>
-        <option value="tiktok">TikTok Feed</option>
-        <option value="classroom">Classroom</option>
-      </select>
-      <div
-        style={{
-          border: "1px solid #ccc",
-          borderRadius: 10,
-          padding: 20,
-          minHeight: 400,
-        }}
-      >
-        {templates[selected]}
-      </div>
-    </div>
-  );
+export default function TemplatePreview({ schema }) {
+const { ok, issues } = useMemo(() => validateSchema(schema), [schema]);
+if (!schema) return <div style={{ padding: 12 }}>No template selected yet.</div>;
+if (!ok) {
+return (
+<div style={{ color: '#b00020', padding: 12 }}>
+<div><strong>Schema validation failed</strong></div>
+<ul>{issues.map((i, idx) => <li key={idx}>{i}</li>)}</ul>
+</div>
+);
+}
+return (
+<div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
+<RenderFromSchema schema={schema} />
+</div>
+);
 }

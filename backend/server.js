@@ -6,10 +6,11 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import aiTemplateRoutes from "./routes/aiTemplates.js";
 import agoraRoutes from "./routes/agora.js";
+import aiRoutes from "./routes/aiRoutes.js";
 
 
 
-dotenv.config();
+
 const app = express();
 
 app.use(cors());
@@ -17,7 +18,7 @@ app.use(bodyParser.json());
 
 // Routes
 app.use("/api/agora", agoraRoutes);
-app.use("/api/ai", aiTemplateRoutes);
+app.use("/api/ai", aiRoutes);
 
 app.get("/", (req, res) => {
   res.send("Video Sandbox API running...");

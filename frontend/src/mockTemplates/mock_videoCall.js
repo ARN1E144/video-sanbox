@@ -1,34 +1,29 @@
-const mock_videoCall = `
-() => {
-  const [inCall, setInCall] = React.useState(false);
+const videoCall = {
+name: 'Video Call',
+tree: {
+type: 'App',
+children: [
+{ type: 'AppBar', props: { title: 'Video Call', actions: ['EndCall'] } },
+{
+type: 'Container',
+props: { layout: 'grid', align: 'center', justify: 'center' },
+children: [
+{ type: 'VideoFeed', props: { autoplay: true, muted: true, controls: true } },
+{ type: 'ChatPanel', props: { room: 'default', showAvatars: true } },
+],
+},
+{
+type: 'Container',
+props: { layout: 'flex', align: 'center', justify: 'space-between' },
+children: [
+{ type: 'MicButton', props: { state: 'on' } },
+{ type: 'TextBox', props: { placeholder: 'Say hello…' } },
+{ type: 'ControlButton', props: { label: 'End', action: 'EndCall', target: 'AppBar' } },
+],
+},
+],
+},
+};
 
-  return (
-    <div style={{ textAlign: "center", padding: 40 }}>
-      <h1>📞 Mock 1:1 Video Call</h1>
-      <p>Simulates a peer-to-peer video call interface.</p>
-      {!inCall ? (
-        <button
-          onClick={() => setInCall(true)}
-          style={{ padding: 10, fontSize: 16 }}
-        >
-          Start Call
-        </button>
-      ) : (
-        <div>
-          <p>Connected to peer...</p>
-          <video
-            width="300"
-            autoPlay
-            muted
-            loop
-            src="https://www.w3schools.com/html/mov_bbb.mp4"
-          />
-          <p>Remote stream simulated</p>
-        </div>
-      )}
-    </div>
-  );
-}
-`;
 
-export default mock_videoCall;
+export default videoCall;

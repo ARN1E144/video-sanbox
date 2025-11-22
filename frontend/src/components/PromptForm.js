@@ -1,38 +1,61 @@
-import { useState } from "react";
+import React, { useState, useContext } from 'react';
+import { generateTemplateSchema, refineTemplateSchema } from '../engine/templateEngine';
+import { ProjectContext } from '../context/ProjectContext';
 
-export default function PromptForm({ onTemplateGenerated }) {
-  const [prompt, setPrompt] = useState("");
+export default function PromptForm() {
+  const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
+  const { projectSchema, setProjectSchema } = useContext(ProjectContext);
 
-  const handleSubmit = async (e) => {
+  async function onGenerate(e) {
     e.preventDefault();
-    if (!prompt) return;
-
     setLoading(true);
-    try {
-      onTemplateGenerated(prompt);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to generate template.");
-    }
+    const schema = await generateTemplateSchema(prompt);
+    setProjectSchema(schema);
     setLoading(false);
-  };
+  }
+
+  async function onRefine(e) {
+    e.preventDefault();
+    if (!projectSchema) return alert('Generate a base app first!');
+    setLoading(true);
+    const updated = await refineTemplateSchema(projectSchema, prompt);
+    setProjectSchema(updated);
+    setLoading(false);
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="mb-6 flex w-full gap-3">
+    <form onSubmit={onGenerate} style={{ display: 'flex', gap: 8 }}>
       <input
-        type="text"
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
-        placeholder="Describe your app idea..."
-        className="flex-1 bg-panel text-text-primary placeholder-text-muted border border-border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+        placeholder="Describe or modify your app..."
+        style={{
+          flex: 1,
+          padding: 8,
+          border: '1px solid #444',
+          borderRadius: 6,
+          backgroundColor: '#1e1e1e',
+          color: '#fff',
+        }}
       />
+      <button type="submit" disabled={loading} style={{ padding: '8px 12px' }}>
+        {loading ? '...' : 'Generate'}
+      </button>
       <button
-        type="submit"
+        type="button"
         disabled={loading}
-        className="px-5 py-2 rounded-lg bg-accent hover:bg-accent-light text-white font-medium transition disabled:opacity-60"
+        onClick={onRefine}
+        style={{
+          padding: '8px 12px',
+          background: '#444',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 6,
+          cursor: 'pointer',
+        }}
       >
-        {loading ? "Generating..." : "Generate"}
+        Refine
       </button>
     </form>
   );

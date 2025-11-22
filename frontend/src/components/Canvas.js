@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Rnd } from "react-rnd";
 import { v4 as uuid } from "uuid";
-import { COMPONENTS } from "../components/elements/registry";
+import COMPONENTS from "../components/elements/registry";
 import InspectorPanel from "./InspectorPanel";
 import Tabs from "./Tabs";
 import { usePreviewMode } from "../context/PreviewContext";
@@ -37,6 +37,10 @@ export default function Canvas({ role }) {
   const canvasRef = useRef(null);
   const inspectorRef = useRef(null);
   const containerRef = useRef(null);
+
+  // manual drag state for undocked inspector
+  const [isDraggingInspector, setIsDraggingInspector] = useState(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
 
   const deviceSize = DEVICE_SIZES[device];
   const currentRoleKey = role || "null";
@@ -91,6 +95,56 @@ export default function Canvas({ role }) {
   };
 
   const toggleDock = () => setInspectorDocked((prev) => !prev);
+
+  /* ------------------------------------------------------------
+     🧭 Manual drag for undocked inspector
+  ------------------------------------------------------------ */
+  const handleInspectorDragStart = (e) => {
+    if (inspectorDocked) return;
+    if (!containerRef.current) return;
+
+    setIsDraggingInspector(true);
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    dragOffsetRef.current = {
+      x: e.clientX - containerRect.left - inspectorPosition.x,
+      y: e.clientY - containerRect.top - inspectorPosition.y,
+    };
+  };
+
+  useEffect(() => {
+    if (!isDraggingInspector) return;
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (!containerRect) return;
+
+    const handleMove = (e) => {
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+
+      const newX = mouseX - dragOffsetRef.current.x;
+      const newY = mouseY - dragOffsetRef.current.y;
+
+      const maxX = containerRect.width - 260; // min inspector width
+      const maxY = containerRect.height - 100; // leave a bit of bottom space
+
+      setInspectorPosition({
+        x: Math.max(0, Math.min(newX, maxX)),
+        y: Math.max(0, Math.min(newY, maxY)),
+      });
+    };
+
+    const handleUp = () => setIsDraggingInspector(false);
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    window.addEventListener("mouseleave", handleUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+      window.removeEventListener("mouseleave", handleUp);
+    };
+  }, [isDraggingInspector, inspectorPosition]);
 
   /* ------------------------------------------------------------
      🧭 Render Element
@@ -172,12 +226,16 @@ export default function Canvas({ role }) {
      🖼️ Render
   ------------------------------------------------------------ */
   return (
-    <div ref={containerRef} className="flex w-full min-w-0 gap-4 h-full relative overflow-visible">
-
+    <div
+      ref={containerRef}
+      className="flex w-full min-w-0 gap-4 h-full relative overflow-visible"
+    >
       {/* Sidebar */}
       <div
         className={`shrink-0 transition-all duration-300 bg-panel flex flex-col
-          ${isSplitPreview ? "hidden" : `${isSplitEditor ? "w-44" : "w-56"} p-3 border-r border-border`}
+          ${isSplitPreview ? "hidden" : `${
+            isSplitEditor ? "w-44" : "w-56"
+          } p-3 border-r border-border`}
         `}
       >
         {!isSplitPreview && (
@@ -329,108 +387,126 @@ export default function Canvas({ role }) {
           </div>
         </div>
 
-                  {/* 🧪 Draggable / Dockable Inspector */}
-        {isInspectorOpen && (
-          <Rnd
-            dragHandleClassName="inspector-drag-handle"
-            disableDragging={inspectorDocked}
-            enableResizing={inspectorDocked ? { top: true } : true}
-            size={{
-              width: inspectorDocked
-                ? `calc(100% - ${isSplitEditor ? 12 : 0}px)` // prevents icon clipping in editor
-                : 420,
-              height: inspectorDocked
-                ? Math.max(
-                    200,
-                    window.innerHeight -
-                      (canvasRef.current
-                        ? canvasRef.current.getBoundingClientRect().bottom +
-                          (isPreviewMode ? 16 : 48)
-                        : 260)
-                  )
-                : 400,
-            }}
-
-            position={
-            inspectorDocked
-              ? {
-                  x: 0,
-                  y:
-                    canvasRef.current && canvasRef.current.offsetHeight
-                      ? canvasRef.current.offsetTop + canvasRef.current.offsetHeight + 8 // sits cleanly below canvas
-                      : 0,
-                }
-              : inspectorPosition
-          }
-
-
-            onDragStop={(e, d) => setInspectorPosition({ x: d.x, y: d.y })}
-            bounds={containerRef}
-            style={{
-              position: "absolute",
-              left: 0,
-              display: "flex",
-              flexDirection: "column",
-            }}
-            className={`transition-all duration-300 ${
-              inspectorDocked
-                ? "bg-panel border-t border-border"
-                : "bg-panel rounded-lg shadow-2xl border border-border z-[999]"
-            }`}
-          >
-            {/* 🧭 Header — draggable area */}
+        {/* 🧪 Draggable / Dockable Inspector */}
+        {isInspectorOpen &&
+          (inspectorDocked ? (
+            // Docked: full-width bar at the bottom of the canvas area
             <div
-              className="inspector-drag-handle flex items-center justify-between px-3 py-2 border-b border-border bg-panel-dark select-none"
-              style={{
-                userSelect: "none",
-                minWidth: 200, // ensures header has enough width for icons
-                overflow: "visible", // prevent icon clipping
-              }}
->
+      style={{
+        flexShrink: 0,
+        marginTop: 8,
+        display: "flex",
+        justifyContent: "center", // center inside this Canvas column
+        zIndex: 50,
+      }}
+    >
+      <div
+        className="bg-panel border border-border rounded-lg shadow-soft transition-all duration-300 flex flex-col"
+        style={{
+          width: 360,          // fixed, reasonable width
+          maxWidth: "100%",    // if column is narrower, shrink
+          maxHeight: "40vh",
+        }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-3 py-2 border-b border-border bg-panel-dark select-none"
+          style={{ userSelect: "none", minWidth: 0, overflow: "visible" }}
+        >
+          <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
+            <Move size={14} />
+            Inspector
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="text-xs text-text-muted hover:text-accent transition"
+              onClick={toggleDock}
+              title="Undock Inspector"
+            >
+              <Dock size={14} />
+            </button>
+            <button
+              className="text-xs text-text-muted hover:text-accent transition"
+              onClick={toggleInspector}
+              title="Close Inspector"
+            >
+              {isInspectorOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            </button>
+          </div>
+        </div>
 
-              <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
-                <Move size={14} />
-                Inspector
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  className="text-xs text-text-muted hover:text-accent transition"
-                  onClick={toggleDock}
-                  title={inspectorDocked ? "Undock Inspector" : "Dock Inspector"}
-                >
-                  <Dock size={14} />
-                </button>
-                <button
-                  className="text-xs text-text-muted hover:text-accent transition"
-                  onClick={toggleInspector}
-                  title="Close Inspector"
-                >
-                  {isInspectorOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                </button>
-              </div>
-            </div>
-
-            {/* 📋 Inspector Content */}
+        {/* Content */}
+        <div
+          className="p-4 overflow-y-auto flex-1"
+          ref={inspectorRef}
+          style={{ minHeight: 0, overflowY: "auto" }}
+        >
+          <InspectorPanel
+            element={elements.find((el) => el.id === selectedId)}
+            onUpdate={(updates) => updateElement(selectedId, updates)}
+            onDelete={() => removeElement(selectedId)}
+            readOnly={isPreviewMode}
+          />
+        </div>
+      </div>
+    </div>
+          ) : (
+            // Undocked: floating panel with manual drag
             <div
-              className="p-4 overflow-y-auto flex-1"
-              ref={inspectorRef}
+              className="bg-panel rounded-lg shadow-2xl border border-border transition-all duration-150"
               style={{
-                minHeight: 0, // enables scrolling when flexed
-                overflowY: "auto",
+                position: "absolute",
+                top: inspectorPosition.y,
+                left: inspectorPosition.x,
+                zIndex: 999,
+                display: "flex",
+                flexDirection: "column",
+                minWidth: 260,
+                maxWidth: 420,
+                maxHeight: "60vh",
               }}
             >
-              <InspectorPanel
-                element={elements.find((el) => el.id === selectedId)}
-                onUpdate={(updates) => updateElement(selectedId, updates)}
-                onDelete={() => removeElement(selectedId)}
-                readOnly={isPreviewMode}
-              />
+              <div
+                className="inspector-drag-handle flex items-center justify-between px-3 py-2 border-b border-border bg-panel-dark select-none"
+                style={{ userSelect: "none", minWidth: 200, overflow: "visible" }}
+                onMouseDown={handleInspectorDragStart}
+              >
+                <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                  <Move size={14} />
+                  Inspector
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="text-xs text-text-muted hover:text-accent transition"
+                    onClick={toggleDock}
+                    title="Dock Inspector"
+                  >
+                    <Dock size={14} />
+                  </button>
+                  <button
+                    className="text-xs text-text-muted hover:text-accent transition"
+                    onClick={toggleInspector}
+                    title="Close Inspector"
+                  >
+                    {isInspectorOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className="p-4 overflow-y-auto flex-1"
+                ref={inspectorRef}
+                style={{ minHeight: 0, overflowY: "auto" }}
+              >
+                <InspectorPanel
+                  element={elements.find((el) => el.id === selectedId)}
+                  onUpdate={(updates) => updateElement(selectedId, updates)}
+                  onDelete={() => removeElement(selectedId)}
+                  readOnly={isPreviewMode}
+                />
+              </div>
             </div>
-          </Rnd>
-        )}
-
-
-
+          ))}
       </div>
     </div>
   );

@@ -1,154 +1,139 @@
-import React, { useState } from "react";
-import Canvas from "./components/Canvas";
-import { usePreviewMode } from "./context/PreviewContext";
-import { useProjectContext } from "./context/ProjectContext";
-import { useCanvasState } from "./context/CanvasContext";
-import NewProjectModal from "./components/NewProjectModal";
-import ProjectSidebar from "./components/ProjectSidebar";
-import { v4 as uuid } from "uuid";
-import { useEffect } from "react";
+import React, { useState, useContext } from 'react';
+import PromptForm from './components/PromptForm';
+import TemplatePreview from './components/TemplatePreview';
+import ProjectSidebar from './components/ProjectSidebar';
+import TemplateCarousel from './components/TemplateCarousel';
+import ModeMenu from './components/ModeMenu';
+import MainMenu from './components/MainMenu';
+import BuilderWorkspace from './views/BuilderWorkspace'; // ⬅️ new workspace view
+import { ProjectContext } from './context/ProjectContext';
+import Canvas from './components/Canvas';
+import { usePreviewMode } from './context/PreviewContext';
 
 export default function MainApp() {
-  const { isPreviewMode, setIsPreviewMode } = usePreviewMode();
-  const {
-    projectType,
-    projectName,
-    setProjectName,
-    saveProject,
-    setActiveRole,
-  } = useProjectContext();
-  const { elements } = useCanvasState();
-  const [viewMode, setViewMode] = useState("host"); // host | client | split
-
-  // ✅ Prevent accidental tab closing
-  useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      e.preventDefault();
-      e.returnValue = ""; // shows native confirmation dialog
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, []);
-
-  // 💾 Handle Save
-  const handleSave = () => {
-    let name = projectName;
-    if (!name) {
-      const userName = window.prompt(
-        "Enter a name for this project:",
-        `Untitled-${uuid().slice(0, 4)}`
-      );
-      if (!userName) return;
-      name = userName.trim();
-      setProjectName(name);
-    }
-
-    saveProject({
-      name,
-      type: projectType || "client-host",
-      elements,
-    });
-
-    alert(`✅ Project "${name}" saved successfully!`);
-  };
-
-  if (!projectType) return <NewProjectModal />;
-
-  const isClientHost = projectType === "client-host";
+  const { projectSchema, viewMode } = useContext(ProjectContext);
+  const { previewView } = usePreviewMode();
+  const [currentView, setCurrentView] = useState('templates'); // 'templates' | 'build' | 'settings'
 
   return (
-    <div className="w-full h-screen flex flex-col bg-background text-text-primary">
-      {/* 🧭 Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-panel">
-        <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold">
-            🎬 So Real Video Studio {projectName && `— ${projectName}`}
-          </h1>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '260px 1fr',
+        height: '100vh',
+        backgroundColor: '#0f0f0f',
+        color: '#fff',
+      }}
+    >
+      {/* 🔹 Sidebar */}
+      <ProjectSidebar />
 
-          {/* 🪄 Toggle Editor / Preview */}
-          <button
-            onClick={() => setIsPreviewMode((prev) => !prev)}
-            className={`px-3 py-1 rounded text-white transition ${
-              isPreviewMode
-                ? "bg-green-600 hover:bg-green-500"
-                : "bg-gray-700 hover:bg-gray-600"
-            }`}
+      {/* 🔹 Main content area */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* 🔹 Top navigation menu */}
+        <MainMenu currentView={currentView} setCurrentView={setCurrentView} />
+
+        {/* 🔹 Templates view */}
+        {currentView === 'templates' && (
+          <div
+            style={{
+              padding: 16,
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
+              overflow: 'hidden',
+            }}
           >
-            {isPreviewMode ? "Preview Mode ✅" : "Editor Mode ✍️"}
-          </button>
-
-          {/* 🧭 Host/Client view selector */}
-          {isClientHost && (
-            <select
-              value={viewMode}
-              onChange={(e) => {
-                setViewMode(e.target.value);
-                setActiveRole(e.target.value);
-              }}
-              className="bg-panel text-text-primary border border-border rounded px-2 py-1"
-            >
-              <option value="host">Host Only</option>
-              <option value="client">Client Only</option>
-              <option value="split">Host / Client Split</option>
-            </select>
-          )}
-        </div>
-
-        {/* 💾 Save */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSave}
-            disabled={elements.length === 0}
-            className={`px-2 py-1 rounded text-sm text-white transition ${
-              elements.length === 0
-                ? "bg-gray-500 cursor-not-allowed"
-                : "bg-gray-700 hover:bg-gray-600"
-            }`}
-          >
-            💾 Save
-          </button>
-        </div>
-      </div>
-
-      {/* 🖼 Layout */}
-      <div className="flex flex-1 overflow-hidden">
-        {!isPreviewMode && <ProjectSidebar />}
-
-        <div className="flex flex-1 overflow-hidden p-4 gap-4">
-          {/* Single-user project: normal canvas */}
-          {!isClientHost && <Canvas role={null} />}
-
-          {/* Client-Host project: host/client/split */}
-          {isClientHost && viewMode === "host" && (
-            <div className="flex-1 border border-border rounded-lg overflow-hidden">
-              <h3 className="bg-panel text-xs px-2 py-1 border-b border-border">🧑 Host View</h3>
-              <Canvas role="host" />
-            </div>
-          )}
-          {isClientHost && viewMode === "client" && (
-            <div className="flex-1 border border-border rounded-lg overflow-hidden">
-              <h3 className="bg-panel text-xs px-2 py-1 border-b border-border">🙋 Client View</h3>
-              <Canvas role="client" />
-            </div>
-          )}
-          {isClientHost && viewMode === "split" && (
-  <>
-          <div className="flex-1 border border-border rounded-lg overflow-hidden">
-            <h3 className="bg-panel text-xs px-2 py-1 border-b border-border">
-              🧑 Split View — Host
-            </h3>
-            <Canvas role="host" />
+            <h3 style={{ marginBottom: 12, color: '#aaa' }}>Select a template to get started</h3>
+            <TemplateCarousel />
           </div>
-          <div className="flex-1 border border-border rounded-lg overflow-hidden">
-            <h3 className="bg-panel text-xs px-2 py-1 border-b border-border">
-              🙋 Split View — Client
-            </h3>
+        )}
+
+        {/* 🔹 Build Your Own view (full workspace) */}
+        {currentView === 'build' && (
+  <div
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      backgroundColor: '#0f0f0f',
+    }}
+  >
+    {/* 🔹 Top input + toggle bar */}
+    <div style={{ flexShrink: 0, padding: '12px 16px', borderBottom: '1px solid #222' }}>
+      <PromptForm />
+      <ModeMenu />
+    </div>
+
+    {/* 🔹 Canvas Area */}
+    <div
+      style={{
+        flexGrow: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: '#0a0a0a',
+        borderTop: '1px solid #222',
+        borderRadius: '0 0 8px 8px',
+        overflow: 'hidden',
+      }}
+    >
+      {viewMode === 'preview' ? (
+        previewView === 'split' ? (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 8,
+              flexGrow: 1,
+              overflow: 'hidden',
+            }}
+          >
+            <Canvas role="host" />
             <Canvas role="client" />
           </div>
-        </>
-      )}
-
+        ) : (
+          <div style={{ flexGrow: 1 }}>
+            <Canvas role={previewView} />
+          </div>
+        )
+      ) : (
+        <div style={{ padding: 24 }}>
+          <h3 style={{ marginBottom: 10, color: '#fff' }}>Actions Panel</h3>
+          <p style={{ color: '#aaa' }}>
+            Here you’ll be able to edit and connect actions between components.
+          </p>
         </div>
+      )}
+    </div>
+  </div>
+)}
+
+        {/* {currentView === 'build' && (
+          <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+            <BuilderWorkspace />
+          </div>
+        )} */}
+
+
+
+        {/* 🔹 Settings view */}
+        {currentView === 'settings' && (
+          <div
+            style={{
+              padding: 16,
+              color: '#aaa',
+            }}
+          >
+            <h3>Settings</h3>
+            <p>Coming soon – configuration options for your app builder.</p>
+          </div>
+        )}
       </div>
     </div>
   );

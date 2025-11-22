@@ -1,60 +1,47 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { useProjectContext } from "./ProjectContext";
 
 const CanvasContext = createContext();
 
 export function CanvasProvider({ children }) {
+  const { activeProject, projects, saveProjectElements } = useProjectContext();
+
   const [elements, setElements] = useState([]);
-  const [isLoadedFromStorage, setIsLoadedFromStorage] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   /* ------------------------------------------------------------
-   🧠 Load from Local Storage (on App Start)
+   🧠 Load elements when a project becomes active
   ------------------------------------------------------------ */
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("soReal_currentProject");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.elements)) {
-          setElements(parsed.elements);
-          console.log("🪄 Restored project from localStorage");
-        } else {
-          console.warn("⚠️ Invalid project data found in storage.");
-        }
-      } else {
-        // ✅ Default element (fresh start)
-        setElements([
-          {
-            id: "el1",
-            type: "VideoFeed",
-            x: 100,
-            y: 100,
-            width: 400,
-            height: 225,
-            props: { label: "🎥 Host Camera" },
-          },
-        ]);
-      }
-    } catch (err) {
-      console.error("❌ Failed to load from localStorage:", err);
-    } finally {
-      setIsLoadedFromStorage(true);
+    if (!activeProject) {
+      // No active project → clear canvas for new or start screen
+      setElements([]);
+      setIsLoaded(true);
+      return;
     }
-  }, []);
+
+    const project = projects[activeProject];
+    if (project && Array.isArray(project.elements)) {
+      setElements(project.elements);
+      console.log(`📂 Loaded project: ${project.name}`);
+    } else {
+      console.log("🆕 Starting fresh project...");
+      setElements([]);
+    }
+
+    setIsLoaded(true);
+  }, [activeProject, projects]);
 
   /* ------------------------------------------------------------
-   💾 Auto-Save to Local Storage on Change
+   💾 Auto-save whenever elements change
   ------------------------------------------------------------ */
   useEffect(() => {
-    if (!isLoadedFromStorage) return;
-    const projectData = {
-      elements,
-      lastSaved: new Date().toISOString(),
-    };
-    localStorage.setItem("soReal_currentProject", JSON.stringify(projectData));
-  }, [elements, isLoadedFromStorage]);
+    if (!isLoaded || !activeProject) return;
+    saveProjectElements(elements);
+  }, [elements, isLoaded, activeProject]);
 
   /* ------------------------------------------------------------
-   ✨ Canvas Manipulation Methods
+   ✨ Canvas manipulation helpers
   ------------------------------------------------------------ */
   const addElement = (newEl) => setElements((prev) => [...prev, newEl]);
 
@@ -85,7 +72,6 @@ export function CanvasProvider({ children }) {
     <CanvasContext.Provider
       value={{
         elements,
-        setElements,
         addElement,
         updateElement,
         removeElement,
