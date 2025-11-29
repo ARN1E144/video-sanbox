@@ -1,3 +1,4 @@
+// src/components/Canvas.js
 import React, { useState, useEffect, useRef } from "react";
 import { Rnd } from "react-rnd";
 import { v4 as uuid } from "uuid";
@@ -7,6 +8,8 @@ import Tabs from "./Tabs";
 import { usePreviewMode } from "../context/PreviewContext";
 import { useCanvasState } from "../context/CanvasContext";
 import { useProjectContext } from "../context/ProjectContext";
+import { runAction } from "../utils/actionExecutor";
+import { useActionContext } from "../context/ActionContext";
 import { ChevronDown, ChevronUp, Move, Dock } from "lucide-react";
 
 const DEVICE_SIZES = {
@@ -18,9 +21,11 @@ const DEVICE_SIZES = {
 export default function Canvas({ role }) {
   const [device, setDevice] = useState("desktop");
   const [scale, setScale] = useState(0.75);
+
   const { isPreviewMode } = usePreviewMode();
   const { elements, addElement, updateElement, removeElement } = useCanvasState();
   const { projectType } = useProjectContext();
+  const actionCtx = useActionContext();
 
   const [selectedId, setSelectedId] = useState(null);
   const [availableElements, setAvailableElements] = useState([]);
@@ -47,8 +52,8 @@ export default function Canvas({ role }) {
   const isInspectorOpen = inspectorState[currentRoleKey];
 
   /* ------------------------------------------------------------
-     🧠 Load element metadata
-  ------------------------------------------------------------ */
+   * Load element metadata
+   * ---------------------------------------------------------- */
   useEffect(() => {
     const ctx = require.context("../components/elements", false, /\.meta\.json$/);
     const all = ctx.keys().map((key) => {
@@ -58,15 +63,25 @@ export default function Canvas({ role }) {
     setAvailableElements(all);
   }, []);
 
+
+  useEffect(() => {
+  if (!isPreviewMode) {
+    // Exiting preview → wipe any runtime bindings
+    actionCtx.clearAllBindings();
+  }
+}, [isPreviewMode]);
+
   /* ------------------------------------------------------------
-     🧩 Drag and Drop Element
-  ------------------------------------------------------------ */
+   * Drag and Drop Element
+   * ---------------------------------------------------------- */
   const handleDrop = (e) => {
     e.preventDefault();
     const metaString = e.dataTransfer.getData("application/json");
     if (!metaString) return;
 
     const meta = JSON.parse(metaString);
+    if (!canvasRef.current) return;
+
     const rect = canvasRef.current.getBoundingClientRect();
     const dropX = (e.clientX - rect.left) / scale;
     const dropY = (e.clientY - rect.top) / scale;
@@ -82,11 +97,12 @@ export default function Canvas({ role }) {
       props: meta.editableProps || {},
     });
   };
+
   const handleDragOver = (e) => e.preventDefault();
 
   /* ------------------------------------------------------------
-     🧭 Inspector Toggle
-  ------------------------------------------------------------ */
+   * Inspector: toggle + docking
+   * ---------------------------------------------------------- */
   const toggleInspector = () => {
     setInspectorState((prev) => ({
       ...prev,
@@ -97,8 +113,8 @@ export default function Canvas({ role }) {
   const toggleDock = () => setInspectorDocked((prev) => !prev);
 
   /* ------------------------------------------------------------
-     🧭 Manual drag for undocked inspector
-  ------------------------------------------------------------ */
+   * Manual drag for undocked inspector
+   * ---------------------------------------------------------- */
   const handleInspectorDragStart = (e) => {
     if (inspectorDocked) return;
     if (!containerRef.current) return;
@@ -124,8 +140,8 @@ export default function Canvas({ role }) {
       const newX = mouseX - dragOffsetRef.current.x;
       const newY = mouseY - dragOffsetRef.current.y;
 
-      const maxX = containerRect.width - 260; // min inspector width
-      const maxY = containerRect.height - 100; // leave a bit of bottom space
+      const maxX = containerRect.width - 260; // assume min width
+      const maxY = containerRect.height - 100;
 
       setInspectorPosition({
         x: Math.max(0, Math.min(newX, maxX)),
@@ -147,72 +163,8 @@ export default function Canvas({ role }) {
   }, [isDraggingInspector, inspectorPosition]);
 
   /* ------------------------------------------------------------
-     🧭 Render Element
-  ------------------------------------------------------------ */
-  const renderElement = (el) => {
-    const ElementComp = COMPONENTS[el.type];
-    if (!ElementComp) return null;
-
-    const isButton = ["Button", "MicButton", "ControlButton"].includes(el.type);
-    const isTextBox = el.type === "TextBox";
-
-    if (isPreviewMode) {
-      if (isTextBox)
-        return (
-          <input
-            type="text"
-            placeholder={el.props.placeholder || "Type..."}
-            className="w-full h-full bg-transparent outline-none px-2 text-white"
-            style={{ backgroundColor: el.props.bgColor || "#333", borderRadius: 8 }}
-          />
-        );
-      try {
-        return <ElementComp {...el.props} />;
-      } catch (e) {
-        console.error("❌ Preview render failed:", el.type, e);
-        return <div style={{ color: "red" }}>Error rendering {el.type}</div>;
-      }
-    }
-
-    if (isButton)
-      return (
-        <div
-          className="w-full h-full flex items-center justify-center select-none"
-          style={{
-            backgroundColor: el.props.bgColor || "#6d28d9",
-            borderRadius: 8,
-            pointerEvents: "none",
-          }}
-        >
-          {el.props.label || "Button"}
-        </div>
-      );
-
-    if (isTextBox)
-      return (
-        <input
-          type="text"
-          placeholder={el.props.placeholder || "Type..."}
-          disabled
-          className="w-full h-full bg-transparent outline-none px-2 text-white"
-          style={{
-            backgroundColor: el.props.bgColor || "#333",
-            borderRadius: 8,
-            pointerEvents: "none",
-          }}
-        />
-      );
-
-    return (
-      <div className="w-full h-full" style={{ pointerEvents: "none" }}>
-        <ElementComp {...el.props} />
-      </div>
-    );
-  };
-
-  /* ------------------------------------------------------------
-     🧮 Filter Elements by Role
-  ------------------------------------------------------------ */
+   * Filter Elements by Role
+   * ---------------------------------------------------------- */
   const visibleElements = elements.filter((el) => {
     if (projectType === "single") return true;
     if (role === null) return true;
@@ -223,8 +175,8 @@ export default function Canvas({ role }) {
   const isSplitEditor = !isPreviewMode && (role === "host" || role === "client");
 
   /* ------------------------------------------------------------
-     🖼️ Render
-  ------------------------------------------------------------ */
+   * Render
+   * ---------------------------------------------------------- */
   return (
     <div
       ref={containerRef}
@@ -241,24 +193,26 @@ export default function Canvas({ role }) {
         {!isSplitPreview && (
           <>
             <Tabs activeTab={activeTab} setActiveTab={setActiveTab} tabs={["Elements", "Layers"]} />
+
             {activeTab === "Elements" && (
               <div>
                 <h3 className="text-sm font-semibold mb-3 text-text-primary">🧩 Elements</h3>
-                {availableElements.map((el) => (
+                {availableElements.map((meta) => (
                   <div
-                    key={el.name}
+                    key={meta.name}
                     draggable
                     onDragStart={(e) =>
-                      e.dataTransfer.setData("application/json", JSON.stringify(el))
+                      e.dataTransfer.setData("application/json", JSON.stringify(meta))
                     }
                     className="flex items-center gap-2 px-3 py-2 rounded-md text-sm hover:bg-accent/10 transition cursor-grab active:cursor-grabbing"
                   >
-                    <span>{el.icon}</span>
-                    <span>{el.name}</span>
+                    <span>{meta.icon}</span>
+                    <span>{meta.name}</span>
                   </div>
                 ))}
               </div>
             )}
+
             {activeTab === "Layers" && (
               <div>
                 <h3 className="text-sm font-semibold mb-3 text-text-primary">🧭 Layers</h3>
@@ -349,107 +303,137 @@ export default function Canvas({ role }) {
               transformOrigin: "top left",
             }}
           >
-            {visibleElements.map((el) => (
-              <Rnd
-                key={el.id}
-                size={{ width: el.width, height: el.height }}
-                position={{ x: el.x, y: el.y }}
-                onClick={() => {
-                  setSelectedId(el.id);
-                  setInspectorState((prev) => ({
-                    ...prev,
-                    [currentRoleKey]: true,
-                  }));
-                }}
-                onDragStop={(e, d) => updateElement(el.id, { x: d.x, y: d.y })}
-                onResizeStop={(e, direction, ref, delta, position) =>
-                  updateElement(el.id, {
-                    width: parseFloat(ref.style.width),
-                    height: parseFloat(ref.style.height),
-                    ...position,
-                  })
+            {visibleElements.map((el) => {
+              const ElementComp = COMPONENTS[el.type];
+
+              const handleElementClick = async (event) => {
+                event.stopPropagation();
+
+                // always select + open inspector on click
+                setSelectedId(el.id);
+                setInspectorState((prev) => ({
+                  ...prev,
+                  [currentRoleKey]: true,
+                }));
+
+                const actionName = el.props?.onClick;
+                if (!isPreviewMode || !actionName) return;
+
+                try {
+                  await runAction(actionName, actionCtx, {
+                    ...el.props,
+                    elementId: el.id,
+                    role: el.role,
+                  });
+                } catch (err) {
+                  console.error("Action error:", err);
                 }
-                bounds="parent"
-                scale={scale}
-                className={`group rounded-lg border-2 ${
-                  isPreviewMode ? "cursor-pointer" : "cursor-move"
-                } ${
-                  selectedId === el.id
-                    ? isPreviewMode
-                      ? "border-blue-500"
-                      : "border-purple-500 shadow-[0_0_0_2px_rgba(168,85,247,0.5)]"
-                    : "border-gray-600 hover:border-purple-400"
-                }`}
-              >
-                {renderElement(el)}
-              </Rnd>
-            ))}
+              };
+
+              return (
+                <Rnd
+                  key={el.id}
+                  size={{ width: el.width, height: el.height }}
+                  position={{ x: el.x, y: el.y }}
+                  bounds="parent"
+                  scale={scale}
+                  onClick={handleElementClick}
+                  onDragStop={(e, d) => updateElement(el.id, { x: d.x, y: d.y })}
+                  onResizeStop={(e, direction, ref, delta, position) =>
+                    updateElement(el.id, {
+                      width: parseFloat(ref.style.width),
+                      height: parseFloat(ref.style.height),
+                      ...position,
+                    })
+                  }
+                  className={`group rounded-lg border-2 ${
+                    isPreviewMode ? "cursor-pointer" : "cursor-move"
+                  } ${
+                    selectedId === el.id
+                      ? isPreviewMode
+                        ? "border-blue-500"
+                        : "border-purple-500 shadow-[0_0_0_2px_rgba(168,85,247,0.5)]"
+                      : "border-gray-600 hover:border-purple-400"
+                  }`}
+                >
+                  <div className="w-full h-full pointer-events-none">
+                    <ElementComp
+                      {...el.props}
+                      {...(actionCtx.bindings?.[el.id] || {})}
+                    />
+                  </div>
+                </Rnd>
+              );
+            })}
           </div>
         </div>
 
         {/* 🧪 Draggable / Dockable Inspector */}
         {isInspectorOpen &&
           (inspectorDocked ? (
-            // Docked: full-width bar at the bottom of the canvas area
+            // Docked: card under *this* canvas, fixed height with scrollable content
             <div
-      style={{
-        flexShrink: 0,
-        marginTop: 8,
-        display: "flex",
-        justifyContent: "center", // center inside this Canvas column
-        zIndex: 50,
-      }}
-    >
-      <div
-        className="bg-panel border border-border rounded-lg shadow-soft transition-all duration-300 flex flex-col"
-        style={{
-          width: 360,          // fixed, reasonable width
-          maxWidth: "100%",    // if column is narrower, shrink
-          maxHeight: "40vh",
-        }}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-3 py-2 border-b border-border bg-panel-dark select-none"
-          style={{ userSelect: "none", minWidth: 0, overflow: "visible" }}
-        >
-          <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
-            <Move size={14} />
-            Inspector
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              className="text-xs text-text-muted hover:text-accent transition"
-              onClick={toggleDock}
-              title="Undock Inspector"
+              style={{
+                flexShrink: 0,
+                marginTop: 8,
+                display: "flex",
+                justifyContent: "center",
+                width: "100%", // only within this Canvas column
+                zIndex: 50,
+              }}
             >
-              <Dock size={14} />
-            </button>
-            <button
-              className="text-xs text-text-muted hover:text-accent transition"
-              onClick={toggleInspector}
-              title="Close Inspector"
-            >
-              {isInspectorOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-            </button>
-          </div>
-        </div>
+              <div
+                className="bg-panel border border-border rounded-lg shadow-soft flex flex-col"
+                style={{
+                  width: "min(100%, 480px)", // never wider than this column, max 480px
+                  height: "40vh",            // fixed height so inner area can scroll
+                  overflow: "hidden",
+                }}
+              >
+                {/* Header */}
+                <div
+                  className="flex items-center justify-between px-3 py-2 border-b border-border bg-panel-dark select-none"
+                  style={{ userSelect: "none", minWidth: 0, overflow: "visible" }}
+                >
+                  <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                    <Move size={14} />
+                    Inspector
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="text-xs text-text-muted hover:text-accent transition"
+                      onClick={toggleDock}
+                      title="Undock Inspector"
+                    >
+                      <Dock size={14} />
+                    </button>
+                    <button
+                      className="text-xs text-text-muted hover:text-accent transition"
+                      onClick={toggleInspector}
+                      title="Close Inspector"
+                    >
+                      {isInspectorOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+                  </div>
+                </div>
 
-        {/* Content */}
-        <div
-          className="p-4 overflow-y-auto flex-1"
-          ref={inspectorRef}
-          style={{ minHeight: 0, overflowY: "auto" }}
-        >
-          <InspectorPanel
-            element={elements.find((el) => el.id === selectedId)}
-            onUpdate={(updates) => updateElement(selectedId, updates)}
-            onDelete={() => removeElement(selectedId)}
-            readOnly={isPreviewMode}
-          />
-        </div>
-      </div>
-    </div>
+                {/* Scrollable content */}
+                <div
+                  className="p-4 flex-1 overflow-y-auto"
+                  ref={inspectorRef}
+                  style={{ minHeight: 0 }}
+                >
+                 <InspectorPanel
+                    element={elements.find((el) => el.id === selectedId)}
+                    elements={visibleElements}                // 👈 add this
+                    onUpdate={(updates) => updateElement(selectedId, updates)}
+                    onDelete={() => removeElement(selectedId)}
+                    readOnly={isPreviewMode}
+                  />
+
+                </div>
+              </div>
+            </div>
           ) : (
             // Undocked: floating panel with manual drag
             <div
@@ -496,14 +480,16 @@ export default function Canvas({ role }) {
               <div
                 className="p-4 overflow-y-auto flex-1"
                 ref={inspectorRef}
-                style={{ minHeight: 0, overflowY: "auto" }}
+                style={{ minHeight: 0 }}
               >
                 <InspectorPanel
-                  element={elements.find((el) => el.id === selectedId)}
-                  onUpdate={(updates) => updateElement(selectedId, updates)}
-                  onDelete={() => removeElement(selectedId)}
-                  readOnly={isPreviewMode}
-                />
+                element={elements.find((el) => el.id === selectedId)}
+                elements={visibleElements}                // 👈 add this
+                onUpdate={(updates) => updateElement(selectedId, updates)}
+                onDelete={() => removeElement(selectedId)}
+                readOnly={isPreviewMode}
+              />
+
               </div>
             </div>
           ))}

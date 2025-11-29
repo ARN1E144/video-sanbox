@@ -12,7 +12,10 @@ import { usePreviewMode } from './context/PreviewContext';
 
 export default function MainApp() {
   const { projectSchema, viewMode } = useContext(ProjectContext);
-  const { previewView } = usePreviewMode();
+  const { isPreviewMode, 
+          setIsPreviewMode, 
+          previewView,
+          setPreviewMode } = usePreviewMode();
   const [currentView, setCurrentView] = useState('templates'); // 'templates' | 'build' | 'settings'
 
   return (
