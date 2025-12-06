@@ -1,18 +1,49 @@
+// src/components/elements/TextBox.js
 import React from "react";
 import { useTheme } from "../../context/ThemeContext";
 import { runAction } from "../../utils/actionExecutor";
+import { useActionContext } from "../../context/ActionContext";
 
-export default function TextBox({
-  label,
-  style,
-  onInputAction,
-  apiUrl,
-  apiMethod,
-  apiHeaders,
-  apiTarget,
-  apiTargetField,
-}) {
+export default function TextBox(props) {
+  const {
+    label,
+    style,
+
+    // live-bound values (from ActionContext bindings)
+    value,
+    text,
+
+    // action wiring
+    onInputAction,
+    apiUrl,
+    apiMethod,
+    apiHeaders,
+    apiTarget,
+    apiTargetField,
+
+    ...rest
+  } = props;
+
   const theme = useTheme();
+  const actionCtx = useActionContext();
+
+  const handleInput = (e) => {
+    const newValue = e.target.value;
+    if (!onInputAction) return;
+
+    runAction(onInputAction, actionCtx, {
+      value: newValue,
+      label,
+      url: apiUrl,
+      method: apiMethod || "GET",
+      headers: apiHeaders,
+      targetId: apiTarget,
+      targetField: apiTargetField,
+    });
+  };
+
+  // If this TextBox is ever used as an API target, it can bind to `value` or `text`
+  const displayValue = value ?? text ?? "";
 
   return (
     <div className="w-full h-full flex items-center justify-center">
@@ -27,18 +58,9 @@ export default function TextBox({
           borderRadius: style?.borderRadius || 8,
           border: style?.border || "1px solid #333",
         }}
-        onInput={(e) => {
-          const value = e.target.value;
-          runAction(onInputAction, {
-            value,
-            label,
-            url: apiUrl,
-            method: apiMethod,
-            headers: apiHeaders,
-            targetId: apiTarget,
-            targetField: apiTargetField,
-          });
-        }}
+        value={displayValue}
+        onChange={handleInput}
+        {...rest}
       />
     </div>
   );

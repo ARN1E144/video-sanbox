@@ -7,6 +7,7 @@ import bodyParser from "body-parser";
 import aiTemplateRoutes from "./routes/aiTemplates.js";
 import agoraRoutes from "./routes/agora.js";
 import aiRoutes from "./routes/aiRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 
 
 
@@ -19,6 +20,7 @@ app.use(bodyParser.json());
 // Routes
 app.use("/api/agora", agoraRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/auth", authRoutes);
 
 app.get("/", (req, res) => {
   res.send("Video Sandbox API running...");
