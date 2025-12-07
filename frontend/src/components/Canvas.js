@@ -11,6 +11,7 @@ import { useProjectContext } from "../context/ProjectContext";
 import { runAction } from "../utils/actionExecutor";
 import { useActionContext } from "../context/ActionContext";
 import { ChevronDown, ChevronUp, Move, Dock } from "lucide-react";
+import DebugBindingsPanel from "./DebugBindingPanel";
 
 const DEVICE_SIZES = {
   desktop: { width: 1440, height: 900 },
@@ -39,6 +40,60 @@ export default function Canvas({ role }) {
   const [inspectorDocked, setInspectorDocked] = useState(true);
   const [inspectorPosition, setInspectorPosition] = useState({ x: 200, y: 200 });
 
+  const [showDebug, setShowDebug] = useState(false);
+
+  // 🎨 Per-device background config
+  const [backgroundConfigs, setBackgroundConfigs] = useState({
+    desktop: {
+      kind: "color", // "color" | "image"
+      color: "#020617",
+      imageUrl: "",
+      size: "cover", // cover | contain | repeat
+    },
+    tablet: {
+      kind: "color",
+      color: "#020617",
+      imageUrl: "",
+      size: "cover",
+    },
+    mobile: {
+      kind: "color",
+      color: "#020617",
+      imageUrl: "",
+      size: "cover",
+    },
+  });
+
+  const [showBgPanel, setShowBgPanel] = useState(false);
+  const activeBg = backgroundConfigs[device];
+
+  const canvasBackgroundStyle =
+    activeBg.kind === "image" && activeBg.imageUrl
+      ? {
+          backgroundImage: `url(${activeBg.imageUrl})`,
+          backgroundRepeat: activeBg.size === "repeat" ? "repeat" : "no-repeat",
+          backgroundSize:
+            activeBg.size === "cover" || activeBg.size === "contain"
+              ? activeBg.size
+              : "auto",
+          backgroundPosition: "center",
+          backgroundColor: "#000000", // fallback behind transparent PNGs
+        }
+      : {
+          backgroundColor: activeBg.color || "#020617",
+        };
+
+  // helper to update current device bg
+  const updateActiveBackground = (patch) => {
+    setBackgroundConfigs((prev) => ({
+      ...prev,
+      [device]: {
+        ...prev[device],
+        ...patch,
+      },
+    }));
+  };
+
   const canvasRef = useRef(null);
   const inspectorRef = useRef(null);
   const containerRef = useRef(null);
@@ -63,13 +118,12 @@ export default function Canvas({ role }) {
     setAvailableElements(all);
   }, []);
 
-
   useEffect(() => {
-  if (!isPreviewMode) {
-    // Exiting preview → wipe any runtime bindings
-    actionCtx.clearAllBindings();
-  }
-}, [isPreviewMode]);
+    if (!isPreviewMode) {
+      // Exiting preview → wipe any runtime bindings
+      actionCtx.clearAllBindings();
+    }
+  }, [isPreviewMode, actionCtx]);
 
   /* ------------------------------------------------------------
    * Drag and Drop Element
@@ -283,6 +337,22 @@ export default function Canvas({ role }) {
             />
             <span className="ml-2">{Math.round(scale * 100)}%</span>
           </label>
+
+          <button
+            type="button"
+            onClick={() => setShowBgPanel((v) => !v)}
+            className="ml-auto px-2 py-1 text-xs rounded border border-border text-text-muted hover:text-accent hover:border-accent transition"
+          >
+            {showBgPanel ? "Hide Background" : "Background"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowDebug((v) => !v)}
+            className="px-2 py-1 text-xs rounded border border-border text-text-muted hover:text-accent hover:border-accent transition"
+          >
+            {showDebug ? "Hide Debug" : "Show Debug"}
+          </button>
         </div>
 
         {/* Canvas */}
@@ -298,6 +368,7 @@ export default function Canvas({ role }) {
             onDragOver={handleDragOver}
             className="relative bg-gray-900 border border-gray-800 rounded-lg overflow-hidden shadow-md"
             style={{
+              ...canvasBackgroundStyle, // ✅ apply background
               width: deviceSize.width * scale,
               height: deviceSize.height * scale,
               transformOrigin: "top left",
@@ -371,26 +442,25 @@ export default function Canvas({ role }) {
         {/* 🧪 Draggable / Dockable Inspector */}
         {isInspectorOpen &&
           (inspectorDocked ? (
-            // Docked: card under *this* canvas, fixed height with scrollable content
+            // Docked inspector
             <div
               style={{
                 flexShrink: 0,
                 marginTop: 8,
                 display: "flex",
                 justifyContent: "center",
-                width: "100%", // only within this Canvas column
+                width: "100%",
                 zIndex: 50,
               }}
             >
               <div
                 className="bg-panel border border-border rounded-lg shadow-soft flex flex-col"
                 style={{
-                  width: "min(100%, 480px)", // never wider than this column, max 480px
-                  height: "40vh",            // fixed height so inner area can scroll
+                  width: "min(100%, 480px)",
+                  height: "40vh",
                   overflow: "hidden",
                 }}
               >
-                {/* Header */}
                 <div
                   className="flex items-center justify-between px-3 py-2 border-b border-border bg-panel-dark select-none"
                   style={{ userSelect: "none", minWidth: 0, overflow: "visible" }}
@@ -417,25 +487,23 @@ export default function Canvas({ role }) {
                   </div>
                 </div>
 
-                {/* Scrollable content */}
                 <div
                   className="p-4 flex-1 overflow-y-auto"
                   ref={inspectorRef}
                   style={{ minHeight: 0 }}
                 >
-                 <InspectorPanel
+                  <InspectorPanel
                     element={elements.find((el) => el.id === selectedId)}
-                    elements={visibleElements}                // 👈 add this
+                    elements={visibleElements}
                     onUpdate={(updates) => updateElement(selectedId, updates)}
                     onDelete={() => removeElement(selectedId)}
                     readOnly={isPreviewMode}
                   />
-
                 </div>
               </div>
             </div>
           ) : (
-            // Undocked: floating panel with manual drag
+            // Undocked inspector
             <div
               className="bg-panel rounded-lg shadow-2xl border border-border transition-all duration-150"
               style={{
@@ -483,17 +551,147 @@ export default function Canvas({ role }) {
                 style={{ minHeight: 0 }}
               >
                 <InspectorPanel
-                element={elements.find((el) => el.id === selectedId)}
-                elements={visibleElements}                // 👈 add this
-                onUpdate={(updates) => updateElement(selectedId, updates)}
-                onDelete={() => removeElement(selectedId)}
-                readOnly={isPreviewMode}
-              />
-
+                  element={elements.find((el) => el.id === selectedId)}
+                  elements={visibleElements}
+                  onUpdate={(updates) => updateElement(selectedId, updates)}
+                  onDelete={() => removeElement(selectedId)}
+                  readOnly={isPreviewMode}
+                />
               </div>
             </div>
           ))}
       </div>
+
+      {/* 🎨 Background panel */}
+      {showBgPanel && (
+        <div
+          className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
+          style={{
+            position: "absolute",
+            right: showDebug ? 304 : 16, // nudge left if debug is open
+            bottom: 16,
+            width: 260,
+            zIndex: 1000,
+            padding: 8,
+            fontSize: 11,
+          }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-text-primary">
+              Background – {device}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowBgPanel(false)}
+              className="text-[10px] text-text-muted hover:text-accent"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Kind */}
+          <div className="mb-2">
+            <label className="block text-[10px] text-text-muted mb-1">
+              Type
+            </label>
+            <select
+              className="w-full px-2 py-1 rounded bg-surface border border-border text-[11px]"
+              value={activeBg.kind}
+              onChange={(e) => updateActiveBackground({ kind: e.target.value })}
+            >
+              <option value="color">Solid color</option>
+              <option value="image">Image</option>
+            </select>
+          </div>
+
+          {/* Color */}
+          {activeBg.kind === "color" && (
+            <div className="mb-2 flex items-center gap-2">
+              <label className="block text-[10px] text-text-muted">
+                Color
+              </label>
+              <input
+                type="color"
+                value={activeBg.color}
+                onChange={(e) => updateActiveBackground({ color: e.target.value })}
+              />
+              <input
+                type="text"
+                value={activeBg.color}
+                onChange={(e) => updateActiveBackground({ color: e.target.value })}
+                className="flex-1 px-2 py-1 rounded bg-surface border border-border text-[11px]"
+              />
+            </div>
+          )}
+
+          {/* Image URL + size */}
+          {activeBg.kind === "image" && (
+            <>
+              <div className="mb-2">
+                <label className="block text-[10px] text-text-muted mb-1">
+                  Image URL
+                </label>
+                <input
+                  type="text"
+                  value={activeBg.imageUrl}
+                  onChange={(e) =>
+                    updateActiveBackground({ imageUrl: e.target.value })
+                  }
+                  placeholder="https://example.com/bg.png"
+                  className="w-full px-2 py-1 rounded bg-surface border border-border text-[11px]"
+                />
+              </div>
+              <div className="mb-1">
+                <label className="block text-[10px] text-text-muted mb-1">
+                  Size / Repeat
+                </label>
+                <select
+                  className="w-full px-2 py-1 rounded bg-surface border border-border text-[11px]"
+                  value={activeBg.size}
+                  onChange={(e) => updateActiveBackground({ size: e.target.value })}
+                >
+                  <option value="cover">Cover</option>
+                  <option value="contain">Contain</option>
+                  <option value="repeat">Repeat</option>
+                </select>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* 🔍 Bindings debug panel */}
+      {showDebug && (
+        <div
+          className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
+          style={{
+            position: "absolute",
+            right: 16,
+            bottom: 16,
+            width: 280,
+            maxHeight: "50vh",
+            zIndex: 1000,
+            padding: 8,
+            fontFamily: "monospace",
+            fontSize: 10,
+          }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-text-primary">
+              Bindings Debug
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowDebug(false)}
+              className="text-[10px] text-text-muted hover:text-accent"
+            >
+              ✕
+            </button>
+          </div>
+
+          <DebugBindingsPanel selectedId={selectedId} role={role} />
+        </div>
+      )}
     </div>
   );
 }
