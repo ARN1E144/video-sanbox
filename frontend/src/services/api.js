@@ -1,13 +1,7 @@
 import axios from "axios";
 
-const BASE_URL = "http://localhost:5000/api";
+const api = axios.create({
+  baseURL: "http://localhost:5000/api", // backend base URL
+});
 
-export const generateTemplate = async (prompt) => {
-  const res = await axios.post(`${BASE_URL}/ai/generate`, { prompt });
-  return res.data;
-};
-
-export const getAgoraToken = async (channel) => {
-  const res = await axios.get(`${BASE_URL}/agora/token?channel=${channel}`);
-  return res.data;
-};
+export default api;

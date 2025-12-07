@@ -1,40 +1,29 @@
-const mock_classroom = `
-() => {
-  return (
-    <div style={{ textAlign: "center", padding: 40 }}>
-      <h1>🏫 Mock Video Classroom</h1>
-      <p>Instructor with student view layout.</p>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "2fr 1fr",
-          gap: 20,
-          marginTop: 20,
-        }}
-      >
-        <video
-          width="100%"
-          autoPlay
-          muted
-          loop
-          src="https://www.w3schools.com/html/mov_bbb.mp4"
-        />
-        <div style={{ display: "grid", gap: 10 }}>
-          {[1, 2, 3, 4].map((n) => (
-            <video
-              key={n}
-              width="100%"
-              autoPlay
-              muted
-              loop
-              src="https://www.w3schools.com/html/movie.mp4"
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-`;
+const classroom = {
+name: 'Classroom',
+tree: {
+type: 'App',
+children: [
+{ type: 'AppBar', props: { title: 'Classroom', actions: ['EndCall'] } },
+{
+type: 'Container',
+props: { layout: 'grid', align: 'center', justify: 'center' },
+children: [
+{ type: 'VideoFeed', props: { autoplay: true, muted: true, controls: true } },
+{ type: 'ChatPanel', props: { room: 'default', showAvatars: true } },
+],
+},
+{
+type: 'Container',
+props: { layout: 'flex', align: 'center', justify: 'space-between' },
+children: [
+{ type: 'MicButton', props: { state: 'on' } },
+{ type: 'TextBox', props: { placeholder: 'Say hello…' } },
+{ type: 'ControlButton', props: { label: 'End', action: 'EndCall', target: 'AppBar' } },
+],
+},
+],
+},
+};
 
-export default mock_classroom;
+
+export default classroom;

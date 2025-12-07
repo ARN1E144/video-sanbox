@@ -1,29 +1,29 @@
-const mock_tiktokFeed = `
-() => {
-  const videos = [
-    "https://www.w3schools.com/html/mov_bbb.mp4",
-    "https://www.w3schools.com/html/movie.mp4",
-    "https://www.w3schools.com/html/mov_bbb.mp4",
-  ];
+const tiktokFeed = {
+name: 'Tiktok Feed',
+tree: {
+type: 'App',
+children: [
+{ type: 'AppBar', props: { title: 'Tiktok Feed', actions: ['EndCall'] } },
+{
+type: 'Container',
+props: { layout: 'grid', align: 'center', justify: 'center' },
+children: [
+{ type: 'VideoFeed', props: { autoplay: true, muted: true, controls: true } },
+{ type: 'ChatPanel', props: { room: 'default', showAvatars: true } },
+],
+},
+{
+type: 'Container',
+props: { layout: 'flex', align: 'center', justify: 'space-between' },
+children: [
+{ type: 'MicButton', props: { state: 'on' } },
+{ type: 'TextBox', props: { placeholder: 'Say hello…' } },
+{ type: 'ControlButton', props: { label: 'End', action: 'EndCall', target: 'AppBar' } },
+],
+},
+],
+},
+};
 
-  return (
-    <div style={{ overflowY: "scroll", height: "90vh" }}>
-      {videos.map((src, i) => (
-        <div key={i} style={{ marginBottom: 30, textAlign: "center" }}>
-          <video
-            width="300"
-            autoPlay
-            muted
-            loop
-            src={src}
-            style={{ borderRadius: 10 }}
-          />
-          <p>🎬 Video #{i + 1}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-`;
 
-export default mock_tiktokFeed;
+export default tiktokFeed;

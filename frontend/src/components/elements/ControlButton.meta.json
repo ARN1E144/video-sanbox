@@ -5,6 +5,11 @@
   "icon": "🔘",
   "editableProps": {
     "label": "Button",
+    "endpoint": "",
+    "apiMethod": "GET",
+    "apiIncludeAuth": false,
+    "apiAuthScheme": "Bearer",
+    "apiAuthToken": "",
     "style": {
       "backgroundColor": "#7C3AED",
       "color": "#FFFFFF",

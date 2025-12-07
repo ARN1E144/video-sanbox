@@ -1,10 +1,30 @@
 // src/mockTemplates/mock_fallback.js
-const mock_fallback = `
+const fallback = {
+name: 'fallback',
+tree: {
+type: 'App',
+children: [
+{ type: 'AppBar', props: { title: 'fallback', actions: ['EndCall'] } },
+{
+type: 'Container',
+props: { layout: 'grid', align: 'center', justify: 'center' },
+children: [
+{ type: 'VideoFeed', props: { autoplay: true, muted: true, controls: true } },
+{ type: 'ChatPanel', props: { room: 'default', showAvatars: true } },
+],
+},
+{
+type: 'Container',
+props: { layout: 'flex', align: 'center', justify: 'space-between' },
+children: [
+{ type: 'MicButton', props: { state: 'on' } },
+{ type: 'TextBox', props: { placeholder: 'Say hello…' } },
+{ type: 'ControlButton', props: { label: 'End', action: 'EndCall', target: 'AppBar' } },
+],
+},
+],
+},
+};
 
-    <div style={{ textAlign: "center", padding: 40 }}>
-      <h3>⚠️ No template matches this prompt</h3>
-      <p>Try entering a different prompt like "live stream" or "video call".</p>
-    </div>`
-  
 
-export default mock_fallback;
+export default fallback;
