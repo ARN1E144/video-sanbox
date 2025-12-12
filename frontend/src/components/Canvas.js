@@ -10,7 +10,14 @@ import { useCanvasState } from "../context/CanvasContext";
 import { useProjectContext } from "../context/ProjectContext";
 import { runAction } from "../utils/actionExecutor";
 import { useActionContext } from "../context/ActionContext";
-import { ChevronDown, ChevronUp, Move, Dock } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Move,
+  Dock,
+  Bug,
+  Palette,
+} from "lucide-react";
 import DebugBindingsPanel from "./DebugBindingPanel";
 
 const DEVICE_SIZES = {
@@ -25,12 +32,15 @@ export default function Canvas({ role }) {
 
   const { isPreviewMode } = usePreviewMode();
   const { elements, addElement, updateElement, removeElement } = useCanvasState();
-  const { projectType } = useProjectContext();
+  const { projectType, backgroundConfigs, setBackgroundConfigs } = useProjectContext();
   const actionCtx = useActionContext();
 
   const [selectedId, setSelectedId] = useState(null);
   const [availableElements, setAvailableElements] = useState([]);
   const [activeTab, setActiveTab] = useState("Elements");
+
+  const [showBgPanel, setShowBgPanel] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
   const [inspectorState, setInspectorState] = useState({
     host: true,
@@ -40,32 +50,31 @@ export default function Canvas({ role }) {
   const [inspectorDocked, setInspectorDocked] = useState(true);
   const [inspectorPosition, setInspectorPosition] = useState({ x: 200, y: 200 });
 
-  const [showDebug, setShowDebug] = useState(false);
+  const canvasRef = useRef(null);
+  const inspectorRef = useRef(null);
+  const containerRef = useRef(null);
 
-  // 🎨 Per-device background config
-  const [backgroundConfigs, setBackgroundConfigs] = useState({
-    desktop: {
-      kind: "color", // "color" | "image"
-      color: "#020617",
-      imageUrl: "",
-      size: "cover", // cover | contain | repeat
-    },
-    tablet: {
-      kind: "color",
-      color: "#020617",
-      imageUrl: "",
-      size: "cover",
-    },
-    mobile: {
-      kind: "color",
-      color: "#020617",
-      imageUrl: "",
-      size: "cover",
-    },
-  });
+  // manual drag state for undocked inspector
+  const [isDraggingInspector, setIsDraggingInspector] = useState(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
 
-  const [showBgPanel, setShowBgPanel] = useState(false);
-  const activeBg = backgroundConfigs[device];
+  const isRoleCanvas = role === "host" || role === "client";
+  const currentRoleKey = role || "null";
+  const isInspectorOpen = inspectorState[currentRoleKey];
+
+  const deviceSize = DEVICE_SIZES[device];
+
+  /* ------------------------------------------------------------
+   * Background (per device, shared for project)
+   * ---------------------------------------------------------- */
+  const defaultBg = {
+    kind: "color",
+    color: "#020617",
+    imageUrl: "",
+    size: "cover",
+  };
+
+  const activeBg = (backgroundConfigs && backgroundConfigs[device]) || defaultBg;
 
   const canvasBackgroundStyle =
     activeBg.kind === "image" && activeBg.imageUrl
@@ -77,34 +86,30 @@ export default function Canvas({ role }) {
               ? activeBg.size
               : "auto",
           backgroundPosition: "center",
-          backgroundColor: "#000000", // fallback behind transparent PNGs
+          backgroundColor: "#000000",
         }
       : {
           backgroundColor: activeBg.color || "#020617",
         };
 
-  // helper to update current device bg
   const updateActiveBackground = (patch) => {
-    setBackgroundConfigs((prev) => ({
-      ...prev,
-      [device]: {
-        ...prev[device],
-        ...patch,
-      },
-    }));
+    if (typeof setBackgroundConfigs !== "function") {
+      console.warn("setBackgroundConfigs is not available from ProjectContext");
+      return;
+    }
+
+    setBackgroundConfigs((prev) => {
+      const safePrev = prev || {};
+      const current = safePrev[device] || defaultBg;
+      return {
+        ...safePrev,
+        [device]: {
+          ...current,
+          ...patch,
+        },
+      };
+    });
   };
-
-  const canvasRef = useRef(null);
-  const inspectorRef = useRef(null);
-  const containerRef = useRef(null);
-
-  // manual drag state for undocked inspector
-  const [isDraggingInspector, setIsDraggingInspector] = useState(false);
-  const dragOffsetRef = useRef({ x: 0, y: 0 });
-
-  const deviceSize = DEVICE_SIZES[device];
-  const currentRoleKey = role || "null";
-  const isInspectorOpen = inspectorState[currentRoleKey];
 
   /* ------------------------------------------------------------
    * Load element metadata
@@ -118,15 +123,23 @@ export default function Canvas({ role }) {
     setAvailableElements(all);
   }, []);
 
+  /* ------------------------------------------------------------
+   * Clear bindings only when leaving preview (prevents max depth)
+   * ---------------------------------------------------------- */
+  const prevPreviewRef = useRef(isPreviewMode);
   useEffect(() => {
-    if (!isPreviewMode) {
-      // Exiting preview → wipe any runtime bindings
+    const wasPreview = prevPreviewRef.current;
+    const isNowPreview = isPreviewMode;
+
+    if (wasPreview && !isNowPreview) {
       actionCtx.clearAllBindings();
     }
-  }, [isPreviewMode, actionCtx]);
+
+    prevPreviewRef.current = isNowPreview;
+  }, [isPreviewMode]); // IMPORTANT: don't depend on actionCtx object
 
   /* ------------------------------------------------------------
-   * Drag and Drop Element
+   * Drag & drop
    * ---------------------------------------------------------- */
   const handleDrop = (e) => {
     e.preventDefault();
@@ -143,7 +156,8 @@ export default function Canvas({ role }) {
     addElement({
       id: uuid(),
       type: meta.name,
-      role: role || null,
+      // ✅ IMPORTANT: role-specific canvases stamp the element with that role
+      role: isRoleCanvas ? role : null,
       x: dropX - 150,
       y: dropY - 75,
       width: 300,
@@ -194,7 +208,7 @@ export default function Canvas({ role }) {
       const newX = mouseX - dragOffsetRef.current.x;
       const newY = mouseY - dragOffsetRef.current.y;
 
-      const maxX = containerRect.width - 260; // assume min width
+      const maxX = containerRect.width - 260;
       const maxY = containerRect.height - 100;
 
       setInspectorPosition({
@@ -217,16 +231,19 @@ export default function Canvas({ role }) {
   }, [isDraggingInspector, inspectorPosition]);
 
   /* ------------------------------------------------------------
-   * Filter Elements by Role
+   * ✅ Role filtering (fixes host/client showing same elements)
    * ---------------------------------------------------------- */
-  const visibleElements = elements.filter((el) => {
-    if (projectType === "single") return true;
-    if (role === null) return true;
-    return el.role === role;
-  });
+  const visibleElements = React.useMemo(() => {
+    // If this Canvas is host/client, ALWAYS show only its own role.
+    if (isRoleCanvas) return elements.filter((el) => el.role === role);
 
-  const isSplitPreview = isPreviewMode && (role === "host" || role === "client");
-  const isSplitEditor = !isPreviewMode && (role === "host" || role === "client");
+    // Otherwise, behave as before (single canvas or "all" canvas).
+    if (projectType === "single") return elements;
+    return elements;
+  }, [elements, isRoleCanvas, role, projectType]);
+
+  const isSplitPreview = isPreviewMode && isRoleCanvas;
+  const isSplitEditor = !isPreviewMode && isRoleCanvas;
 
   /* ------------------------------------------------------------
    * Render
@@ -239,9 +256,7 @@ export default function Canvas({ role }) {
       {/* Sidebar */}
       <div
         className={`shrink-0 transition-all duration-300 bg-panel flex flex-col
-          ${isSplitPreview ? "hidden" : `${
-            isSplitEditor ? "w-44" : "w-56"
-          } p-3 border-r border-border`}
+          ${isSplitPreview ? "hidden" : `${isSplitEditor ? "w-44" : "w-56"} p-3 border-r border-border`}
         `}
       >
         {!isSplitPreview && (
@@ -273,59 +288,54 @@ export default function Canvas({ role }) {
                 {elements.length === 0 && (
                   <p className="text-xs text-text-muted italic">No elements yet</p>
                 )}
-                {elements
-                  .filter((el) => (role ? el.role === role : true))
-                  .map((el) => (
-                    <div
-                      key={el.id}
-                      onClick={() => {
-                        setSelectedId(el.id);
-                        setInspectorState((prev) => ({
-                          ...prev,
-                          [currentRoleKey]: true,
-                        }));
+                {visibleElements.map((el) => (
+                  <div
+                    key={el.id}
+                    onClick={() => {
+                      setSelectedId(el.id);
+                      setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
+                    }}
+                    className={`flex justify-between items-center px-2 py-1 rounded cursor-pointer mb-1 ${
+                      selectedId === el.id ? "bg-accent/20" : "hover:bg-accent/10"
+                    }`}
+                  >
+                    <span className="text-sm">
+                      {el.type} {el.role && `(${el.role})`}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeElement(el.id);
+                        if (selectedId === el.id) setSelectedId(null);
                       }}
-                      className={`flex justify-between items-center px-2 py-1 rounded cursor-pointer mb-1 ${
-                        selectedId === el.id ? "bg-accent/20" : "hover:bg-accent/10"
-                      }`}
+                      className="text-xs text-red-500 hover:text-red-400"
                     >
-                      <span className="text-sm">
-                        {el.type} {el.role && `(${el.role})`}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeElement(el.id);
-                          if (selectedId === el.id) setSelectedId(null);
-                        }}
-                        className="text-xs text-red-500 hover:text-red-400"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </>
         )}
       </div>
 
-      {/* Canvas + Inspector */}
-      <div className="flex flex-col flex-1 relative bg-panel">
+      {/* Canvas + Inspector column */}
+      <div className="flex flex-col flex-1 min-w-0 relative bg-panel">
         {/* Toolbar */}
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-3 mb-4 min-w-0">
           <select
             value={device}
             onChange={(e) => setDevice(e.target.value)}
-            className="bg-panel text-text-primary border border-border rounded-lg px-3 py-1"
+            className="bg-panel text-text-primary border border-border rounded-lg px-3 py-1 shrink-0"
           >
             <option value="desktop">Desktop</option>
             <option value="tablet">Tablet</option>
             <option value="mobile">Mobile</option>
           </select>
 
-          <label className="text-text-primary">
-            Zoom:
+          <label className="text-text-primary whitespace-nowrap flex items-center min-w-0">
+            <span className="shrink-0">Zoom:</span>
             <input
               type="range"
               min="0.5"
@@ -333,31 +343,38 @@ export default function Canvas({ role }) {
               step="0.05"
               value={scale}
               onChange={(e) => setScale(parseFloat(e.target.value))}
-              className="ml-2"
+              className="ml-2 w-28"
             />
-            <span className="ml-2">{Math.round(scale * 100)}%</span>
+            <span className="ml-2 shrink-0">{Math.round(scale * 100)}%</span>
           </label>
 
-          <button
-            type="button"
-            onClick={() => setShowBgPanel((v) => !v)}
-            className="ml-auto px-2 py-1 text-xs rounded border border-border text-text-muted hover:text-accent hover:border-accent transition"
-          >
-            {showBgPanel ? "Hide Background" : "Background"}
-          </button>
+          {/* ✅ Always available; icon-only in split preview to avoid "ou" clipping */}
+          <div className="ml-auto flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowBgPanel((v) => !v)}
+              className="px-2 py-1 text-xs rounded border border-border text-text-muted hover:text-accent hover:border-accent transition flex items-center gap-2"
+              title="Background"
+            >
+              <Palette size={14} />
+              {!isSplitPreview && <span>{showBgPanel ? "Hide Background" : "Background"}</span>}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setShowDebug((v) => !v)}
-            className="px-2 py-1 text-xs rounded border border-border text-text-muted hover:text-accent hover:border-accent transition"
-          >
-            {showDebug ? "Hide Debug" : "Show Debug"}
-          </button>
+            <button
+              type="button"
+              onClick={() => setShowDebug((v) => !v)}
+              className="px-2 py-1 text-xs rounded border border-border text-text-muted hover:text-accent hover:border-accent transition flex items-center gap-2"
+              title="Bindings Debug"
+            >
+              <Bug size={14} />
+              {!isSplitPreview && <span>{showDebug ? "Hide Debug" : "Show Debug"}</span>}
+            </button>
+          </div>
         </div>
 
         {/* Canvas */}
         <div
-          className="flex justify-center items-start overflow-auto relative flex-1"
+          className="flex justify-center items-start overflow-auto relative flex-1 min-w-0"
           onClick={(e) => {
             if (e.target === canvasRef.current) setSelectedId(null);
           }}
@@ -366,9 +383,9 @@ export default function Canvas({ role }) {
             ref={canvasRef}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
-            className="relative bg-gray-900 border border-gray-800 rounded-lg overflow-hidden shadow-md"
+            className="relative overflow-hidden rounded-lg shadow-md"
             style={{
-              ...canvasBackgroundStyle, // ✅ apply background
+              ...canvasBackgroundStyle,
               width: deviceSize.width * scale,
               height: deviceSize.height * scale,
               transformOrigin: "top left",
@@ -380,12 +397,8 @@ export default function Canvas({ role }) {
               const handleElementClick = async (event) => {
                 event.stopPropagation();
 
-                // always select + open inspector on click
                 setSelectedId(el.id);
-                setInspectorState((prev) => ({
-                  ...prev,
-                  [currentRoleKey]: true,
-                }));
+                setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
 
                 const actionName = el.props?.onClick;
                 if (!isPreviewMode || !actionName) return;
@@ -428,10 +441,7 @@ export default function Canvas({ role }) {
                   }`}
                 >
                   <div className="w-full h-full pointer-events-none">
-                    <ElementComp
-                      {...el.props}
-                      {...(actionCtx.bindings?.[el.id] || {})}
-                    />
+                    <ElementComp {...el.props} {...(actionCtx.bindings?.[el.id] || {})} />
                   </div>
                 </Rnd>
               );
@@ -439,10 +449,9 @@ export default function Canvas({ role }) {
           </div>
         </div>
 
-        {/* 🧪 Draggable / Dockable Inspector */}
+        {/* Inspector */}
         {isInspectorOpen &&
           (inspectorDocked ? (
-            // Docked inspector
             <div
               style={{
                 flexShrink: 0,
@@ -487,11 +496,7 @@ export default function Canvas({ role }) {
                   </div>
                 </div>
 
-                <div
-                  className="p-4 flex-1 overflow-y-auto"
-                  ref={inspectorRef}
-                  style={{ minHeight: 0 }}
-                >
+                <div className="p-4 flex-1 overflow-y-auto" ref={inspectorRef} style={{ minHeight: 0 }}>
                   <InspectorPanel
                     element={elements.find((el) => el.id === selectedId)}
                     elements={visibleElements}
@@ -503,7 +508,6 @@ export default function Canvas({ role }) {
               </div>
             </div>
           ) : (
-            // Undocked inspector
             <div
               className="bg-panel rounded-lg shadow-2xl border border-border transition-all duration-150"
               style={{
@@ -545,11 +549,7 @@ export default function Canvas({ role }) {
                 </div>
               </div>
 
-              <div
-                className="p-4 overflow-y-auto flex-1"
-                ref={inspectorRef}
-                style={{ minHeight: 0 }}
-              >
+              <div className="p-4 overflow-y-auto flex-1" ref={inspectorRef} style={{ minHeight: 0 }}>
                 <InspectorPanel
                   element={elements.find((el) => el.id === selectedId)}
                   elements={visibleElements}
@@ -562,13 +562,13 @@ export default function Canvas({ role }) {
           ))}
       </div>
 
-      {/* 🎨 Background panel */}
+      {/* Background panel */}
       {showBgPanel && (
         <div
           className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
           style={{
             position: "absolute",
-            right: showDebug ? 304 : 16, // nudge left if debug is open
+            right: showDebug ? 304 : 16,
             bottom: 16,
             width: 260,
             zIndex: 1000,
@@ -589,11 +589,8 @@ export default function Canvas({ role }) {
             </button>
           </div>
 
-          {/* Kind */}
           <div className="mb-2">
-            <label className="block text-[10px] text-text-muted mb-1">
-              Type
-            </label>
+            <label className="block text-[10px] text-text-muted mb-1">Type</label>
             <select
               className="w-full px-2 py-1 rounded bg-surface border border-border text-[11px]"
               value={activeBg.kind}
@@ -604,12 +601,9 @@ export default function Canvas({ role }) {
             </select>
           </div>
 
-          {/* Color */}
           {activeBg.kind === "color" && (
             <div className="mb-2 flex items-center gap-2">
-              <label className="block text-[10px] text-text-muted">
-                Color
-              </label>
+              <label className="block text-[10px] text-text-muted">Color</label>
               <input
                 type="color"
                 value={activeBg.color}
@@ -624,27 +618,20 @@ export default function Canvas({ role }) {
             </div>
           )}
 
-          {/* Image URL + size */}
           {activeBg.kind === "image" && (
             <>
               <div className="mb-2">
-                <label className="block text-[10px] text-text-muted mb-1">
-                  Image URL
-                </label>
+                <label className="block text-[10px] text-text-muted mb-1">Image URL</label>
                 <input
                   type="text"
                   value={activeBg.imageUrl}
-                  onChange={(e) =>
-                    updateActiveBackground({ imageUrl: e.target.value })
-                  }
+                  onChange={(e) => updateActiveBackground({ imageUrl: e.target.value })}
                   placeholder="https://example.com/bg.png"
                   className="w-full px-2 py-1 rounded bg-surface border border-border text-[11px]"
                 />
               </div>
               <div className="mb-1">
-                <label className="block text-[10px] text-text-muted mb-1">
-                  Size / Repeat
-                </label>
+                <label className="block text-[10px] text-text-muted mb-1">Size / Repeat</label>
                 <select
                   className="w-full px-2 py-1 rounded bg-surface border border-border text-[11px]"
                   value={activeBg.size}
@@ -660,7 +647,7 @@ export default function Canvas({ role }) {
         </div>
       )}
 
-      {/* 🔍 Bindings debug panel */}
+      {/* Debug panel */}
       {showDebug && (
         <div
           className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
@@ -677,9 +664,7 @@ export default function Canvas({ role }) {
           }}
         >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-text-primary">
-              Bindings Debug
-            </span>
+            <span className="text-xs font-semibold text-text-primary">Bindings Debug</span>
             <button
               type="button"
               onClick={() => setShowDebug(false)}
