@@ -15,10 +15,9 @@ import {
   ChevronUp,
   Move,
   Dock,
+  Image as ImageIcon,
   Bug,
-  Palette,
 } from "lucide-react";
-import DebugBindingsPanel from "./DebugBindingPanel";
 
 const DEVICE_SIZES = {
   desktop: { width: 1440, height: 900 },
@@ -26,21 +25,24 @@ const DEVICE_SIZES = {
   mobile: { width: 390, height: 844 },
 };
 
-export default function Canvas({ role }) {
+export default function Canvas({
+  role,
+  showRightTools = true,
+  onSelectedIdChange,
+  onRequestBackground,
+  onRequestDebug,
+}) {
   const [device, setDevice] = useState("desktop");
   const [scale, setScale] = useState(0.75);
 
   const { isPreviewMode } = usePreviewMode();
   const { elements, addElement, updateElement, removeElement } = useCanvasState();
-  const { projectType, backgroundConfigs, setBackgroundConfigs } = useProjectContext();
+  const { projectType, backgroundConfigs } = useProjectContext();
   const actionCtx = useActionContext();
 
   const [selectedId, setSelectedId] = useState(null);
   const [availableElements, setAvailableElements] = useState([]);
   const [activeTab, setActiveTab] = useState("Elements");
-
-  const [showBgPanel, setShowBgPanel] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
 
   const [inspectorState, setInspectorState] = useState({
     host: true,
@@ -54,18 +56,31 @@ export default function Canvas({ role }) {
   const inspectorRef = useRef(null);
   const containerRef = useRef(null);
 
-  // manual drag state for undocked inspector
   const [isDraggingInspector, setIsDraggingInspector] = useState(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
 
-  const isRoleCanvas = role === "host" || role === "client";
+  const deviceSize = DEVICE_SIZES[device];
   const currentRoleKey = role || "null";
   const isInspectorOpen = inspectorState[currentRoleKey];
 
-  const deviceSize = DEVICE_SIZES[device];
+  const isSplitPreview = isPreviewMode && (role === "host" || role === "client");
+  const isSplitEditor = !isPreviewMode && (role === "host" || role === "client");
+
+  // Local fallback panels (Canvas will still show something even if parent doesn't)
+  const [showBgPanel, setShowBgPanel] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
   /* ------------------------------------------------------------
-   * Background (per device, shared for project)
+   * Notify parent when selection changes
+   * ---------------------------------------------------------- */
+  useEffect(() => {
+    if (typeof onSelectedIdChange === "function") {
+      onSelectedIdChange(selectedId);
+    }
+  }, [selectedId, onSelectedIdChange]);
+
+  /* ------------------------------------------------------------
+   * Background (shared per project, per device)
    * ---------------------------------------------------------- */
   const defaultBg = {
     kind: "color",
@@ -92,25 +107,6 @@ export default function Canvas({ role }) {
           backgroundColor: activeBg.color || "#020617",
         };
 
-  const updateActiveBackground = (patch) => {
-    if (typeof setBackgroundConfigs !== "function") {
-      console.warn("setBackgroundConfigs is not available from ProjectContext");
-      return;
-    }
-
-    setBackgroundConfigs((prev) => {
-      const safePrev = prev || {};
-      const current = safePrev[device] || defaultBg;
-      return {
-        ...safePrev,
-        [device]: {
-          ...current,
-          ...patch,
-        },
-      };
-    });
-  };
-
   /* ------------------------------------------------------------
    * Load element metadata
    * ---------------------------------------------------------- */
@@ -124,40 +120,39 @@ export default function Canvas({ role }) {
   }, []);
 
   /* ------------------------------------------------------------
-   * Clear bindings only when leaving preview (prevents max depth)
+   * Prevent max update depth:
+   * clear bindings ONLY when leaving preview
    * ---------------------------------------------------------- */
   const prevPreviewRef = useRef(isPreviewMode);
   useEffect(() => {
-    const wasPreview = prevPreviewRef.current;
-    const isNowPreview = isPreviewMode;
-
-    if (wasPreview && !isNowPreview) {
+    if (prevPreviewRef.current && !isPreviewMode) {
       actionCtx.clearAllBindings();
     }
-
-    prevPreviewRef.current = isNowPreview;
-  }, [isPreviewMode]); // IMPORTANT: don't depend on actionCtx object
+    prevPreviewRef.current = isPreviewMode;
+  }, [isPreviewMode]); // intentionally minimal deps
 
   /* ------------------------------------------------------------
-   * Drag & drop
+   * Drag & Drop — ROLE AUTHORITY ✅
    * ---------------------------------------------------------- */
   const handleDrop = (e) => {
     e.preventDefault();
     const metaString = e.dataTransfer.getData("application/json");
-    if (!metaString) return;
+    if (!metaString || !canvasRef.current) return;
 
     const meta = JSON.parse(metaString);
-    if (!canvasRef.current) return;
-
     const rect = canvasRef.current.getBoundingClientRect();
+
     const dropX = (e.clientX - rect.left) / scale;
     const dropY = (e.clientY - rect.top) / scale;
+
+    // ✅ single => always client
+    // ✅ multi  => use canvas role (host/client), fallback null
+    const targetRole = projectType === "single" ? "client" : role || null;
 
     addElement({
       id: uuid(),
       type: meta.name,
-      // ✅ IMPORTANT: role-specific canvases stamp the element with that role
-      role: isRoleCanvas ? role : null,
+      role: targetRole,
       x: dropX - 150,
       y: dropY - 75,
       width: 300,
@@ -169,7 +164,7 @@ export default function Canvas({ role }) {
   const handleDragOver = (e) => e.preventDefault();
 
   /* ------------------------------------------------------------
-   * Inspector: toggle + docking
+   * Inspector controls
    * ---------------------------------------------------------- */
   const toggleInspector = () => {
     setInspectorState((prev) => ({
@@ -180,15 +175,11 @@ export default function Canvas({ role }) {
 
   const toggleDock = () => setInspectorDocked((prev) => !prev);
 
-  /* ------------------------------------------------------------
-   * Manual drag for undocked inspector
-   * ---------------------------------------------------------- */
   const handleInspectorDragStart = (e) => {
     if (inspectorDocked) return;
     if (!containerRef.current) return;
 
     setIsDraggingInspector(true);
-
     const containerRect = containerRef.current.getBoundingClientRect();
     dragOffsetRef.current = {
       x: e.clientX - containerRect.left - inspectorPosition.x,
@@ -228,22 +219,29 @@ export default function Canvas({ role }) {
       window.removeEventListener("mouseup", handleUp);
       window.removeEventListener("mouseleave", handleUp);
     };
-  }, [isDraggingInspector, inspectorPosition]);
+  }, [isDraggingInspector]);
 
   /* ------------------------------------------------------------
-   * ✅ Role filtering (fixes host/client showing same elements)
+   * Filter elements per role
    * ---------------------------------------------------------- */
-  const visibleElements = React.useMemo(() => {
-    // If this Canvas is host/client, ALWAYS show only its own role.
-    if (isRoleCanvas) return elements.filter((el) => el.role === role);
+  const visibleElements = elements.filter((el) => {
+    if (projectType === "single") return el.role === "client" || el.role === null;
+    if (role === null) return true;
+    return el.role === role;
+  });
 
-    // Otherwise, behave as before (single canvas or "all" canvas).
-    if (projectType === "single") return elements;
-    return elements;
-  }, [elements, isRoleCanvas, role, projectType]);
+  /* ------------------------------------------------------------
+   * Tool handlers (call parent if provided, otherwise local panel)
+   * ---------------------------------------------------------- */
+  const handleBackgroundClick = () => {
+    if (typeof onRequestBackground === "function") return onRequestBackground();
+    setShowBgPanel((v) => !v);
+  };
 
-  const isSplitPreview = isPreviewMode && isRoleCanvas;
-  const isSplitEditor = !isPreviewMode && isRoleCanvas;
+  const handleDebugClick = () => {
+    if (typeof onRequestDebug === "function") return onRequestDebug();
+    setShowDebug((v) => !v);
+  };
 
   /* ------------------------------------------------------------
    * Render
@@ -256,12 +254,20 @@ export default function Canvas({ role }) {
       {/* Sidebar */}
       <div
         className={`shrink-0 transition-all duration-300 bg-panel flex flex-col
-          ${isSplitPreview ? "hidden" : `${isSplitEditor ? "w-44" : "w-56"} p-3 border-r border-border`}
+          ${
+            isSplitPreview
+              ? "hidden"
+              : `${isSplitEditor ? "w-44" : "w-56"} p-3 border-r border-border`
+          }
         `}
       >
         {!isSplitPreview && (
           <>
-            <Tabs activeTab={activeTab} setActiveTab={setActiveTab} tabs={["Elements", "Layers"]} />
+            <Tabs
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              tabs={["Elements", "Layers"]}
+            />
 
             {activeTab === "Elements" && (
               <div>
@@ -288,54 +294,58 @@ export default function Canvas({ role }) {
                 {elements.length === 0 && (
                   <p className="text-xs text-text-muted italic">No elements yet</p>
                 )}
-                {visibleElements.map((el) => (
-                  <div
-                    key={el.id}
-                    onClick={() => {
-                      setSelectedId(el.id);
-                      setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
-                    }}
-                    className={`flex justify-between items-center px-2 py-1 rounded cursor-pointer mb-1 ${
-                      selectedId === el.id ? "bg-accent/20" : "hover:bg-accent/10"
-                    }`}
-                  >
-                    <span className="text-sm">
-                      {el.type} {el.role && `(${el.role})`}
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeElement(el.id);
-                        if (selectedId === el.id) setSelectedId(null);
+                {elements
+                  .filter((el) => (role ? el.role === role : true))
+                  .map((el) => (
+                    <div
+                      key={el.id}
+                      onClick={() => {
+                        setSelectedId(el.id);
+                        setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
                       }}
-                      className="text-xs text-red-500 hover:text-red-400"
+                      className={`flex justify-between items-center px-2 py-1 rounded cursor-pointer mb-1 ${
+                        selectedId === el.id ? "bg-accent/20" : "hover:bg-accent/10"
+                      }`}
                     >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+                      <span className="text-sm">
+                        {el.type} {el.role && `(${el.role})`}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeElement(el.id);
+                          if (selectedId === el.id) setSelectedId(null);
+                        }}
+                        className="text-xs text-red-500 hover:text-red-400"
+                        title="Delete"
+                        type="button"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
               </div>
             )}
           </>
         )}
       </div>
 
-      {/* Canvas + Inspector column */}
-      <div className="flex flex-col flex-1 min-w-0 relative bg-panel">
+      {/* Canvas + Inspector */}
+      <div className="flex flex-col flex-1 relative bg-panel min-w-0">
         {/* Toolbar */}
-        <div className="flex items-center gap-3 mb-4 min-w-0">
+        <div className="relative flex items-center gap-4 mb-4 pr-16">
           <select
             value={device}
             onChange={(e) => setDevice(e.target.value)}
-            className="bg-panel text-text-primary border border-border rounded-lg px-3 py-1 shrink-0"
+            className="bg-panel text-text-primary border border-border rounded-lg px-3 py-1"
           >
             <option value="desktop">Desktop</option>
             <option value="tablet">Tablet</option>
             <option value="mobile">Mobile</option>
           </select>
 
-          <label className="text-text-primary whitespace-nowrap flex items-center min-w-0">
-            <span className="shrink-0">Zoom:</span>
+          <label className="text-text-primary whitespace-nowrap">
+            Zoom:
             <input
               type="range"
               min="0.5"
@@ -343,34 +353,112 @@ export default function Canvas({ role }) {
               step="0.05"
               value={scale}
               onChange={(e) => setScale(parseFloat(e.target.value))}
-              className="ml-2 w-28"
+              className="ml-2"
             />
-            <span className="ml-2 shrink-0">{Math.round(scale * 100)}%</span>
+            <span className="ml-2">{Math.round(scale * 100)}%</span>
           </label>
 
-          {/* ✅ Always available; icon-only in split preview to avoid "ou" clipping */}
-          <div className="ml-auto flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowBgPanel((v) => !v)}
-              className="px-2 py-1 text-xs rounded border border-border text-text-muted hover:text-accent hover:border-accent transition flex items-center gap-2"
-              title="Background"
-            >
-              <Palette size={14} />
-              {!isSplitPreview && <span>{showBgPanel ? "Hide Background" : "Background"}</span>}
-            </button>
+          {/* Right tools pinned (prevents disappearing in split due to wrapping) */}
+          {showRightTools && (
+            <div className="absolute right-0 top-0 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackgroundClick}
+                className="p-1.5 rounded border border-border text-text-muted hover:text-accent hover:border-accent transition"
+                title="Background"
+              >
+                <ImageIcon size={14} />
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setShowDebug((v) => !v)}
-              className="px-2 py-1 text-xs rounded border border-border text-text-muted hover:text-accent hover:border-accent transition flex items-center gap-2"
-              title="Bindings Debug"
-            >
-              <Bug size={14} />
-              {!isSplitPreview && <span>{showDebug ? "Hide Debug" : "Show Debug"}</span>}
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={handleDebugClick}
+                className="p-1.5 rounded border border-border text-text-muted hover:text-accent hover:border-accent transition"
+                title="Show Debug"
+              >
+                <Bug size={14} />
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Local Floating Panels (only if parent isn't handling) */}
+        {showBgPanel && (
+          <div
+            className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
+            style={{
+              position: "absolute",
+              right: 12,
+              top: 52,
+              width: 260,
+              zIndex: 2000,
+              padding: 10,
+              fontSize: 11,
+            }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-text-primary">
+                Background ({role || "client"})
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowBgPanel(false)}
+                className="text-[10px] text-text-muted hover:text-accent"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="text-text-muted text-xs">
+              Background editor UI…
+              <br />
+              (Parent panel can override this)
+            </div>
+          </div>
+        )}
+
+        {showDebug && (
+          <div
+            className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
+            style={{
+              position: "absolute",
+              right: 12,
+              top: showBgPanel ? 52 + 220 : 52,
+              width: 280,
+              maxHeight: "50vh",
+              overflow: "auto",
+              zIndex: 2000,
+              padding: 10,
+              fontFamily: "monospace",
+              fontSize: 10,
+            }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-text-primary">Debug</span>
+              <button
+                type="button"
+                onClick={() => setShowDebug(false)}
+                className="text-[10px] text-text-muted hover:text-accent"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <pre className="text-text-muted whitespace-pre-wrap">
+              {JSON.stringify(
+                {
+                  role,
+                  projectType,
+                  selectedId,
+                  visibleCount: visibleElements.length,
+                },
+                null,
+                2
+              )}
+            </pre>
+          </div>
+        )}
 
         {/* Canvas */}
         <div
@@ -396,7 +484,6 @@ export default function Canvas({ role }) {
 
               const handleElementClick = async (event) => {
                 event.stopPropagation();
-
                 setSelectedId(el.id);
                 setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
 
@@ -483,6 +570,7 @@ export default function Canvas({ role }) {
                       className="text-xs text-text-muted hover:text-accent transition"
                       onClick={toggleDock}
                       title="Undock Inspector"
+                      type="button"
                     >
                       <Dock size={14} />
                     </button>
@@ -490,13 +578,18 @@ export default function Canvas({ role }) {
                       className="text-xs text-text-muted hover:text-accent transition"
                       onClick={toggleInspector}
                       title="Close Inspector"
+                      type="button"
                     >
                       {isInspectorOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
                     </button>
                   </div>
                 </div>
 
-                <div className="p-4 flex-1 overflow-y-auto" ref={inspectorRef} style={{ minHeight: 0 }}>
+                <div
+                  className="p-4 flex-1 overflow-y-auto"
+                  ref={inspectorRef}
+                  style={{ minHeight: 0 }}
+                >
                   <InspectorPanel
                     element={elements.find((el) => el.id === selectedId)}
                     elements={visibleElements}
@@ -536,6 +629,7 @@ export default function Canvas({ role }) {
                     className="text-xs text-text-muted hover:text-accent transition"
                     onClick={toggleDock}
                     title="Dock Inspector"
+                    type="button"
                   >
                     <Dock size={14} />
                   </button>
@@ -543,6 +637,7 @@ export default function Canvas({ role }) {
                     className="text-xs text-text-muted hover:text-accent transition"
                     onClick={toggleInspector}
                     title="Close Inspector"
+                    type="button"
                   >
                     {isInspectorOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
                   </button>
@@ -561,122 +656,6 @@ export default function Canvas({ role }) {
             </div>
           ))}
       </div>
-
-      {/* Background panel */}
-      {showBgPanel && (
-        <div
-          className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
-          style={{
-            position: "absolute",
-            right: showDebug ? 304 : 16,
-            bottom: 16,
-            width: 260,
-            zIndex: 1000,
-            padding: 8,
-            fontSize: 11,
-          }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-text-primary">
-              Background – {device}
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowBgPanel(false)}
-              className="text-[10px] text-text-muted hover:text-accent"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="mb-2">
-            <label className="block text-[10px] text-text-muted mb-1">Type</label>
-            <select
-              className="w-full px-2 py-1 rounded bg-surface border border-border text-[11px]"
-              value={activeBg.kind}
-              onChange={(e) => updateActiveBackground({ kind: e.target.value })}
-            >
-              <option value="color">Solid color</option>
-              <option value="image">Image</option>
-            </select>
-          </div>
-
-          {activeBg.kind === "color" && (
-            <div className="mb-2 flex items-center gap-2">
-              <label className="block text-[10px] text-text-muted">Color</label>
-              <input
-                type="color"
-                value={activeBg.color}
-                onChange={(e) => updateActiveBackground({ color: e.target.value })}
-              />
-              <input
-                type="text"
-                value={activeBg.color}
-                onChange={(e) => updateActiveBackground({ color: e.target.value })}
-                className="flex-1 px-2 py-1 rounded bg-surface border border-border text-[11px]"
-              />
-            </div>
-          )}
-
-          {activeBg.kind === "image" && (
-            <>
-              <div className="mb-2">
-                <label className="block text-[10px] text-text-muted mb-1">Image URL</label>
-                <input
-                  type="text"
-                  value={activeBg.imageUrl}
-                  onChange={(e) => updateActiveBackground({ imageUrl: e.target.value })}
-                  placeholder="https://example.com/bg.png"
-                  className="w-full px-2 py-1 rounded bg-surface border border-border text-[11px]"
-                />
-              </div>
-              <div className="mb-1">
-                <label className="block text-[10px] text-text-muted mb-1">Size / Repeat</label>
-                <select
-                  className="w-full px-2 py-1 rounded bg-surface border border-border text-[11px]"
-                  value={activeBg.size}
-                  onChange={(e) => updateActiveBackground({ size: e.target.value })}
-                >
-                  <option value="cover">Cover</option>
-                  <option value="contain">Contain</option>
-                  <option value="repeat">Repeat</option>
-                </select>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Debug panel */}
-      {showDebug && (
-        <div
-          className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
-          style={{
-            position: "absolute",
-            right: 16,
-            bottom: 16,
-            width: 280,
-            maxHeight: "50vh",
-            zIndex: 1000,
-            padding: 8,
-            fontFamily: "monospace",
-            fontSize: 10,
-          }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-text-primary">Bindings Debug</span>
-            <button
-              type="button"
-              onClick={() => setShowDebug(false)}
-              className="text-[10px] text-text-muted hover:text-accent"
-            >
-              ✕
-            </button>
-          </div>
-
-          <DebugBindingsPanel selectedId={selectedId} role={role} />
-        </div>
-      )}
     </div>
   );
 }
