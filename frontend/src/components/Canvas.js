@@ -10,6 +10,7 @@ import { useCanvasState } from "../context/CanvasContext";
 import { useProjectContext } from "../context/ProjectContext";
 import { runAction } from "../utils/actionExecutor";
 import { useActionContext } from "../context/ActionContext";
+import { useAuth } from "../context/AuthContext";
 import {
   ChevronDown,
   ChevronUp,
@@ -39,6 +40,10 @@ export default function Canvas({
   const { elements, addElement, updateElement, removeElement } = useCanvasState();
   const { projectType, backgroundConfigs } = useProjectContext();
   const actionCtx = useActionContext();
+  const { canBuild } = useAuth();
+
+  // 🔒 Only gate builder features in editor mode (NOT preview).
+  const isBuilderEditable = !isPreviewMode && !!canBuild;
 
   const [selectedId, setSelectedId] = useState(null);
   const [availableElements, setAvailableElements] = useState([]);
@@ -73,11 +78,15 @@ export default function Canvas({
   /* ------------------------------------------------------------
    * Notify parent when selection changes
    * ---------------------------------------------------------- */
+  const onSelectedIdChangeRef = useRef(onSelectedIdChange);
+
   useEffect(() => {
-    if (typeof onSelectedIdChange === "function") {
-      onSelectedIdChange(selectedId);
-    }
-  }, [selectedId, onSelectedIdChange]);
+    onSelectedIdChangeRef.current = onSelectedIdChange;
+  }, [onSelectedIdChange]);
+
+  useEffect(() => {
+    onSelectedIdChangeRef.current?.(selectedId);
+  }, [selectedId]);
 
   /* ------------------------------------------------------------
    * Background (shared per project, per device)
@@ -132,10 +141,14 @@ export default function Canvas({
   }, [isPreviewMode]); // intentionally minimal deps
 
   /* ------------------------------------------------------------
-   * Drag & Drop — ROLE AUTHORITY ✅
+   * Drag & Drop (builders only in editor)
    * ---------------------------------------------------------- */
   const handleDrop = (e) => {
     e.preventDefault();
+
+    // 🔒 No building in editor if user can't build
+    if (!isBuilderEditable) return;
+
     const metaString = e.dataTransfer.getData("application/json");
     if (!metaString || !canvasRef.current) return;
 
@@ -161,7 +174,10 @@ export default function Canvas({
     });
   };
 
-  const handleDragOver = (e) => e.preventDefault();
+  const handleDragOver = (e) => {
+    if (!isBuilderEditable) return;
+    e.preventDefault();
+  };
 
   /* ------------------------------------------------------------
    * Inspector controls
@@ -219,7 +235,7 @@ export default function Canvas({
       window.removeEventListener("mouseup", handleUp);
       window.removeEventListener("mouseleave", handleUp);
     };
-  }, [isDraggingInspector]);
+  }, [isDraggingInspector, inspectorPosition.x, inspectorPosition.y]);
 
   /* ------------------------------------------------------------
    * Filter elements per role
@@ -247,88 +263,96 @@ export default function Canvas({
    * Render
    * ---------------------------------------------------------- */
   return (
-    <div
-      ref={containerRef}
-      className="flex w-full min-w-0 gap-4 h-full relative overflow-visible"
-    >
-      {/* Sidebar */}
-      <div
-        className={`shrink-0 transition-all duration-300 bg-panel flex flex-col
-          ${
-            isSplitPreview
-              ? "hidden"
-              : `${isSplitEditor ? "w-44" : "w-56"} p-3 border-r border-border`
-          }
-        `}
-      >
-        {!isSplitPreview && (
-          <>
-            <Tabs
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              tabs={["Elements", "Layers"]}
-            />
+    <div ref={containerRef} className="flex w-full min-w-0 gap-4 h-full relative overflow-visible">
+      {/* Sidebar (builders only in editor; allowed in preview if you want it later) */}
+      {(isPreviewMode || isBuilderEditable) && (
+        <div
+          className={`shrink-0 transition-all duration-300 bg-panel flex flex-col
+            ${
+              isSplitPreview
+                ? "hidden"
+                : `${isSplitEditor ? "w-44" : "w-56"} p-3 border-r border-border`
+            }
+          `}
+        >
+          {!isSplitPreview && (
+            <>
+              <Tabs activeTab={activeTab} setActiveTab={setActiveTab} tabs={["Elements", "Layers"]} />
 
-            {activeTab === "Elements" && (
-              <div>
-                <h3 className="text-sm font-semibold mb-3 text-text-primary">🧩 Elements</h3>
-                {availableElements.map((meta) => (
-                  <div
-                    key={meta.name}
-                    draggable
-                    onDragStart={(e) =>
-                      e.dataTransfer.setData("application/json", JSON.stringify(meta))
-                    }
-                    className="flex items-center gap-2 px-3 py-2 rounded-md text-sm hover:bg-accent/10 transition cursor-grab active:cursor-grabbing"
-                  >
-                    <span>{meta.icon}</span>
-                    <span>{meta.name}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {activeTab === "Layers" && (
-              <div>
-                <h3 className="text-sm font-semibold mb-3 text-text-primary">🧭 Layers</h3>
-                {elements.length === 0 && (
-                  <p className="text-xs text-text-muted italic">No elements yet</p>
-                )}
-                {elements
-                  .filter((el) => (role ? el.role === role : true))
-                  .map((el) => (
+              {activeTab === "Elements" && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 text-text-primary">🧩 Elements</h3>
+                  {availableElements.map((meta) => (
                     <div
-                      key={el.id}
-                      onClick={() => {
-                        setSelectedId(el.id);
-                        setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
+                      key={meta.name}
+                      draggable={isBuilderEditable}
+                      onDragStart={(e) => {
+                        if (!isBuilderEditable) return;
+                        e.dataTransfer.setData("application/json", JSON.stringify(meta));
                       }}
-                      className={`flex justify-between items-center px-2 py-1 rounded cursor-pointer mb-1 ${
-                        selectedId === el.id ? "bg-accent/20" : "hover:bg-accent/10"
-                      }`}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition
+                        ${isBuilderEditable ? "hover:bg-accent/10 cursor-grab active:cursor-grabbing" : "opacity-60 cursor-not-allowed"}
+                      `}
+                      title={isBuilderEditable ? "" : "No build permission"}
                     >
-                      <span className="text-sm">
-                        {el.type} {el.role && `(${el.role})`}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeElement(el.id);
-                          if (selectedId === el.id) setSelectedId(null);
-                        }}
-                        className="text-xs text-red-500 hover:text-red-400"
-                        title="Delete"
-                        type="button"
-                      >
-                        ✕
-                      </button>
+                      <span>{meta.icon}</span>
+                      <span>{meta.name}</span>
                     </div>
                   ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
+                </div>
+              )}
+
+              {activeTab === "Layers" && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 text-text-primary">🧭 Layers</h3>
+                  {elements.length === 0 && (
+                    <p className="text-xs text-text-muted italic">No elements yet</p>
+                  )}
+
+                  {elements
+                    .filter((el) => (role ? el.role === role : true))
+                    .map((el) => (
+                      <div
+                        key={el.id}
+                        onClick={() => {
+                          setSelectedId(el.id);
+                          if (isPreviewMode || isBuilderEditable) {
+                            setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
+                          }
+                        }}
+                        className={`flex justify-between items-center px-2 py-1 rounded cursor-pointer mb-1 ${
+                          selectedId === el.id ? "bg-accent/20" : "hover:bg-accent/10"
+                        }`}
+                      >
+                        <span className="text-sm">
+                          {el.type} {el.role && `(${el.role})`}
+                        </span>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isBuilderEditable) return;
+                            removeElement(el.id);
+                            if (selectedId === el.id) setSelectedId(null);
+                          }}
+                          className={`text-xs ${
+                            isBuilderEditable
+                              ? "text-red-500 hover:text-red-400"
+                              : "text-red-500/40 cursor-not-allowed"
+                          }`}
+                          title={isBuilderEditable ? "Delete" : "No build permission"}
+                          type="button"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Canvas + Inspector */}
       <div className="flex flex-col flex-1 relative bg-panel min-w-0">
@@ -358,7 +382,23 @@ export default function Canvas({
             <span className="ml-2">{Math.round(scale * 100)}%</span>
           </label>
 
-          {/* Right tools pinned (prevents disappearing in split due to wrapping) */}
+          {/* View-only badge */}
+          {!isPreviewMode && !isBuilderEditable && (
+            <div
+              style={{
+                marginLeft: 12,
+                padding: "4px 8px",
+                borderRadius: 999,
+                border: "1px solid #333",
+                color: "#aaa",
+                fontSize: 12,
+              }}
+            >
+              View-only (no build permission)
+            </div>
+          )}
+
+          {/* Right tools pinned */}
           {showRightTools && (
             <div className="absolute right-0 top-0 flex items-center gap-2">
               <button
@@ -382,7 +422,7 @@ export default function Canvas({
           )}
         </div>
 
-        {/* Local Floating Panels (only if parent isn't handling) */}
+        {/* Local Floating Panels */}
         {showBgPanel && (
           <div
             className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
@@ -452,6 +492,8 @@ export default function Canvas({
                   projectType,
                   selectedId,
                   visibleCount: visibleElements.length,
+                  isPreviewMode,
+                  canBuild,
                 },
                 null,
                 2
@@ -485,7 +527,11 @@ export default function Canvas({
               const handleElementClick = async (event) => {
                 event.stopPropagation();
                 setSelectedId(el.id);
-                setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
+
+                // Only auto-open inspector if builder can edit (or in preview)
+                if (isPreviewMode || isBuilderEditable) {
+                  setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
+                }
 
                 const actionName = el.props?.onClick;
                 if (!isPreviewMode || !actionName) return;
@@ -509,16 +555,22 @@ export default function Canvas({
                   bounds="parent"
                   scale={scale}
                   onClick={handleElementClick}
-                  onDragStop={(e, d) => updateElement(el.id, { x: d.x, y: d.y })}
-                  onResizeStop={(e, direction, ref, delta, position) =>
+                  enableResizing={isBuilderEditable}
+                  disableDragging={!isBuilderEditable}
+                  onDragStop={(e, d) => {
+                    if (!isBuilderEditable) return;
+                    updateElement(el.id, { x: d.x, y: d.y });
+                  }}
+                  onResizeStop={(e, direction, ref, delta, position) => {
+                    if (!isBuilderEditable) return;
                     updateElement(el.id, {
                       width: parseFloat(ref.style.width),
                       height: parseFloat(ref.style.height),
                       ...position,
-                    })
-                  }
+                    });
+                  }}
                   className={`group rounded-lg border-2 ${
-                    isPreviewMode ? "cursor-pointer" : "cursor-move"
+                    isPreviewMode ? "cursor-pointer" : isBuilderEditable ? "cursor-move" : "cursor-default"
                   } ${
                     selectedId === el.id
                       ? isPreviewMode
@@ -536,8 +588,8 @@ export default function Canvas({
           </div>
         </div>
 
-        {/* Inspector */}
-        {isInspectorOpen &&
+        {/* Inspector (builders only in editor; still visible in preview if you ever want readOnly) */}
+        {isInspectorOpen && (isPreviewMode || isBuilderEditable) &&
           (inspectorDocked ? (
             <div
               style={{
@@ -585,17 +637,16 @@ export default function Canvas({
                   </div>
                 </div>
 
-                <div
-                  className="p-4 flex-1 overflow-y-auto"
-                  ref={inspectorRef}
-                  style={{ minHeight: 0 }}
-                >
+                <div className="p-4 flex-1 overflow-y-auto" ref={inspectorRef} style={{ minHeight: 0 }}>
                   <InspectorPanel
                     element={elements.find((el) => el.id === selectedId)}
                     elements={visibleElements}
                     onUpdate={(updates) => updateElement(selectedId, updates)}
-                    onDelete={() => removeElement(selectedId)}
-                    readOnly={isPreviewMode}
+                    onDelete={() => {
+                      if (!isBuilderEditable) return;
+                      removeElement(selectedId);
+                    }}
+                    readOnly={isPreviewMode || !isBuilderEditable}
                   />
                 </div>
               </div>
@@ -649,8 +700,11 @@ export default function Canvas({
                   element={elements.find((el) => el.id === selectedId)}
                   elements={visibleElements}
                   onUpdate={(updates) => updateElement(selectedId, updates)}
-                  onDelete={() => removeElement(selectedId)}
-                  readOnly={isPreviewMode}
+                  onDelete={() => {
+                    if (!isBuilderEditable) return;
+                    removeElement(selectedId);
+                  }}
+                  readOnly={isPreviewMode || !isBuilderEditable}
                 />
               </div>
             </div>

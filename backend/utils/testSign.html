@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Google Token Test</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+      body { font-family: system-ui; padding: 20px; }
+      pre { background: #111; color: #0f0; padding: 12px; border-radius: 8px; overflow: auto; }
+      button { padding: 10px 14px; }
+    </style>
+  </head>
+  <body>
+    <h2>Google ID Token Test</h2>
+
+    <div id="g_id_onload"
+      data-client_id="291803778244-3hnvpn4ermff7b9iuob1v414det394e2.apps.googleusercontent.com"
+      data-callback="handleCredentialResponse"
+      data-auto_prompt="false">
+    </div>
+
+    <div class="g_id_signin" data-type="standard"></div>
+
+    <h3>idToken (credential)</h3>
+    <pre id="out">(sign in to see token)</pre>
+
+    <button id="send">Send to backend /auth/google</button>
+
+    <script>
+      let idToken = null;
+
+      function handleCredentialResponse(response) {
+        idToken = response.credential; // THIS is the idToken (JWT)
+        document.getElementById("out").textContent = idToken;
+      }
+
+      document.getElementById("send").onclick = async () => {
+        if (!idToken) return alert("Sign in first");
+
+        const res = await fetch("http://localhost:5000/auth/google", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken, tenantName: "My Tenant" })
+        });
+
+        const data = await res.json();
+        console.log("backend response:", data);
+        alert("Check console for response");
+      };
+    </script>
+  </body>
+</html>

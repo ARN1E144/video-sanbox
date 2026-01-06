@@ -1,10 +1,10 @@
 {
   "name": "MicButton",
-  "type": "button",
   "category": "controls",
-  "icon": "🔘",
+  "icon": "🎙️",
   "editableProps": {
-    "label": "Button",
+    "label": "Mic On",
+    "onClick": "ToggleMic",
     "style": {
       "backgroundColor": "#7C3AED",
       "color": "#FFFFFF",

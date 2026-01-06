@@ -9,12 +9,94 @@ import Canvas from "./components/Canvas";
 import DebugBindingsPanel from "./components/DebugBindingPanel";
 import { ProjectContext } from "./context/ProjectContext";
 import { usePreviewMode } from "./context/PreviewContext";
+import AuthPortal from "./components/AuthPortal";
+
+
+function DraggablePanel({ title, onClose, children, initial = { x: 16, y: 16 }, width = 300 }) {
+  const [pos, setPos] = React.useState(initial);
+  const draggingRef = React.useRef(false);
+  const offsetRef = React.useRef({ x: 0, y: 0 });
+
+  React.useEffect(() => {
+    const onMove = (e) => {
+      if (!draggingRef.current) return;
+      setPos({
+        x: e.clientX - offsetRef.current.x,
+        y: e.clientY - offsetRef.current.y,
+      });
+    };
+
+    const onUp = () => {
+      draggingRef.current = false;
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
+  const onMouseDown = (e) => {
+    draggingRef.current = true;
+    offsetRef.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: pos.x,
+        top: pos.y,
+        width,
+        zIndex: 5000,
+        background: "#141414",
+        border: "1px solid #2a2a2a",
+        borderRadius: 10,
+        boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        onMouseDown={onMouseDown}
+        style={{
+          cursor: "grab",
+          userSelect: "none",
+          padding: "10px 10px",
+          borderBottom: "1px solid #2a2a2a",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 12 }}>{title}</div>
+        <button
+          onClick={onClose}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#aaa",
+            cursor: "pointer",
+            fontSize: 14,
+          }}
+          title="Close"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div style={{ padding: 10, maxHeight: "60vh", overflow: "auto" }}>{children}</div>
+    </div>
+  );
+}
+
 
 export default function MainApp() {
   const { viewMode, backgroundConfigs, setBackgroundConfigs } = useContext(ProjectContext);
   const { previewView } = usePreviewMode();
 
-  const [currentView, setCurrentView] = useState("templates"); // templates | build | settings
+  const [currentView, setCurrentView] = useState("templates"); // templates | auth | build | settings
 
   // Shared panels (one instance)
   const [showBgPanel, setShowBgPanel] = useState(false);
@@ -75,6 +157,11 @@ export default function MainApp() {
 
       <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <MainMenu currentView={currentView} setCurrentView={setCurrentView} />
+
+        <div style={{ padding: 8, borderBottom: "1px solid #222" }}>
+          <button onClick={() => setCurrentView("auth")}>Auth</button>
+        </div>
+
 
         {currentView === "templates" && (
           <div style={{ padding: 16, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -187,40 +274,12 @@ export default function MainApp() {
 
               {/* ───────────────── Shared Background Panel ───────────────── */}
               {showBgPanel && (
-                <div
-                  style={{
-                    position: "absolute",
-                    right: showDebug ? 316 : 16,
-                    bottom: 16,
-                    width: 280,
-                    zIndex: 2000,
-                    background: "#141414",
-                    border: "1px solid #2a2a2a",
-                    borderRadius: 10,
-                    padding: 10,
-                    boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
-                    fontSize: 12,
-                  }}
+                <DraggablePanel
+                  title={`Background (${panelTargetRole})`}
+                  onClose={() => setShowBgPanel(false)}
+                  initial={{ x: 16, y: 120 }}
+                  width={300}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <div style={{ fontWeight: 700 }}>
-                      Background ({panelTargetRole})
-                    </div>
-                    <button
-                      onClick={() => setShowBgPanel(false)}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: "#aaa",
-                        cursor: "pointer",
-                        fontSize: 14,
-                      }}
-                      title="Close"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
                   <div style={{ marginBottom: 10 }}>
                     <div style={{ color: "#888", marginBottom: 6 }}>Type</div>
                     <select
@@ -303,58 +362,38 @@ export default function MainApp() {
                       </div>
                     </>
                   )}
-                </div>
+                </DraggablePanel>
               )}
 
-              {/* ───────────────── Shared Debug Panel ───────────────── */}
-              {showDebug && (
-                <div
-                  style={{
-                    position: "absolute",
-                    right: 16,
-                    bottom: 16,
-                    width: 300,
-                    maxHeight: "55vh",
-                    overflow: "auto",
-                    zIndex: 2000,
-                    background: "#141414",
-                    border: "1px solid #2a2a2a",
-                    borderRadius: 10,
-                    padding: 10,
-                    boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
-                    fontFamily: "monospace",
-                    fontSize: 11,
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <div style={{ fontWeight: 700, fontFamily: "system-ui" }}>
-                      Debug ({panelTargetRole})
-                    </div>
-                    <button
-                      onClick={() => setShowDebug(false)}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: "#aaa",
-                        cursor: "pointer",
-                        fontSize: 14,
-                      }}
-                      title="Close"
-                    >
-                      ✕
-                    </button>
-                  </div>
 
-                  <div style={{ color: "#999", marginBottom: 8 }}>
+              {/* ───────────────── Shared Debug Panel ───────────────── */}
+               {showDebug && (
+                <DraggablePanel
+                  title={`Debug (${panelTargetRole})`}
+                  onClose={() => setShowDebug(false)}
+                  initial={{ x: 340, y: 120 }}
+                  width={320}
+                >
+                  <div style={{ color: "#999", marginBottom: 8, fontFamily: "system-ui" }}>
                     Selected: {activeSelectedId || "None"}
                   </div>
 
-                  <DebugBindingsPanel selectedId={activeSelectedId} role={panelTargetRole} />
-                </div>
+                  <div style={{ fontFamily: "monospace", fontSize: 11 }}>
+                    <DebugBindingsPanel selectedId={activeSelectedId} role={panelTargetRole} />
+                  </div>
+                </DraggablePanel>
               )}
+
             </div>
           </div>
         )}
+
+        {currentView === "auth" && (
+          <div style={{ height: "100%", overflow: "hidden" }}>
+            <AuthPortal />
+          </div>
+        )}
+
 
         {currentView === "settings" && (
           <div style={{ padding: 16, color: "#aaa" }}>

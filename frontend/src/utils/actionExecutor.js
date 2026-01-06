@@ -35,22 +35,50 @@ export async function runAction(name, ctx, params = {}) {
       return data;
     }
 
-    case "SendMessage": {
-      const { text } = params;
-      console.log("[runAction:SendMessage] text", text);
-      const { data } = await api.post("/chat/send", { text });
+     case "SendMessage": {
+      const { text, value, message, targetId } = params;
+
+      // allow multiple possible sources
+      const payloadText = text ?? value ?? message ?? "";
+
+      console.log("[runAction:SendMessage] payloadText", payloadText);
+      console.log("[runAction:SendMessage] targetId", targetId);
+
+      // You can still call your API if you want
+      const { data } = await api.post("/chat/send", { text: payloadText });
       console.log("[runAction:SendMessage] response", data);
-      ctx.appendFeed("ChatPanel", data.message);
+
+      // ✅ append into the specific ChatPanel instance
+      if (targetId) {
+        ctx.appendFeed(targetId, data.message ?? payloadText);
+      } else {
+        // fallback (old behaviour) so you don't break anything immediately
+        console.warn(
+          "[runAction:SendMessage] No targetId provided; falling back to 'ChatPanel' key"
+        );
+        ctx.appendFeed("ChatPanel", data.message ?? payloadText);
+      }
+
       return data;
     }
 
     case "ToggleMic": {
       const current = ctx.get("micState") || "on";
       const next = current === "on" ? "off" : "on";
-      console.log("[runAction:ToggleMic] current -> next", { current, next });
       ctx.set("micState", next);
+
+      // ✅ make the clicked MicButton visually react
+      if (params?.elementId) {
+        ctx.updateBinding(params.elementId, {
+          micState: next,
+          active: next === "on",
+          label: next === "on" ? "Mic On" : "Mic Off",
+        });
+      }
+
       return next;
     }
+
 
     // ✅ Generic toggle for a target element
     case "toggle": {
@@ -239,6 +267,13 @@ export async function runAction(name, ctx, params = {}) {
         ctx.notify?.("API Call failed – see console for details");
         return null;
       }
+    }
+
+    case "StartCall": {
+      console.log("[runAction:StartCall] firing");
+      await api.post("/call/start");
+      ctx.notify("Call started");
+      return true;
     }
 
     case "EndCall": {

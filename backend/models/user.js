@@ -1,47 +1,24 @@
-const mongoose = require('mongoose');
-const bcrypt   = require('bcryptjs');
+import mongoose from "mongoose";
 
-const addressSchema = new mongoose.Schema({
-  postcode: { type: String, required: true },
-  line1: { type: String, required: true },
-  line2: String,
-  line3: String,
-  town: { type: String, required: true },
-});
+const userSchema = new mongoose.Schema(
+  {
+    firstName: { type: String, default: "" },
+    lastName: { type: String, default: "" },
+    email: { type: String, unique: true, index: true, required: true },
+    passwordHash: { type: String }, // null if Google-only
 
-const userSchema = new mongoose.Schema({
-  firstName:    { type: String, required: true },
-  lastName:     { type: String, required: true },
-  email:        { type: String, required: true, unique: true },
-  role:      { type: String, enum: ['client', 'partner','admin'], required: true },
-  companyName: { type: String }, // Optional, only for partners
-  address: { type: addressSchema, required: true },
-  authProvider: { type: String, enum: ['local','google'], default: 'local' },
-  isVerified: { type: Boolean, default: false },
-  verifyCode: String,
-  verifyCodeExpires: Date,
-  password:     {
-    type: String,
-    required: function() { return this.authProvider === 'local'; }
+    // verification
+    emailVerifiedAt: { type: Date, default: null },
+    emailVerifyCodeHash: { type: String, default: null },
+    emailVerifyCodeExpiresAt: { type: Date, default: null },
+
+    // refresh token rotation (store hashed)
+    refreshTokenHash: { type: String, default: null },
+
+    // oauth (optional)
+    googleSub: { type: String, default: null },
   },
-   // 👇 Add this field
-  isActive: { type: Boolean, default: false },
-  lastSeen: { type: Date, default: Date.now }
-  
-}, { collection: 'costa_de_saul_users' }); // 👈 force collection name
+  { timestamps: true }
+);
 
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
-
-
-userSchema.methods.matchPassword = async function(candidate) {
-  return bcrypt.compare(candidate, this.password);
-};
-
-const User = mongoose.models.Costa_De_Saul_User || mongoose.model('Costa_De_Saul_User', userSchema);
-module.exports = { User, userSchema };
-
+export default mongoose.model("User", userSchema);

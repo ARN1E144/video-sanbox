@@ -1,20 +1,29 @@
+// src/components/elements/MicButton.js
 import React from "react";
-import { useTheme } from "../../context/ThemeContext";
+import { useActionContext } from "../../context/ActionContext";
 
 export default function MicButton({ label, style }) {
-  const theme = useTheme();
+  const actionCtx = useActionContext();
+
+  // Global mic state (set by ToggleMic action)
+  const micState = actionCtx.get("micState") || "on";
+  const isOn = micState === "on";
+
   return (
     <button
-      className="w-full h-full flex items-center justify-center text-sm font-medium transition hover:opacity-90"
+      className="w-full h-full flex items-center justify-center text-sm font-medium transition"
       style={{
-        backgroundColor: style?.backgroundColor || theme.colors.accent,
-        color: style?.color || theme.colors.textPrimary,
-        borderRadius: style?.borderRadius || theme.radius.md,
-        padding: style?.padding || theme.spacing.md,
-        fontFamily: theme.typography.fontFamily,
+        backgroundColor: style?.backgroundColor || "#7C3AED",
+        color: style?.color || "#FFFFFF",
+        borderRadius: style?.borderRadius || 8,
+        padding: style?.padding || 16,
+
+        // 🔥 Visual feedback
+        opacity: isOn ? 1 : 0.5,
+        filter: isOn ? "none" : "grayscale(60%)",
       }}
     >
-      {label || "Button"}
+      {isOn ? label || "Mic On" : "Mic Off"}
     </button>
   );
 }

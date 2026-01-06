@@ -1,6 +1,14 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import { requireEnv } from "./utils/requireEnv.js";
+
+requireEnv([
+  "MONGODB_URI",
+  "JWT_ACCESS_SECRET",
+  "JWT_REFRESH_SECRET",
+]);
+
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
@@ -8,8 +16,9 @@ import aiTemplateRoutes from "./routes/aiTemplates.js";
 import agoraRoutes from "./routes/agora.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
-
-
+import { connectWithRetry } from "./db/connect.js";
+import tenantRoutes from "./routes/tenantRoutes.js";
+import meRoutes from "./routes/me.js";
 
 
 const app = express();
@@ -21,6 +30,8 @@ app.use(bodyParser.json());
 app.use("/api/agora", agoraRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/auth", authRoutes);
+app.use("/api/tenant", tenantRoutes);
+app.use("/api", meRoutes);
 
 app.get("/", (req, res) => {
   res.send("Video Sandbox API running...");
@@ -34,6 +45,7 @@ app.get("/api/stream", (req, res) => {
   });
 });
 
+await connectWithRetry(process.env.MONGODB_URI);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`))

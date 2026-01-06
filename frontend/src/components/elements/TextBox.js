@@ -13,13 +13,16 @@ export default function TextBox(props) {
     value,
     text,
 
-    // action wiring
+    // action wiring (keep existing)
     onInputAction,
     apiUrl,
     apiMethod,
     apiHeaders,
     apiTarget,
     apiTargetField,
+
+    // NEW (optional): override the draft key if you ever want
+    draftKey = "draftMessage",
 
     ...rest
   } = props;
@@ -29,6 +32,11 @@ export default function TextBox(props) {
 
   const handleInput = (e) => {
     const newValue = e.target.value;
+
+    // ✅ Always keep a draft in ActionContext
+    actionCtx.set(draftKey, newValue);
+
+    // ✅ Keep your existing onInputAction behavior (if configured)
     if (!onInputAction) return;
 
     runAction(onInputAction, actionCtx, {
@@ -42,8 +50,8 @@ export default function TextBox(props) {
     });
   };
 
-  // If this TextBox is ever used as an API target, it can bind to `value` or `text`
-  const displayValue = value ?? text ?? "";
+  // Prefer live-bound value/text, otherwise fall back to global draftMessage
+  const displayValue = value ?? text ?? actionCtx.get(draftKey) ?? "";
 
   return (
     <div className="w-full h-full flex items-center justify-center">
@@ -52,8 +60,7 @@ export default function TextBox(props) {
         placeholder={label || "Enter text..."}
         className="w-full h-full px-3 text-sm outline-none rounded"
         style={{
-          backgroundColor:
-            style?.backgroundColor || theme.colors.surface || "#1A1A1D",
+          backgroundColor: style?.backgroundColor || theme.colors.surface || "#1A1A1D",
           color: style?.color || theme.colors.textPrimary || "#FFFFFF",
           borderRadius: style?.borderRadius || 8,
           border: style?.border || "1px solid #333",

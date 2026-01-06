@@ -1,83 +1,50 @@
-const { User } = require('../models/User');
-const jwt = require('jsonwebtoken');
-const RefreshToken = require('../models/refreshToken');
+import bcrypt from "bcrypt";
+import crypto from "crypto";
+import User from "../models/User.js";
+import Membership from "../models/Membership.js";
+import { signAccessToken, signRefreshToken } from "../utils/authTokens.js";
 
-const loginUser = async (req, res, next) => {
+function hashCode(v) {
+  return crypto.createHash("sha256").update(v).digest("hex");
+}
+
+export default async function loginUser(req, res) {
   try {
-    const { email, password } = req.body;
-    console.log('Login attempt:', { email });
+    const { email, password, tenantId } = req.body;
 
-    // 1. Validate input
-    if (!email || !password) {
-      console.warn('Missing email or password');
-      return res.status(400).json({ message: 'Email and password required.' });
-    }
+    if (!email || !password) return res.status(400).json({ error: "email + password required" });
 
-    // 2. Find user
-    const user = await User.findOne({ email });
-    if (!user) {
-      console.warn(`No user found for email: ${email}`);
-      return res.status(401).json({ message: 'Invalid credentials.' });
-    }
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user || !user.passwordHash) return res.status(401).json({ error: "Invalid credentials" });
 
-    if (user.authProvider !== 'local') {
-      console.warn(`User exists but is registered with different auth provider: ${user.authProvider}`);
-      return res.status(401).json({ message: 'Invalid credentials.' });
-    }
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
-    // 3. Check if email is verified
-    if (!user.isVerified) {
-      console.warn(`User email not verified for email: ${email}`);
-      return res.status(403).json({ message: 'Please verify your email before logging in.' });
-    }
+    // If you support multiple tenants per email, require tenantId (or pick last used)
+    const membership = tenantId
+      ? await Membership.findOne({ userId: user._id, tenantId })
+      : await Membership.findOne({ userId: user._id }).sort({ createdAt: 1 });
 
-    // 4. Check password
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      console.warn(`Password mismatch for email: ${email}`);
-      return res.status(401).json({ message: 'Invalid credentials.' });
-    }
+    if (!membership) return res.status(403).json({ error: "No tenant membership found" });
 
-    console.log('Credentials validated successfully.');
+    const accessToken = signAccessToken({
+      userId: user._id,
+      tenantId: membership.tenantId,
+      role: membership.role,
+    });
 
-    // 5. Generate tokens
-    const accessToken = jwt.sign(
-      { id: user._id, email: user.email, role: user.role, firstName: user.firstName, lastName: user.lastName },
-      process.env.JWT_ACCESS_SECRET,
-      { expiresIn: '1h' }
-    );
+    const refreshToken = signRefreshToken({ userId: user._id });
 
-    const refreshToken = jwt.sign(
-      { id: user._id },
-      process.env.JWT_REFRESH_SECRET,
-      { expiresIn: '7d' }
-    );
+    user.refreshTokenHash = hashCode(refreshToken);
+    await user.save();
 
-    console.log('JWT tokens generated.');
-
-    // 6. Store refresh token
-    await RefreshToken.create({ token: refreshToken, userId: user._id });
-    console.log('Refresh token stored in DB.');
-
-    // 7. Return response
-    console.log(`User ${email} logged in successfully.`);
-    return res.status(200).json({
-      message: 'Login successful',
-      accessToken,
-      refreshToken,
-      user: {
-        id: user._id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role
-      },
+    return res.json({
+      user: { id: user._id, email: user.email, emailVerified: !!user.emailVerifiedAt },
+      membership: { tenantId: membership.tenantId, role: membership.role },
+      tokens: { accessToken, refreshToken },
     });
   } catch (err) {
-    console.error('Unexpected login error:', err);
-    next(err);
+    console.error(err);
+    return res.status(500).json({ error: "Login failed" });
   }
-};
-
-module.exports = loginUser;
-
+}
