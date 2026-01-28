@@ -51,6 +51,13 @@ export default function MainMenu({ currentView, setCurrentView }) {
       >
         ⚙️ Settings
       </div>
+      <div
+        style={currentView === 'calls' ? { ...buttonStyle, ...activeStyle } : buttonStyle}
+        onClick={() => setCurrentView('calls')}
+      >
+        📞 Calls
+      </div>
+
     </div>
   );
 }

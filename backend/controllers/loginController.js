@@ -9,17 +9,24 @@ function hashCode(v) {
 }
 
 export default async function loginUser(req, res) {
+
   try {
+
     const { email, password, tenantId } = req.body;
+
+     console.log("[LOGIN CONTROLLER] Attempting login for", email);
 
     if (!email || !password) return res.status(400).json({ error: "email + password required" });
 
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user || !user.passwordHash) return res.status(401).json({ error: "Invalid credentials" });
 
+    console.log("[LOGIN CONTROLLER] Found user:", user._id);
+
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
+    console.log("[LOGIN CONTROLLER] Password verified for user:", user._id);
     // If you support multiple tenants per email, require tenantId (or pick last used)
     const membership = tenantId
       ? await Membership.findOne({ userId: user._id, tenantId })

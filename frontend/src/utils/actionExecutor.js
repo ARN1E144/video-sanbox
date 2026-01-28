@@ -11,29 +11,76 @@ export async function runAction(name, ctx, params = {}) {
   console.log("[runAction] called", { name, params }); // 🔍 top-level trace
 
   switch (name) {
+
+        // CLIENT: create a call
+    case "StartCall": {
+      console.log("[runAction:StartCall] firing");
+      const { data } = await api.post("/calls");
+      // store active call in ActionContext state
+      ctx.set("activeCall", data.call);
+      ctx.notify?.("Call created");
+      return data.call;
+    }
+
+    // EMPLOYEE: fetch waiting calls
+    case "FetchAvailableCalls": {
+      console.log("[runAction:FetchAvailableCalls] Firing");
+      const { data } = await api.get("/calls/available");
+      ctx.set("availableCalls", data.calls || []);
+      return data.calls || [];
+    }
+
+    // EMPLOYEE: accept a call (atomic)
+    case "AcceptCall": {
+      const { callId } = params;
+      if (!callId) {
+        console.warn("[runAction:AcceptCall] missing callId");
+        return null;
+      }
+      console.log("[runAction:AcceptCall] accepting", callId);
+      const { data } = await api.post(`/calls/${callId}/accept`);
+      ctx.set("activeCall", data.call);
+      ctx.notify?.("Call accepted");
+      return data.call;
+    }
+
+    // CLIENT/EMPLOYEE/ADMIN: end a call
+    case "EndCall": {
+      const callId = params?.callId || ctx.get("activeCall")?._id;
+      if (!callId) {
+        console.warn("[runAction:EndCall] missing callId");
+        return null;
+      }
+      console.log("[runAction:EndCall] ending", callId);
+      const { data } = await api.post(`/calls/${callId}/end`);
+      ctx.set("activeCall", data.call);
+      ctx.notify?.("Call ended");
+      return data.call;
+    }
     case "StartStream": {
       console.log("[runAction:StartStream] firing");
-      const { data } = await api.post("/startStream");
-      console.log("[runAction:StartStream] response", data);
-      ctx.updateBinding("VideoFeed", { src: data.streamUrl });
-      return data;
+       const { targetId } = params;
+        const { data } = await api.post("/startStream");
+        if (targetId) ctx.updateBinding(targetId, { src: data.streamUrl });
+        return data;
     }
 
-    case "StopStream": {
-      console.log("[runAction:StopStream] firing");
-      await api.post("/stopStream");
-      ctx.updateBinding("VideoFeed", { src: null });
-      return true;
-    }
+   case "StopStream": {
+    const { targetId } = params;
+    await api.post("/stopStream");
+    if (targetId) ctx.updateBinding(targetId, { src: null });
+    else ctx.updateBinding("VideoFeed", { src: null }); // optional legacy fallback
+    return true;
+  }
 
-    case "LoadVideo": {
-      const { id } = params;
-      console.log("[runAction:LoadVideo] id", id);
-      const { data } = await api.get(`/videos/${id}`);
-      console.log("[runAction:LoadVideo] response", data);
-      ctx.updateBinding("VideoFeed", { src: data.videoUrl });
-      return data;
-    }
+  case "LoadVideo": {
+    const { id, targetId } = params;
+    const { data } = await api.get(`/videos/${id}`);
+    if (targetId) ctx.updateBinding(targetId, { src: data.videoUrl });
+    else ctx.updateBinding("VideoFeed", { src: data.videoUrl }); // optional legacy fallback
+    return data;
+  }
+
 
      case "SendMessage": {
       const { text, value, message, targetId } = params;

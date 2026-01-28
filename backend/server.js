@@ -19,6 +19,8 @@ import authRoutes from "./routes/authRoutes.js";
 import { connectWithRetry } from "./db/connect.js";
 import tenantRoutes from "./routes/tenantRoutes.js";
 import meRoutes from "./routes/me.js";
+import callRoutes from "./routes/callRoutes.js";
+
 
 
 const app = express();
@@ -29,9 +31,11 @@ app.use(bodyParser.json());
 // Routes
 app.use("/api/agora", agoraRoutes);
 app.use("/api/ai", aiRoutes);
-app.use("/auth", authRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api/tenant", tenantRoutes);
 app.use("/api", meRoutes);
+app.use("/api/calls", callRoutes);
+
 
 app.get("/", (req, res) => {
   res.send("Video Sandbox API running...");

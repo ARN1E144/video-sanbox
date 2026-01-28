@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, { createContext, useContext, useMemo, useState, useEffect } from "react";
 import { authApi } from "../services/authApi";
-
+import { setApiToken } from "../services/api";
 const AuthContext = createContext(null);
 const LS_KEY = "vs_auth";
 
@@ -13,7 +13,14 @@ export function AuthProvider({ children }) {
     }
   });
 
+  useEffect(() => {
+  console.log("[Auth] session", session);
+}, [session]);
+
   const save = (next) => {
+
+    console.log("[AuthProvider] Save Session Tokens", next);
+
     setSession(next);
     localStorage.setItem(LS_KEY, JSON.stringify(next));
   };
@@ -63,38 +70,54 @@ export function AuthProvider({ children }) {
 
     const refreshMe = async () => {
       if (!token) throw new Error("No access token");
-      const me = await authApi.me(token);
-      mergeSave({ me });
-      return me;
+      setApiToken(token); // ensure axios is primed (important on reload)
+      const res = await authApi.me();
+      mergeSave({ me:res.data });
+      return res.data;
     };
+
 
     const register = async (payload) => {
       const res = await authApi.register(payload);
-      const nextToken = res?.tokens?.accessToken;
+      const data = res.data;
+      const nextToken = data?.tokens?.accessToken;
 
-      if (nextToken) {
-        const me = await authApi.me(nextToken);
-        save({ ...res, me });
-      } else {
-        save(res);
+      if (!nextToken) {
+        save(data);
+        return data;
       }
 
-      return res;
+      setApiToken(nextToken);
+      const meRes = await authApi.me();
+
+      save({ ...data, me: meRes.data });
+      return data;
     };
+
 
     const login = async (payload) => {
-      const res = await authApi.login(payload);
-      const nextToken = res?.tokens?.accessToken;
+  console.log("[AuthProvider] login", payload);
 
-      if (nextToken) {
-        const me = await authApi.me(nextToken);
-        save({ ...res, me });
-      } else {
-        save(res);
-      }
+  const res = await authApi.login(payload);
+  const data = res.data;
 
-      return res;
-    };
+  const nextToken = data?.tokens?.accessToken;
+          if (!nextToken) {
+            save(data);
+            return data;
+          }
+
+          // ✅ Set token FIRST
+          setApiToken(nextToken);
+
+          // ✅ Now authenticated requests work
+          const meRes = await authApi.me();
+
+          save({ ...data, me : meRes.data });
+
+          return data;
+        };
+
 
     return {
       session,

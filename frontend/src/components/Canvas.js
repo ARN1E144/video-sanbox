@@ -1,5 +1,5 @@
 // src/components/Canvas.js
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Rnd } from "react-rnd";
 import { v4 as uuid } from "uuid";
 import COMPONENTS from "../components/elements/registry";
@@ -26,6 +26,122 @@ const DEVICE_SIZES = {
   mobile: { width: 390, height: 844 },
 };
 
+function CallsPanel({ isEmployee, actionCtx }) {
+  const [polling, setPolling] = React.useState(true);
+
+  const activeCall = actionCtx.get("activeCall");
+  const availableCalls = actionCtx.get("availableCalls") || [];
+
+  // Poll available calls for employees
+  React.useEffect(() => {
+    if (!isEmployee) return;
+    if (!polling) return;
+
+    let alive = true;
+
+    const tick = async () => {
+      try {
+        await runAction("FetchAvailableCalls", actionCtx, {});
+      } catch (e) {
+        // keep quiet in UI for Jan; console is enough
+        console.warn("FetchAvailableCalls failed", e);
+      }
+    };
+
+    tick();
+    const id = setInterval(() => {
+      if (!alive) return;
+      tick();
+    }, 2000);
+
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [isEmployee, polling, actionCtx]);
+
+  return (
+    <div className="ml-2 flex items-center gap-2">
+      {/* Client controls */}
+      {!isEmployee && (
+        <>
+          <button
+            type="button"
+            onClick={() => runAction("StartCall", actionCtx, {})}
+            className="px-3 py-1.5 rounded border border-border text-text-primary hover:border-accent hover:text-accent transition text-xs"
+            title="Create a new call"
+          >
+            Start call
+          </button>
+
+          <button
+            type="button"
+            onClick={() => runAction("EndCall", actionCtx, { callId: activeCall?._id })}
+            disabled={!activeCall?._id}
+            className="px-3 py-1.5 rounded border border-border text-text-muted hover:border-red-500 hover:text-red-400 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+            title="End current call"
+          >
+            End call
+          </button>
+        </>
+      )}
+
+      {/* Employee controls */}
+      {isEmployee && (
+        <div className="flex items-center gap-2">
+          <div className="text-xs text-text-muted">
+            Available: <span className="text-text-primary">{availableCalls.length}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => runAction("FetchAvailableCalls", actionCtx, {})}
+            className="px-2 py-1 rounded border border-border text-text-muted hover:text-accent hover:border-accent transition text-xs"
+            title="Refresh"
+          >
+            Refresh
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPolling((v) => !v)}
+            className="px-2 py-1 rounded border border-border text-text-muted hover:text-accent hover:border-accent transition text-xs"
+            title="Toggle auto-refresh"
+          >
+            {polling ? "Auto: on" : "Auto: off"}
+          </button>
+
+          {/* Quick accept first waiting call */}
+          <button
+            type="button"
+            onClick={() => {
+              const first = availableCalls[0];
+              if (!first?._id) return;
+              runAction("AcceptCall", actionCtx, { callId: first._id });
+            }}
+            disabled={!availableCalls[0]?._id}
+            className="px-3 py-1.5 rounded border border-border text-text-primary hover:border-accent hover:text-accent transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Accept the newest waiting call"
+          >
+            Accept newest
+          </button>
+
+          <button
+            type="button"
+            onClick={() => runAction("EndCall", actionCtx, { callId: activeCall?._id })}
+            disabled={!activeCall?._id}
+            className="px-3 py-1.5 rounded border border-border text-text-muted hover:border-red-500 hover:text-red-400 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+            title="End active call"
+          >
+            End call
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 export default function Canvas({
   role,
   showRightTools = true,
@@ -42,7 +158,7 @@ export default function Canvas({
   const actionCtx = useActionContext();
   const { canBuild } = useAuth();
 
-  // 🔒 Only gate builder features in editor mode (NOT preview).
+  // 🔒 Builders can edit only in editor mode. Preview mode still works normally for everyone.
   const isBuilderEditable = !isPreviewMode && !!canBuild;
 
   const [selectedId, setSelectedId] = useState(null);
@@ -71,9 +187,15 @@ export default function Canvas({
   const isSplitPreview = isPreviewMode && (role === "host" || role === "client");
   const isSplitEditor = !isPreviewMode && (role === "host" || role === "client");
 
-  // Local fallback panels (Canvas will still show something even if parent doesn't)
+  // Local fallback panels
   const [showBgPanel, setShowBgPanel] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+
+  // helpful debug view of what’s stored
+  const elementTypeSnapshot = useMemo(
+    () => (elements || []).map((e) => ({ id: e?.id, type: e?.type })),
+    [elements]
+  );
 
   /* ------------------------------------------------------------
    * Notify parent when selection changes
@@ -89,7 +211,7 @@ export default function Canvas({
   }, [selectedId]);
 
   /* ------------------------------------------------------------
-   * Background (shared per project, per device)
+   * Background
    * ---------------------------------------------------------- */
   const defaultBg = {
     kind: "color",
@@ -112,9 +234,7 @@ export default function Canvas({
           backgroundPosition: "center",
           backgroundColor: "#000000",
         }
-      : {
-          backgroundColor: activeBg.color || "#020617",
-        };
+      : { backgroundColor: activeBg.color || "#020617" };
 
   /* ------------------------------------------------------------
    * Load element metadata
@@ -129,8 +249,7 @@ export default function Canvas({
   }, []);
 
   /* ------------------------------------------------------------
-   * Prevent max update depth:
-   * clear bindings ONLY when leaving preview
+   * Prevent max update depth: clear bindings ONLY when leaving preview
    * ---------------------------------------------------------- */
   const prevPreviewRef = useRef(isPreviewMode);
   useEffect(() => {
@@ -146,7 +265,6 @@ export default function Canvas({
   const handleDrop = (e) => {
     e.preventDefault();
 
-    // 🔒 No building in editor if user can't build
     if (!isBuilderEditable) return;
 
     const metaString = e.dataTransfer.getData("application/json");
@@ -158,13 +276,13 @@ export default function Canvas({
     const dropX = (e.clientX - rect.left) / scale;
     const dropY = (e.clientY - rect.top) / scale;
 
-    // ✅ single => always client
-    // ✅ multi  => use canvas role (host/client), fallback null
     const targetRole = projectType === "single" ? "client" : role || null;
+
+    console.log("Dropped meta.name:", meta.name, meta);
 
     addElement({
       id: uuid(),
-      type: meta.name,
+      type: meta.name, // MUST match registry keys (VideoFeed, ControlButton, etc.)
       role: targetRole,
       x: dropX - 150,
       y: dropY - 75,
@@ -247,7 +365,7 @@ export default function Canvas({
   });
 
   /* ------------------------------------------------------------
-   * Tool handlers (call parent if provided, otherwise local panel)
+   * Tool handlers
    * ---------------------------------------------------------- */
   const handleBackgroundClick = () => {
     if (typeof onRequestBackground === "function") return onRequestBackground();
@@ -264,7 +382,10 @@ export default function Canvas({
    * ---------------------------------------------------------- */
   return (
     <div ref={containerRef} className="flex w-full min-w-0 gap-4 h-full relative overflow-visible">
-      {/* Sidebar (builders only in editor; allowed in preview if you want it later) */}
+      {/* Sidebar:
+          - show in preview (normal)
+          - show in editor ONLY if builder
+      */}
       {(isPreviewMode || isBuilderEditable) && (
         <div
           className={`shrink-0 transition-all duration-300 bg-panel flex flex-col
@@ -309,9 +430,8 @@ export default function Canvas({
                     <p className="text-xs text-text-muted italic">No elements yet</p>
                   )}
 
-                  {elements
-                    .filter((el) => (role ? el.role === role : true))
-                    .map((el) => (
+                   {visibleElements.map((el) => (
+
                       <div
                         key={el.id}
                         onClick={() => {
@@ -381,8 +501,12 @@ export default function Canvas({
             />
             <span className="ml-2">{Math.round(scale * 100)}%</span>
           </label>
+          {/* Calls panel (Jan): preview-only */}
+          {isPreviewMode && (
+            <CallsPanel isEmployee={!!canBuild} actionCtx={actionCtx} />
+          )}
 
-          {/* View-only badge */}
+
           {!isPreviewMode && !isBuilderEditable && (
             <div
               style={{
@@ -398,7 +522,6 @@ export default function Canvas({
             </div>
           )}
 
-          {/* Right tools pinned */}
           {showRightTools && (
             <div className="absolute right-0 top-0 flex items-center gap-2">
               <button
@@ -464,7 +587,7 @@ export default function Canvas({
               position: "absolute",
               right: 12,
               top: showBgPanel ? 52 + 220 : 52,
-              width: 280,
+              width: 320,
               maxHeight: "50vh",
               overflow: "auto",
               zIndex: 2000,
@@ -494,6 +617,8 @@ export default function Canvas({
                   visibleCount: visibleElements.length,
                   isPreviewMode,
                   canBuild,
+                  elements: elementTypeSnapshot, // ✅ here’s the check
+                  registryKeys: Object.keys(COMPONENTS),
                 },
                 null,
                 2
@@ -528,7 +653,12 @@ export default function Canvas({
                 event.stopPropagation();
                 setSelectedId(el.id);
 
-                // Only auto-open inspector if builder can edit (or in preview)
+                if (!ElementComp) {
+                  console.warn("Unknown element type:", el.type, "available:", Object.keys(COMPONENTS));
+                  return;
+                }
+
+                // Only auto-open inspector in preview or when editable
                 if (isPreviewMode || isBuilderEditable) {
                   setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
                 }
@@ -546,6 +676,33 @@ export default function Canvas({
                   console.error("Action error:", err);
                 }
               };
+
+              // If the registry is missing the component, render a visual placeholder
+              if (!ElementComp) {
+                return (
+                  <div
+                    key={el.id}
+                    style={{
+                      position: "absolute",
+                      left: el.x * scale,
+                      top: el.y * scale,
+                      width: el.width * scale,
+                      height: el.height * scale,
+                      border: "1px dashed #ff6b6b",
+                      color: "#ffb3b3",
+                      fontSize: 11,
+                      padding: 8,
+                      borderRadius: 8,
+                      background: "rgba(0,0,0,0.4)",
+                    }}
+                    title={`Unknown element type: ${el.type}`}
+                  >
+                    Unknown element: <b>{el.type}</b>
+                    <br />
+                    Check meta.name == registry key
+                  </div>
+                );
+              }
 
               return (
                 <Rnd
@@ -570,7 +727,11 @@ export default function Canvas({
                     });
                   }}
                   className={`group rounded-lg border-2 ${
-                    isPreviewMode ? "cursor-pointer" : isBuilderEditable ? "cursor-move" : "cursor-default"
+                    isPreviewMode
+                      ? "cursor-pointer"
+                      : isBuilderEditable
+                      ? "cursor-move"
+                      : "cursor-default"
                   } ${
                     selectedId === el.id
                       ? isPreviewMode
@@ -588,7 +749,10 @@ export default function Canvas({
           </div>
         </div>
 
-        {/* Inspector (builders only in editor; still visible in preview if you ever want readOnly) */}
+        {/* Inspector:
+            - show in preview (readOnly)
+            - show in editor ONLY if builder
+        */}
         {isInspectorOpen && (isPreviewMode || isBuilderEditable) &&
           (inspectorDocked ? (
             <div

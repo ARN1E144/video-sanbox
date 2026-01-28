@@ -1,0 +1,22 @@
+{
+  "name": "AgoraFeed",
+  "type": "rtc",
+  "category": "media",
+  "icon": "📡",
+  "editableProps": {
+    "appId": "",
+    "channel": "",
+    "uid": 0,
+    "token": "",
+    "tokenEndpoint": "/agora/token",
+    "autoJoin": true,
+    "publishLocal": true,
+    "muted": false,
+    "cameraOff": false,
+    "mirror": true,
+    "objectFit": "cover",
+    "borderRadius": 12,
+    "style": { "backgroundColor": "#000000" }
+  }
+}
+

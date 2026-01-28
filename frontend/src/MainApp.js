@@ -10,6 +10,8 @@ import DebugBindingsPanel from "./components/DebugBindingPanel";
 import { ProjectContext } from "./context/ProjectContext";
 import { usePreviewMode } from "./context/PreviewContext";
 import AuthPortal from "./components/AuthPortal";
+import CallsPortal from "./components/CallsPortal";
+
 
 
 function DraggablePanel({ title, onClose, children, initial = { x: 16, y: 16 }, width = 300 }) {
@@ -401,6 +403,13 @@ export default function MainApp() {
             <p>Coming soon – configuration options for your app builder.</p>
           </div>
         )}
+
+        {currentView === "calls" && (
+          <div style={{ height: "100%", overflow: "auto" }}>
+            <CallsPortal />
+          </div>
+        )}
+
       </div>
     </div>
   );

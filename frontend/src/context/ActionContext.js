@@ -1,26 +1,12 @@
 // src/context/ActionContext.js
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-} from "react";
+import React, { createContext, useContext, useState, useCallback } from "react";
 
 const ActionContext = createContext(null);
-
-// Simple flag so logs are easy to filter
 const LOG_PREFIX = "[ActionContext]";
 
 export function ActionProvider({ children }) {
-  // Per-element binding overrides (e.g. { [elementId]: { src, text, ... } })
   const [bindings, setBindings] = useState({});
-
-  // Generic key/value state for actions (micState etc.)
   const [state, setState] = useState({});
-
-  /* -------------------------------------------------------
-   * Base binding helpers
-   * ----------------------------------------------------- */
 
   const updateBinding = useCallback((elementId, partialProps) => {
     if (!elementId) return;
@@ -29,29 +15,29 @@ export function ActionProvider({ children }) {
       const prevBinding = prev[elementId] || {};
       const nextBinding = { ...prevBinding, ...partialProps };
 
-      console.log(
-        `${LOG_PREFIX} updateBinding`,
-        { elementId, partialProps, nextBinding }
-      );
+      console.log(`${LOG_PREFIX} updateBinding`, {
+        elementId,
+        partialProps,
+        nextBinding,
+      });
 
-      return {
-        ...prev,
-        [elementId]: nextBinding,
-      };
+      return { ...prev, [elementId]: nextBinding };
     });
   }, []);
+
+  const getBinding = useCallback(
+    (elementId) => (elementId ? bindings[elementId] : undefined),
+    [bindings]
+  );
 
   const clearBinding = useCallback((elementId) => {
     if (!elementId) return;
 
     setBindings((prev) => {
       if (!prev[elementId]) return prev;
-
       const next = { ...prev };
       delete next[elementId];
-
       console.log(`${LOG_PREFIX} clearBinding`, { elementId });
-
       return next;
     });
   }, []);
@@ -68,32 +54,15 @@ export function ActionProvider({ children }) {
       const existing = prev[elementId]?.items || [];
       const nextItems = [...existing, message];
 
-      const nextBinding = {
-        ...(prev[elementId] || {}),
-        items: nextItems,
-      };
+      const nextBinding = { ...(prev[elementId] || {}), items: nextItems };
 
-      console.log(`${LOG_PREFIX} appendFeed`, {
-        elementId,
-        message,
-        nextBinding,
-      });
+      console.log(`${LOG_PREFIX} appendFeed`, { elementId, message, nextBinding });
 
-      return {
-        ...prev,
-        [elementId]: nextBinding,
-      };
+      return { ...prev, [elementId]: nextBinding };
     });
   }, []);
 
-  /* -------------------------------------------------------
-   * Global key/value state
-   * ----------------------------------------------------- */
-
-  const get = useCallback(
-    (key) => state[key],
-    [state]
-  );
+  const get = useCallback((key) => state[key], [state]);
 
   const set = useCallback((key, value) => {
     console.log(`${LOG_PREFIX} set`, { key, value });
@@ -103,10 +72,6 @@ export function ActionProvider({ children }) {
   const notify = useCallback((msg) => {
     console.log("[Action notify]", msg);
   }, []);
-
-  /* -------------------------------------------------------
-   * Camera helpers (used by camera:* actions)
-   * ----------------------------------------------------- */
 
   const cameraOn = useCallback(
     (elementId) => {
@@ -137,13 +102,7 @@ export function ActionProvider({ children }) {
         nextEnabled,
       });
 
-      return {
-        ...prev,
-        [elementId]: {
-          ...current,
-          enabled: nextEnabled,
-        },
-      };
+      return { ...prev, [elementId]: { ...current, enabled: nextEnabled } };
     });
   }, []);
 
@@ -160,13 +119,7 @@ export function ActionProvider({ children }) {
         nextPlaying,
       });
 
-      return {
-        ...prev,
-        [elementId]: {
-          ...current,
-          playing: nextPlaying,
-        },
-      };
+      return { ...prev, [elementId]: { ...current, playing: nextPlaying } };
     });
   }, []);
 
@@ -187,19 +140,18 @@ export function ActionProvider({ children }) {
   );
 
   const value = {
-    // bindings
     bindings,
+    getBinding, // ✅ new
+
     updateBinding,
     clearBinding,
     clearAllBindings,
     appendFeed,
 
-    // global state
     get,
     set,
     notify,
 
-    // camera helpers
     cameraOn,
     cameraOff,
     cameraToggleEnabled,
@@ -208,17 +160,11 @@ export function ActionProvider({ children }) {
     cameraSetMuted,
   };
 
-  return (
-    <ActionContext.Provider value={value}>
-      {children}
-    </ActionContext.Provider>
-  );
+  return <ActionContext.Provider value={value}>{children}</ActionContext.Provider>;
 }
 
 export function useActionContext() {
   const ctx = useContext(ActionContext);
-  if (!ctx) {
-    throw new Error("useActionContext must be used inside <ActionProvider>");
-  }
+  if (!ctx) throw new Error("useActionContext must be used inside <ActionProvider>");
   return ctx;
 }

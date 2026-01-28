@@ -1,28 +1,32 @@
-import { http } from "./http";
-
-const API = process.env.REACT_APP_API_BASE || "http://localhost:5000";
+import api from "./api";
 
 export const authApi = {
+  // Auth
   register(payload) {
-    return http(`${API}/auth/register`, { method: "POST", body: payload });
+    return api.post("/auth/register", payload);
   },
+
   login(payload) {
-    return http(`${API}/auth/login`, { method: "POST", body: payload });
+    return api.post("/auth/login", payload);
   },
-  me(token) {
-    return http(`${API}/api/me`, { token });
+
+  me() {
+    return api.get("/me");
   },
-  members(token, tenantId) {
-    return http(`${API}/api/tenant/${tenantId}/members`, { token });
+
+  // Tenant / Members
+  members(tenantId) {
+    return api.get(`/tenant/${tenantId}/members`);
   },
-  invite(token, tenantId, payload) {
-    return http(`${API}/api/tenant/${tenantId}/invite`, { method: "POST", token, body: payload });
+
+  invite(tenantId, payload) {
+    return api.post(`/tenant/${tenantId}/invite`, payload);
   },
-  changeRole(token, tenantId, userId, role) {
-    return http(`${API}/api/tenant/${tenantId}/members/${userId}/role`, {
-      method: "PATCH",
-      token,
-      body: { role },
-    });
+
+  changeRole(tenantId, userId, role) {
+    return api.patch(
+      `/tenant/${tenantId}/members/${userId}/role`,
+      { role }
+    );
   },
 };

@@ -25,8 +25,11 @@ export default function AuthPortal({ onAuthed }) {
 
   const refreshMembers = async () => {
     if (!token || !tenantId) return;
-    const res = await authApi.members(token, tenantId);
-    setMembers(res.members || []);
+    console.log("[AuthPortal] Refreshing members for tenant:", tenantId); 
+    const res = await authApi.members(tenantId);
+    setMembers(res.data?.members || []);
+    console.log("[AuthPortal] Fetched members:", res.data?.members);
+
   };
 
   useEffect(() => {
@@ -158,7 +161,7 @@ export default function AuthPortal({ onAuthed }) {
                   color: "#ddd",
                 }}
               >
-                role: {me?.auth?.role || session?.auth?.role || "n/a"}
+                role: {me?.membership?.role || session?.membership?.role || "n/a"}
               </div>
             </div>
 

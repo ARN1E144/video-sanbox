@@ -12,6 +12,9 @@ router.get("/token", (req, res) => {
   const role = RtcRole.PUBLISHER;
   const expirationTimeInSeconds = 3600;
 
+  console.log("[AGORA TOKEN] Generating Agora token for channel Rote Hit");  
+  console.log("[AGORA CHANNEL] Channel Name:", channelName); 
+
   if (!channelName) {
     return res.status(400).json({ error: "Channel name is required" });
   }
@@ -28,6 +31,8 @@ router.get("/token", (req, res) => {
       role,
       privilegeExpiredTs
     );
+
+    console.log("[AGORA TOKEN] Token generated successfully", token);
 
     res.json({ token, uid, channelName, appId });
   } catch (err) {

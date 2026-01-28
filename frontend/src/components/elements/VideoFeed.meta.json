@@ -1,21 +1,23 @@
 {
   "name": "VideoFeed",
-  "type": "VideoFeed",
+  "type": "video",
   "category": "media",
-  "icon": "🎥",
+  "icon": "📹",
   "editableProps": {
     "mode": "auto",
     "src": "",
     "deviceId": "",
+
     "enabled": true,
     "playing": true,
     "muted": true,
     "mirror": true,
+
     "objectFit": "cover",
     "borderRadius": 12,
+
     "style": {
-      "backgroundColor": "#000000",
-      "borderRadius": "12px"
+      "backgroundColor": "#000000"
     }
   }
 }

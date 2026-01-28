@@ -37,6 +37,8 @@ router.get(
   async (req, res) => {
     const { tenantId } = req.params;
 
+    console.log("[TenantRoutes] Compare tenant:", tenantId, "by user:", req.user.tenantId);    
+
     // prevent cross-tenant token misuse
     if (tenantId !== String(req.user.tenantId)) {
       return res.status(403).json({ error: "Tenant mismatch" });

@@ -3,11 +3,11 @@ import React, { useEffect, useRef, useState } from "react";
 
 export default function VideoFeed(props) {
   const {
-    mode = "auto",       // "auto" | "local" | "remote"
-    src,                 // remote stream URL
-    deviceId,            // camera deviceId
-    enabled = true,      // when false we HARD stop the camera
-    playing = true,      // play / pause (render only, doesn't kill tracks)
+    mode = "auto", // "auto" | "local" | "remote"
+    src, // remote URL (mp4/webm/m3u8)
+    deviceId,
+    enabled = true,
+    playing = true,
     muted = true,
     mirror = true,
     objectFit = "cover",
@@ -18,74 +18,196 @@ export default function VideoFeed(props) {
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const hlsRef = useRef(null);
+
   const [error, setError] = useState(null);
 
-  const stopStream = () => {
+  const isHlsUrl = (u) =>
+    typeof u === "string" && /\.m3u8(\?.*)?$/i.test(u.trim());
+
+  const destroyHls = () => {
+    try {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const stopLocalStream = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
+    const videoEl = videoRef.current;
+    if (videoEl) {
+      videoEl.srcObject = null;
     }
   };
 
-  // Cleanup on unmount ONLY
+  const resetRemotePlayback = () => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    destroyHls();
+
+    // stop any remote playback cleanly
+    try {
+      videoEl.pause();
+    } catch {
+      // ignore
+    }
+
+    // ensure src + srcObject are cleared
+    videoEl.srcObject = null;
+    videoEl.removeAttribute("src");
+    videoEl.load();
+  };
+
+  // cleanup on unmount
   useEffect(() => {
     return () => {
-      stopStream();
+      destroyHls();
+      stopLocalStream();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Main effect: decide whether to use local camera or remote URL
-  useEffect(() => {
-    const videoEl = videoRef.current;
+  const attachRemote = async ({ videoEl, url }) => {
+    if (!videoEl) return;
 
-    // If disabled, *always* stop camera + pause video
-    if (!enabled) {
-      stopStream();
-      if (videoEl) {
-        videoEl.pause();
-      }
+    // stop local camera
+    stopLocalStream();
+
+    // reset any previous remote pipeline
+    resetRemotePlayback();
+
+    videoEl.playsInline = true;
+    videoEl.muted = muted;
+
+    if (!url) {
+      setError(null);
       return;
     }
 
-    // Remote mode → no local camera, just use src
-    if (mode === "remote") {
-      // make sure local camera is fully stopped
-      stopStream();
+    // HLS (.m3u8)
+    if (isHlsUrl(url)) {
+      const canNativeHls =
+        typeof videoEl.canPlayType === "function" &&
+        videoEl.canPlayType("application/vnd.apple.mpegurl") !== "";
 
-      if (videoEl) {
-        videoEl.srcObject = null;
-
-        if (src) {
-          videoEl.src = src;
-        }
-
-        if (playing && src) {
-          videoEl
-            .play()
-            .catch((err) => console.warn("Video play failed", err));
+      // Safari/iOS native HLS
+      if (canNativeHls) {
+        videoEl.src = url;
+        videoEl.load();
+        if (playing) {
+          try {
+            await videoEl.play();
+          } catch {
+            // autoplay may be blocked
+          }
         } else {
           videoEl.pause();
         }
+        setError(null);
+        return;
       }
+
+      // Chrome/Firefox/Edge: hls.js
+      try {
+        const mod = await import("hls.js");
+        const Hls = mod.default || mod;
+
+        if (!Hls?.isSupported?.()) {
+          setError("HLS is not supported in this browser.");
+          return;
+        }
+
+        const hls = new Hls();
+        hlsRef.current = hls;
+
+        hls.attachMedia(videoEl);
+
+        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+          hls.loadSource(url);
+        });
+
+        hls.on(Hls.Events.ERROR, (_evt, data) => {
+          if (data?.fatal) {
+            setError(`HLS error: ${data?.type || "fatal"}`);
+          }
+        });
+
+        if (playing) {
+          // allow attach to settle
+          setTimeout(() => {
+            videoEl.play().catch(() => {});
+          }, 0);
+        } else {
+          videoEl.pause();
+        }
+
+        setError(null);
+        return;
+      } catch {
+        setError(
+          "This .m3u8 stream needs hls.js installed (npm i hls.js), or use Safari native HLS."
+        );
+        return;
+      }
+    }
+
+    // Non-HLS remote (MP4/WebM/etc.)
+    videoEl.src = url;
+    videoEl.load();
+
+    if (playing) {
+      try {
+        await videoEl.play();
+      } catch {
+        // autoplay may be blocked
+      }
+    } else {
+      videoEl.pause();
+    }
+
+    setError(null);
+  };
+
+  // main mode effect
+  useEffect(() => {
+    const videoEl = videoRef.current;
+
+    // disabled stops everything hard
+    if (!enabled) {
+      destroyHls();
+      stopLocalStream();
+      if (videoEl) videoEl.pause();
+      setError(null);
       return;
     }
 
-    // Local / auto camera
+    // REMOTE
+    if (mode === "remote") {
+      attachRemote({ videoEl, url: src || "" });
+      return;
+    }
 
-    // If not playing, just pause the element but keep any active stream alive.
-    // This means toggling playback doesn't re-request getUserMedia.
+    // LOCAL/AUTO
+    resetRemotePlayback(); // avoids src fighting srcObject
+    if (videoEl) {
+      videoEl.playsInline = true;
+    }
+
+    // pause only (keep stream alive)
     if (!playing) {
-      if (videoEl) {
-        videoEl.pause();
-      }
+      if (videoEl) videoEl.pause();
+      setError(null);
       return;
     }
 
-    // At this point: enabled === true, playing === true, and mode is "auto" or "local"
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera not supported in this browser.");
       return;
@@ -95,12 +217,13 @@ export default function VideoFeed(props) {
 
     (async () => {
       try {
-        // If we already have a stream, just attach it and play
+        // reuse existing stream
         if (streamRef.current && videoEl) {
           videoEl.srcObject = streamRef.current;
+          videoEl.muted = muted;
           try {
             await videoEl.play();
-          } catch (e) {
+          } catch {
             // ignore
           }
           setError(null);
@@ -108,10 +231,7 @@ export default function VideoFeed(props) {
         }
 
         const constraints = {
-          video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
         };
 
         if (deviceId) {
@@ -121,7 +241,6 @@ export default function VideoFeed(props) {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
         if (cancelled) {
-          // If effect cleaned up before we got the stream, stop it immediately
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
@@ -130,11 +249,10 @@ export default function VideoFeed(props) {
 
         if (videoEl) {
           videoEl.srcObject = stream;
-          // muted is handled in a separate effect, but set once here as a sane default
           videoEl.muted = muted;
           try {
             await videoEl.play();
-          } catch (e) {
+          } catch {
             // ignore
           }
         }
@@ -142,31 +260,25 @@ export default function VideoFeed(props) {
         setError(null);
       } catch (err) {
         console.error("getUserMedia failed:", err);
-        setError(err.message || "Camera error");
+        setError(err?.message || "Camera error");
       }
     })();
 
-    // On deps change we only cancel the async; actual track cleanup is handled
-    // either by `enabled=false`, `mode==="remote"`, or unmount effect.
     return () => {
       cancelled = true;
     };
-    // NOTE: we intentionally do NOT depend on `muted` here so mute doesn't
-    // re-run getUserMedia or touch the stream.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, src, deviceId, enabled, playing]);
 
-  // Mute effect: ONLY toggles audio behavior, never touches the stream lifecycle.
+  // muted effect: no lifecycle changes
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
-    // Mute/unmute HTMLMediaElement
     videoEl.muted = muted;
 
-    // If/when we add audio tracks, toggle them here as well.
     if (streamRef.current && typeof streamRef.current.getAudioTracks === "function") {
-      const audioTracks = streamRef.current.getAudioTracks();
-      audioTracks.forEach((track) => {
+      streamRef.current.getAudioTracks().forEach((track) => {
         track.enabled = !muted;
       });
     }
@@ -188,8 +300,6 @@ export default function VideoFeed(props) {
       <video
         ref={videoRef}
         playsInline
-        // Keep muted prop too so initial render is consistent;
-        // runtime toggling is handled in the mute effect.
         muted={muted}
         style={{
           width: "100%",
@@ -199,7 +309,6 @@ export default function VideoFeed(props) {
         }}
       />
 
-      {/* Optional overlays */}
       {!enabled && (
         <div
           style={{

@@ -329,18 +329,15 @@ export default function InspectorPanel({
                   <label className="block text-xs text-text-muted mb-1">HTTP Method</label>
                   <select
                     disabled={readOnly || !canEditBuilder}
-                    value={element.props?.apiMethod || "GET"}
+                    value={element.props?.method || element.props?.apiMethod || "GET"}
                     onChange={(e) =>
                       updateProps({
-                        method: e.target.value,
-                        apiMethod: e.target.value,
+                        method: e.target.value,      // ✅ canonical
+                        apiMethod: e.target.value,   // ♻️ legacy compatibility
                       })
                     }
                     className="w-full px-2 py-1 rounded bg-surface border border-border text-text-primary"
                   >
-                    {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
                   </select>
                 </div>
 
