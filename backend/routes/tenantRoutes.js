@@ -18,6 +18,7 @@ router.use((req, _res, next) => {
 function roleToPermissions(role) {
   if (role === "owner" || role === "admin") return { canBuild: true, canInvite: true };
   if (role === "builder") return { canBuild: true, canInvite: false };
+  if (role === "operative") return { canBuild: true, canInvite: false };
   return { canBuild: false, canInvite: false }; // member
 }
 

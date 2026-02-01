@@ -11,6 +11,8 @@ import { ProjectContext } from "./context/ProjectContext";
 import { usePreviewMode } from "./context/PreviewContext";
 import AuthPortal from "./components/AuthPortal";
 import CallsPortal from "./components/CallsPortal";
+import { useAuth } from "./context/AuthContext";
+
 
 
 
@@ -97,6 +99,7 @@ function DraggablePanel({ title, onClose, children, initial = { x: 16, y: 16 }, 
 export default function MainApp() {
   const { viewMode, backgroundConfigs, setBackgroundConfigs } = useContext(ProjectContext);
   const { previewView } = usePreviewMode();
+  const { session, loading } = useAuth();
 
   const [currentView, setCurrentView] = useState("templates"); // templates | auth | build | settings
 
@@ -139,6 +142,14 @@ export default function MainApp() {
       };
     });
   };
+
+   if (loading) {
+    return <div style={{ color: "#aaa", padding: 20 }}>Loading session…</div>;
+  }
+
+  if (!session) {
+    return <AuthPortal />;
+  }
 
   // NOTE:
   // We are now storing backgrounds per ROLE (client/host).

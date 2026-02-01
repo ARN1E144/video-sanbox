@@ -1,12 +1,15 @@
-// backend/middleware/requireTenant.js
 export default function requireTenant(req, res, next) {
-  const tenantId = req.user?.tenantId;
+  const tenantId =
+    req.user?.tenantId ||
+    req.params?.tenantId ||
+    req.body?.tenantId;
+
+    console.log("[requireTenant] Resolved tenantId:", tenantId);
 
   if (!tenantId) {
-    return res.status(400).json({
-      error: "tenantId is missing from token. Re-login or call /auth/refresh with tenantId.",
-    });
+    return res.status(401).json({ error: "Tenant context missing" });
   }
 
-  return next();
+  req.user.tenantId = tenantId;
+  next();
 }

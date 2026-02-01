@@ -1,25 +1,20 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import AgoraRTC from "agora-rtc-sdk-ng";
 import api from "../../services/api";
 import "../../css/AgoraFeed.css";
 
-export default function AgoraFeed(props) {
-  const {
-    tokenEndpoint = "/agora/token",
+export default function AgoraFeed({
+  tokenEndpoint = "/agora/token",
+  channel = "test-call",
 
-    autoJoin = true,
-    publishLocal = true,
-    preview = true,
+  muted = false,
+  cameraOff = false,
 
-    muted = false,
-    cameraOff = false,
-
-    mirror = true,
-    objectFit = "cover",
-    borderRadius = 12,
-    style = {},
-  } = props;
-
+  mirror = true,
+  objectFit = "cover",
+  borderRadius = 12,
+  style = {},
+}) {
   const remoteRef = useRef(null);
   const localRef = useRef(null);
 
@@ -28,19 +23,8 @@ export default function AgoraFeed(props) {
 
   const [joined, setJoined] = useState(false);
   const [remoteJoined, setRemoteJoined] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [error, setError] = useState(null);
-
-  const [session, setSession] = useState({
-    appId: null,
-    channel: null,
-    uid: null,
-    token: null,
-  });
-
-  /* --------------------------------------------
-   * Logging helper
-   * ------------------------------------------ */
-  const log = (...args) => console.log("[AgoraFeed]", ...args);
 
   /* --------------------------------------------
    * Init client ONCE
@@ -50,175 +34,109 @@ export default function AgoraFeed(props) {
       mode: "rtc",
       codec: "vp8",
     });
-    log("Client created");
+    console.log("[AgoraFeed] Client created");
   }
 
   const client = clientRef.current;
 
   /* --------------------------------------------
-   * STEP 1 — Local Preview (NO JOIN)
+   * JOIN (USER GESTURE — REQUIRED)
    * ------------------------------------------ */
-  useEffect(() => {
-    if (!preview || joined || !localRef.current) return;
+  const handleJoin = async () => {
+    if (joining || joined) return;
 
-    let alive = true;
+    setJoining(true);
+    setError(null);
 
-    const startPreview = async () => {
-      try {
-        log("Starting local preview");
+    try {
+      console.log("[AgoraFeed] Fetching token…");
 
-        const audio = await AgoraRTC.createMicrophoneAudioTrack();
-        const video = await AgoraRTC.createCameraVideoTrack();
+      const { data } = await api.get(tokenEndpoint, {
+        params: { channel },
+      });
 
-        if (!alive) return;
+      const { appId, token, uid } = data;
 
-        await audio.setEnabled(!muted);
-        await video.setEnabled(!cameraOff);
+      console.log("[AgoraFeed] Token received");
 
-        tracksRef.current = { audio, video };
-        video.play(localRef.current, { fit: objectFit });
+      // 🔑 Create tracks ONCE (Safari-safe)
+      const audio = await AgoraRTC.createMicrophoneAudioTrack();
+      const video = await AgoraRTC.createCameraVideoTrack();
 
-        log("Local preview active");
-      } catch (e) {
-        console.error("[AgoraFeed] Preview error", e);
-        setError("Camera or microphone access denied");
-      }
-    };
+      await audio.setEnabled(!muted);
+      await video.setEnabled(!cameraOff);
 
-    startPreview();
+      tracksRef.current = { audio, video };
 
-    return () => {
-      alive = false;
+      // Join channel
+      await client.join(appId, channel, token, uid);
+
+      // Event listeners
+      client.on("user-published", async (user, mediaType) => {
+        await client.subscribe(user, mediaType);
+
+        if (mediaType === "video" && remoteRef.current) {
+          user.videoTrack.play(remoteRef.current, { fit: objectFit });
+          setRemoteJoined(true);
+        }
+
+        if (mediaType === "audio") {
+          user.audioTrack.play();
+        }
+      });
+
+      client.on("user-unpublished", (_, mediaType) => {
+        if (mediaType === "video") setRemoteJoined(false);
+      });
+
+      // Play local preview AFTER join
+      video.play(localRef.current, { fit: objectFit });
+
+      // Publish
+      await client.publish([audio, video]);
+
+      setJoined(true);
+      console.log("[AgoraFeed] Joined + published");
+    } catch (err) {
+      console.error("[AgoraFeed] Join error", err);
+      setError(err.message || "Failed to join call");
+      await cleanup();
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  /* --------------------------------------------
+   * Cleanup
+   * ------------------------------------------ */
+  const cleanup = async () => {
+    try {
+      client.removeAllListeners();
+
       const { audio, video } = tracksRef.current;
       audio?.stop();
       audio?.close();
       video?.stop();
       video?.close();
       tracksRef.current = { audio: null, video: null };
-      log("Preview cleaned up");
-    };
-  }, [preview, joined, muted, cameraOff, objectFit]);
 
-  /* --------------------------------------------
-   * STEP 2 — Fetch Agora Token
-   * ------------------------------------------ */
+      if (client.connectionState !== "DISCONNECTED") {
+        await client.leave();
+      }
+    } catch (e) {
+      console.warn("[AgoraFeed] Cleanup error", e);
+    } finally {
+      setJoined(false);
+      setRemoteJoined(false);
+    }
+  };
+
   useEffect(() => {
-    if (!autoJoin) return;
-
-    const fetchToken = async () => {
-      try {
-        log("Fetching Agora token…");
-
-        const { data } = await api.get(tokenEndpoint, {
-          params: {channel: "test-call"}
-        });
-
-        log("Token received", data);
-
-        setSession({
-          appId: data.appId,
-          channel: data.channel || "test-call",
-          uid: data.uid,
-          token: data.token,
-        });
-      } catch (e) {
-        console.error("[AgoraFeed] token error", e);
-        setError("Failed to fetch Agora token");
-      }
-    };
-
-    fetchToken();
-  }, [autoJoin, tokenEndpoint]);
-
-  /* --------------------------------------------
-   * STEP 3 — Join Channel + Publish
-   * ------------------------------------------ */
-  useEffect(() => {
-    const { appId, channel, token, uid } = session;
-    if (!appId || !channel || !token) return;
-
-    let alive = true;
-
-    const cleanup = async () => {
-      try {
-        client.removeAllListeners();
-
-        const { audio, video } = tracksRef.current;
-        audio?.stop();
-        audio?.close();
-        video?.stop();
-        video?.close();
-        tracksRef.current = { audio: null, video: null };
-
-        if (client.connectionState !== "DISCONNECTED") {
-          await client.leave();
-          log("Client left channel");
-        }
-      } catch (e) {
-        log("Cleanup error", e);
-      } finally {
-        if (alive) {
-          setJoined(false);
-          setRemoteJoined(false);
-        }
-      }
-    };
-
-    const join = async () => {
-      try {
-        setError(null);
-
-        client.on("user-published", async (user, mediaType) => {
-          await client.subscribe(user, mediaType);
-
-          if (mediaType === "video" && remoteRef.current) {
-            user.videoTrack.play(remoteRef.current, { fit: objectFit });
-            setRemoteJoined(true);
-          }
-
-          if (mediaType === "audio") {
-            user.audioTrack.play();
-          }
-        });
-
-        client.on("user-unpublished", (_, mediaType) => {
-          if (mediaType === "video") setRemoteJoined(false);
-        });
-
-        log("Joining channel", channel);
-        await client.join(appId, channel, token, uid);
-        if (!alive) return;
-
-        setJoined(true);
-
-        if (publishLocal) {
-          const audio = await AgoraRTC.createMicrophoneAudioTrack();
-          const video = await AgoraRTC.createCameraVideoTrack();
-
-          tracksRef.current = { audio, video };
-
-          await audio.setEnabled(!muted);
-          await video.setEnabled(!cameraOff);
-
-          video.play(localRef.current, { fit: objectFit });
-          await client.publish([audio, video]);
-
-          log("Local tracks published");
-        }
-      } catch (e) {
-        console.error("[AgoraFeed] Join error", e);
-        setError(e.message || "Agora error");
-        await cleanup();
-      }
-    };
-
-    join();
-
     return () => {
-      alive = false;
       cleanup();
     };
-  }, [session, publishLocal, muted, cameraOff, objectFit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* --------------------------------------------
    * Mic / Camera toggles
@@ -246,7 +164,7 @@ export default function AgoraFeed(props) {
         ...style,
       }}
     >
-      {/* Remote */}
+      {/* Remote video */}
       <div
         ref={remoteRef}
         style={{
@@ -256,8 +174,8 @@ export default function AgoraFeed(props) {
         }}
       />
 
-      {/* Local */}
-      {(preview || publishLocal) && (
+      {/* Local video */}
+      {joined && (
         <div
           ref={localRef}
           className="agora_video_player"
@@ -276,8 +194,23 @@ export default function AgoraFeed(props) {
         />
       )}
 
-      {!joined && !error && session.appId && (
-        <Overlay>Connecting…</Overlay>
+      {/* Overlay states */}
+      {!joined && !error && (
+        <Overlay>
+          <button
+            onClick={handleJoin}
+            disabled={joining}
+            style={{
+              padding: "8px 14px",
+              fontSize: 12,
+              borderRadius: 6,
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            {joining ? "Connecting…" : "Join Call"}
+          </button>
+        </Overlay>
       )}
 
       {joined && !remoteJoined && (
@@ -301,11 +234,12 @@ function Overlay({ children, error }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        color: error ? "tomato" : "#aaa",
+        color: error ? "tomato" : "#fff",
         fontSize: 12,
         padding: 10,
         textAlign: "center",
-        background: "rgba(0,0,0,0.5)",
+        background: "rgba(0,0,0,0.6)",
+        zIndex: 5,
       }}
     >
       {children}

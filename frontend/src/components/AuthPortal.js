@@ -32,11 +32,14 @@ export default function AuthPortal({ onAuthed }) {
 
   };
 
+  console.log("[AuthPortal] token:", token, "tenantId:", tenantId);
+
   useEffect(() => {
     (async () => {
       setError("");
       setMe(null);
       if (!token) return;
+      
       try {
         const res = await authApi.me(token);
         setMe(res);

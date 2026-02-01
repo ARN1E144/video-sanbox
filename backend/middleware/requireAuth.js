@@ -1,7 +1,10 @@
-// backend/middleware/requireAuth.js
-import jwt from "jsonwebtoken";
+import jwt from "jsonwebtoken"; // ← THIS WAS MISSING
 
 export function requireAuth(req, res, next) {
+  if (req.method === "OPTIONS") {
+    return next();
+  }
+
   try {
     const secret = process.env.JWT_ACCESS_SECRET;
     if (!secret) {
@@ -17,16 +20,16 @@ export function requireAuth(req, res, next) {
 
     const payload = jwt.verify(token, secret);
 
-    // Expected payload from signAccessToken:
-    // { userId, tenantId, role, iat, exp }
     req.user = {
       userId: payload.userId,
       tenantId: payload.tenantId,
       role: payload.role,
     };
 
+    console.log("[requireAuth] Authenticated user:", req.user);
     return next();
   } catch (err) {
+    console.error("[requireAuth] JWT error:", err.message);
     return res.status(401).json({ error: "Invalid or expired access token" });
   }
 }

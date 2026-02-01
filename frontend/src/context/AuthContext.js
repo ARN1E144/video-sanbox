@@ -101,12 +101,14 @@ export function AuthProvider({ children }) {
   const res = await authApi.login(payload);
   const data = res.data;
 
+  console.log("[AuthProvider] login response", data);
+
   const nextToken = data?.tokens?.accessToken;
           if (!nextToken) {
             save(data);
             return data;
           }
-
+          
           // ✅ Set token FIRST
           setApiToken(nextToken);
 

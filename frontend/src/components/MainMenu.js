@@ -1,7 +1,13 @@
 import React from 'react';
 import { useProjectContext } from '../context/ProjectContext';
+import { useAuth } from '../context/AuthContext';
+
+
 
 export default function MainMenu({ currentView, setCurrentView }) {
+
+  const { logout } = useAuth();
+
   const buttonStyle = {
     padding: '8px 16px',
     borderRadius: 6,
@@ -56,6 +62,11 @@ export default function MainMenu({ currentView, setCurrentView }) {
         onClick={() => setCurrentView('calls')}
       >
         📞 Calls
+      </div>
+      <div style={buttonStyle}
+      >
+        <button onClick={logout}>Logout</button>
+
       </div>
 
     </div>
