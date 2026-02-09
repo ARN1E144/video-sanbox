@@ -1,24 +1,19 @@
 // src/components/Canvas.js
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Rnd } from "react-rnd";
 import { v4 as uuid } from "uuid";
+
 import COMPONENTS from "../components/elements/registry";
-import InspectorPanel from "./InspectorPanel";
+import InspectorContent from "./inspectorPanel/InspectorContent";
+
 import Tabs from "./Tabs";
+import LazyAgoraFeed from "./LazyAgoraFeed";
+
 import { usePreviewMode } from "../context/PreviewContext";
 import { useCanvasState } from "../context/CanvasContext";
 import { useProjectContext } from "../context/ProjectContext";
-import { runAction } from "../utils/actionExecutor";
 import { useActionContext } from "../context/ActionContext";
 import { useAuth } from "../context/AuthContext";
-import {
-  ChevronDown,
-  ChevronUp,
-  Move,
-  Dock,
-  Image as ImageIcon,
-  Bug,
-} from "lucide-react";
 
 const DEVICE_SIZES = {
   desktop: { width: 1440, height: 900 },
@@ -26,854 +21,362 @@ const DEVICE_SIZES = {
   mobile: { width: 390, height: 844 },
 };
 
-function CallsPanel({ isEmployee, actionCtx }) {
-  const [polling, setPolling] = React.useState(true);
-
-  const activeCall = actionCtx.get("activeCall");
-  const availableCalls = actionCtx.get("availableCalls") || [];
-
-  // Poll available calls for employees
-  React.useEffect(() => {
-    if (!isEmployee) return;
-    if (!polling) return;
-
-    let alive = true;
-
-    const tick = async () => {
-      try {
-        await runAction("FetchAvailableCalls", actionCtx, {});
-      } catch (e) {
-        // keep quiet in UI for Jan; console is enough
-        console.warn("FetchAvailableCalls failed", e);
-      }
-    };
-
-    tick();
-    const id = setInterval(() => {
-      if (!alive) return;
-      tick();
-    }, 2000);
-
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, [isEmployee, polling, actionCtx]);
-
-  return (
-    <div className="ml-2 flex items-center gap-2">
-      {/* Client controls */}
-      {!isEmployee && (
-        <>
-          <button
-            type="button"
-            onClick={() => runAction("StartCall", actionCtx, {})}
-            className="px-3 py-1.5 rounded border border-border text-text-primary hover:border-accent hover:text-accent transition text-xs"
-            title="Create a new call"
-          >
-            Start call
-          </button>
-
-          <button
-            type="button"
-            onClick={() => runAction("EndCall", actionCtx, { callId: activeCall?._id })}
-            disabled={!activeCall?._id}
-            className="px-3 py-1.5 rounded border border-border text-text-muted hover:border-red-500 hover:text-red-400 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-            title="End current call"
-          >
-            End call
-          </button>
-        </>
-      )}
-
-      {/* Employee controls */}
-      {isEmployee && (
-        <div className="flex items-center gap-2">
-          <div className="text-xs text-text-muted">
-            Available: <span className="text-text-primary">{availableCalls.length}</span>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => runAction("FetchAvailableCalls", actionCtx, {})}
-            className="px-2 py-1 rounded border border-border text-text-muted hover:text-accent hover:border-accent transition text-xs"
-            title="Refresh"
-          >
-            Refresh
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPolling((v) => !v)}
-            className="px-2 py-1 rounded border border-border text-text-muted hover:text-accent hover:border-accent transition text-xs"
-            title="Toggle auto-refresh"
-          >
-            {polling ? "Auto: on" : "Auto: off"}
-          </button>
-
-          {/* Quick accept first waiting call */}
-          <button
-            type="button"
-            onClick={() => {
-              const first = availableCalls[0];
-              if (!first?._id) return;
-              runAction("AcceptCall", actionCtx, { callId: first._id });
-            }}
-            disabled={!availableCalls[0]?._id}
-            className="px-3 py-1.5 rounded border border-border text-text-primary hover:border-accent hover:text-accent transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Accept the newest waiting call"
-          >
-            Accept newest
-          </button>
-
-          <button
-            type="button"
-            onClick={() => runAction("EndCall", actionCtx, { callId: activeCall?._id })}
-            disabled={!activeCall?._id}
-            className="px-3 py-1.5 rounded border border-border text-text-muted hover:border-red-500 hover:text-red-400 transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-            title="End active call"
-          >
-            End call
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
 export default function Canvas({
   role,
-  showRightTools = true,
   onSelectedIdChange,
-  onRequestBackground,
-  onRequestDebug,
 }) {
-  const [device, setDevice] = useState("desktop");
-  const [scale, setScale] = useState(0.75);
-
   const { isPreviewMode } = usePreviewMode();
-  const { elements, addElement, updateElement, removeElement } = useCanvasState();
+  const { elements, addElement, updateElement } = useCanvasState();
   const { projectType, backgroundConfigs } = useProjectContext();
   const actionCtx = useActionContext();
   const { canBuild } = useAuth();
 
-  // 🔒 Builders can edit only in editor mode. Preview mode still works normally for everyone.
   const isBuilderEditable = !isPreviewMode && !!canBuild;
 
+  /* --------------------------------------------
+   * Local state
+   * ------------------------------------------ */
+  const [device, setDevice] = useState("desktop");
+  const [scale, setScale] = useState(0.75);
   const [selectedId, setSelectedId] = useState(null);
-  const [availableElements, setAvailableElements] = useState([]);
   const [activeTab, setActiveTab] = useState("Elements");
+  const [availableElements, setAvailableElements] = useState([]);
 
-  const [inspectorState, setInspectorState] = useState({
+  /* --------------------------------------------
+   * Inspector state (PER ROLE)
+   * ------------------------------------------ */
+  const currentRoleKey = role || "null";
+
+  console.log("[Canvas Render]", { role, currentRoleKey, isPreviewMode });
+
+  const [inspectorOpen, setInspectorOpen] = useState({
     host: true,
     client: true,
     null: true,
   });
-  const [inspectorDocked, setInspectorDocked] = useState(true);
-  const [inspectorPosition, setInspectorPosition] = useState({ x: 200, y: 200 });
 
+  const [inspectorLayout, setInspectorLayout] = useState({
+    host: "docked",
+    client: "docked",
+    null: "docked",
+  });
+
+  const [floatingPos, setFloatingPos] = useState({ x: 240, y: 160 });
+
+  /* --------------------------------------------
+   * Mode detection
+   * ------------------------------------------ */
+  const isSingleMode = projectType === "single";
+  const isSplitPreview =
+    isPreviewMode && (role === "host" || role === "client");
+
+  /* --------------------------------------------
+   * Inspector layout resolution (IMPORTANT)
+   * ------------------------------------------ */
+  const requestedLayout = inspectorLayout[currentRoleKey];
+
+  const effectiveLayout = isSplitPreview
+    ? "docked"
+    : requestedLayout === "floating"
+    ? "floating"
+    : isSingleMode
+    ? "right"
+    : "docked";
+
+  const isInspectorVisible = inspectorOpen[currentRoleKey];
+
+  /* --------------------------------------------
+   * Refs
+   * ------------------------------------------ */
   const canvasRef = useRef(null);
-  const inspectorRef = useRef(null);
-  const containerRef = useRef(null);
 
-  const [isDraggingInspector, setIsDraggingInspector] = useState(false);
-  const dragOffsetRef = useRef({ x: 0, y: 0 });
+  /* --------------------------------------------
+   * Selection sync
+   * ------------------------------------------ */
+  //  useEffect(() => {
+  //     if (!selectedId) return;
 
-  const deviceSize = DEVICE_SIZES[device];
-  const currentRoleKey = role || "null";
-  const isInspectorOpen = inspectorState[currentRoleKey];
+  //     onSelectedIdChange((prev) => {
+  //       if (prev === selectedId) return prev;
+  //       return selectedId;
+  //     });
+  //   }, [selectedId, onSelectedIdChange]);
 
-  const isSplitPreview = isPreviewMode && (role === "host" || role === "client");
-  const isSplitEditor = !isPreviewMode && (role === "host" || role === "client");
 
-  // Local fallback panels
-  const [showBgPanel, setShowBgPanel] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-
-  // helpful debug view of what’s stored
-  const elementTypeSnapshot = useMemo(
-    () => (elements || []).map((e) => ({ id: e?.id, type: e?.type })),
-    [elements]
-  );
-
-  /* ------------------------------------------------------------
-   * Notify parent when selection changes
-   * ---------------------------------------------------------- */
-  const onSelectedIdChangeRef = useRef(onSelectedIdChange);
-
-  useEffect(() => {
-    onSelectedIdChangeRef.current = onSelectedIdChange;
-  }, [onSelectedIdChange]);
-
-  useEffect(() => {
-    onSelectedIdChangeRef.current?.(selectedId);
-  }, [selectedId]);
-
-  /* ------------------------------------------------------------
-   * Background
-   * ---------------------------------------------------------- */
-  const defaultBg = {
-    kind: "color",
-    color: "#020617",
-    imageUrl: "",
-    size: "cover",
-  };
-
-  const activeBg = (backgroundConfigs && backgroundConfigs[device]) || defaultBg;
-
-  const canvasBackgroundStyle =
-    activeBg.kind === "image" && activeBg.imageUrl
-      ? {
-          backgroundImage: `url(${activeBg.imageUrl})`,
-          backgroundRepeat: activeBg.size === "repeat" ? "repeat" : "no-repeat",
-          backgroundSize:
-            activeBg.size === "cover" || activeBg.size === "contain"
-              ? activeBg.size
-              : "auto",
-          backgroundPosition: "center",
-          backgroundColor: "#000000",
-        }
-      : { backgroundColor: activeBg.color || "#020617" };
-
-  /* ------------------------------------------------------------
+  /* --------------------------------------------
    * Load element metadata
-   * ---------------------------------------------------------- */
+   * ------------------------------------------ */
   useEffect(() => {
-    const ctx = require.context("../components/elements", false, /\.meta\.json$/);
-    const all = ctx.keys().map((key) => {
-      const meta = ctx(key);
-      return meta.default || meta;
-    });
-    setAvailableElements(all);
+    const ctx = require.context(
+      "../components/elements",
+      false,
+      /\.meta\.json$/
+    );
+    setAvailableElements(
+      ctx.keys().map((k) => ctx(k).default || ctx(k))
+    );
   }, []);
 
-  /* ------------------------------------------------------------
-   * Prevent max update depth: clear bindings ONLY when leaving preview
-   * ---------------------------------------------------------- */
-  const prevPreviewRef = useRef(isPreviewMode);
-  useEffect(() => {
-    if (prevPreviewRef.current && !isPreviewMode) {
-      actionCtx.clearAllBindings();
-    }
-    prevPreviewRef.current = isPreviewMode;
-  }, [isPreviewMode]); // intentionally minimal deps
+  /* --------------------------------------------
+   * Background
+   * ------------------------------------------ */
+  const bg =
+    backgroundConfigs?.[device] || { kind: "color", color: "#020617" };
 
-  /* ------------------------------------------------------------
-   * Drag & Drop (builders only in editor)
-   * ---------------------------------------------------------- */
-  const handleDrop = (e) => {
-    e.preventDefault();
+  const canvasBackgroundStyle =
+    bg.kind === "image" && bg.imageUrl
+      ? {
+          backgroundImage: `url(${bg.imageUrl})`,
+          backgroundSize: bg.size || "cover",
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "center",
+        }
+      : { backgroundColor: bg.color };
 
-    if (!isBuilderEditable) return;
-
-    const metaString = e.dataTransfer.getData("application/json");
-    if (!metaString || !canvasRef.current) return;
-
-    const meta = JSON.parse(metaString);
-    const rect = canvasRef.current.getBoundingClientRect();
-
-    const dropX = (e.clientX - rect.left) / scale;
-    const dropY = (e.clientY - rect.top) / scale;
-
-    const targetRole = projectType === "single" ? "client" : role || null;
-
-    console.log("Dropped meta.name:", meta.name, meta);
-
-    addElement({
-      id: uuid(),
-      type: meta.name, // MUST match registry keys (VideoFeed, ControlButton, etc.)
-      role: targetRole,
-      x: dropX - 150,
-      y: dropY - 75,
-      width: 300,
-      height: 150,
-      props: meta.editableProps || {},
-    });
-  };
-
-  const handleDragOver = (e) => {
-    if (!isBuilderEditable) return;
-    e.preventDefault();
-  };
-
-  /* ------------------------------------------------------------
-   * Inspector controls
-   * ---------------------------------------------------------- */
-  const toggleInspector = () => {
-    setInspectorState((prev) => ({
-      ...prev,
-      [currentRoleKey]: !prev[currentRoleKey],
-    }));
-  };
-
-  const toggleDock = () => setInspectorDocked((prev) => !prev);
-
-  const handleInspectorDragStart = (e) => {
-    if (inspectorDocked) return;
-    if (!containerRef.current) return;
-
-    setIsDraggingInspector(true);
-    const containerRect = containerRef.current.getBoundingClientRect();
-    dragOffsetRef.current = {
-      x: e.clientX - containerRect.left - inspectorPosition.x,
-      y: e.clientY - containerRect.top - inspectorPosition.y,
-    };
-  };
-
-  useEffect(() => {
-    if (!isDraggingInspector) return;
-    const containerRect = containerRef.current?.getBoundingClientRect();
-    if (!containerRect) return;
-
-    const handleMove = (e) => {
-      const mouseX = e.clientX - containerRect.left;
-      const mouseY = e.clientY - containerRect.top;
-
-      const newX = mouseX - dragOffsetRef.current.x;
-      const newY = mouseY - dragOffsetRef.current.y;
-
-      const maxX = containerRect.width - 260;
-      const maxY = containerRect.height - 100;
-
-      setInspectorPosition({
-        x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY)),
-      });
-    };
-
-    const handleUp = () => setIsDraggingInspector(false);
-
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
-    window.addEventListener("mouseleave", handleUp);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-      window.removeEventListener("mouseleave", handleUp);
-    };
-  }, [isDraggingInspector, inspectorPosition.x, inspectorPosition.y]);
-
-  /* ------------------------------------------------------------
-   * Filter elements per role
-   * ---------------------------------------------------------- */
+  /* --------------------------------------------
+   * Visible elements by role
+   * ------------------------------------------ */
   const visibleElements = elements.filter((el) => {
-    if (projectType === "single") return el.role === "client" || el.role === null;
-    if (role === null) return true;
+    if (projectType === "single") return el.role === "client" || el.role == null;
+    if (!role) return true;
     return el.role === role;
   });
 
-  /* ------------------------------------------------------------
-   * Tool handlers
-   * ---------------------------------------------------------- */
-  const handleBackgroundClick = () => {
-    if (typeof onRequestBackground === "function") return onRequestBackground();
-    setShowBgPanel((v) => !v);
+  /* --------------------------------------------
+   * Drag & drop
+   * ------------------------------------------ */
+  /* --------------------------------------------
+ * Drag & drop / add element
+ * ------------------------------------------ */
+const handleDrop = (e) => {
+  if (!isBuilderEditable) return;
+  e.preventDefault();
+
+  const meta = JSON.parse(
+    e.dataTransfer.getData("application/json") || "{}"
+  );
+  if (!meta?.name || !canvasRef.current) return;
+
+  const rect = canvasRef.current.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / scale;
+  const y = (e.clientY - rect.top) / scale;
+
+  // Type-specific default props
+  const defaultPropsByType = {
+    ControlButton: { label: "Button", action: "", targetId: "", apiUrl: "" },
+    MicButton: { label: "Mic", action: "ToggleMic" },
+    VideoFeed: { label: "Video", src: "" },
+    Text: { label: "Text" },
+    ChatPanel: { label: "Chat" },
   };
 
-  const handleDebugClick = () => {
-    if (typeof onRequestDebug === "function") return onRequestDebug();
-    setShowDebug((v) => !v);
+  addElement({
+    id: uuid(),
+    type: meta.name,
+    role: projectType === "single" ? "client" : role,
+    x: x - 150,
+    y: y - 75,
+    width: 300,
+    height: 150,
+    props: { ...(defaultPropsByType[meta.name] || {}), ...(meta.editableProps || {}) },
+  });
+};
+
+
+  /* --------------------------------------------
+   * Inspector controls
+   * ------------------------------------------ */
+  const toggleInspector = () =>
+    setInspectorOpen((p) => ({
+      ...p,
+      [currentRoleKey]: !p[currentRoleKey],
+    }));
+
+  const toggleDock = () => {
+    if (isSplitPreview) return;
+    setInspectorLayout((p) => ({
+      ...p,
+      [currentRoleKey]:
+        p[currentRoleKey] === "floating" ? "docked" : "floating",
+    }));
   };
 
-  /* ------------------------------------------------------------
+  // console.log("🧩 Inspector debug", {
+  //   isInspectorVisible,
+  //   effectiveLayout,
+  //   selectedId,
+  // });
+
+  /* --------------------------------------------
    * Render
-   * ---------------------------------------------------------- */
+   * ------------------------------------------ */
   return (
-    <div ref={containerRef} className="flex w-full min-w-0 gap-4 h-full relative overflow-visible">
-      {/* Sidebar:
-          - show in preview (normal)
-          - show in editor ONLY if builder
-      */}
-      {(isPreviewMode || isBuilderEditable) && (
-        <div
-          className={`shrink-0 transition-all duration-300 bg-panel flex flex-col
-            ${
-              isSplitPreview
-                ? "hidden"
-                : `${isSplitEditor ? "w-44" : "w-56"} p-3 border-r border-border`
-            }
-          `}
-        >
-          {!isSplitPreview && (
-            <>
-              <Tabs activeTab={activeTab} setActiveTab={setActiveTab} tabs={["Elements", "Layers"]} />
+    <div className="flex w-full h-full gap-4 relative overflow-hidden">
+      {/* Sidebar */}
+      {!isSplitPreview && (
+        <div className="bg-panel border-r border-border p-3 w-56">
+          <Tabs
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            tabs={["Elements", "Layers"]}
+          />
 
-              {activeTab === "Elements" && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-3 text-text-primary">🧩 Elements</h3>
-                  {availableElements.map((meta) => (
-                    <div
-                      key={meta.name}
-                      draggable={isBuilderEditable}
-                      onDragStart={(e) => {
-                        if (!isBuilderEditable) return;
-                        e.dataTransfer.setData("application/json", JSON.stringify(meta));
-                      }}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition
-                        ${isBuilderEditable ? "hover:bg-accent/10 cursor-grab active:cursor-grabbing" : "opacity-60 cursor-not-allowed"}
-                      `}
-                      title={isBuilderEditable ? "" : "No build permission"}
-                    >
-                      <span>{meta.icon}</span>
-                      <span>{meta.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {activeTab === "Elements" &&
+            availableElements.map((meta) => (
+              <div
+                key={meta.name}
+                draggable={isBuilderEditable}
+                onDragStart={(e) =>
+                  e.dataTransfer.setData(
+                    "application/json",
+                    JSON.stringify(meta)
+                  )
+                }
+                className="px-3 py-2 text-sm rounded hover:bg-accent/10 cursor-grab"
+              >
+                {meta.icon} {meta.name}
+              </div>
+            ))}
 
-              {activeTab === "Layers" && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-3 text-text-primary">🧭 Layers</h3>
-                  {elements.length === 0 && (
-                    <p className="text-xs text-text-muted italic">No elements yet</p>
-                  )}
-
-                   {visibleElements.map((el) => (
-
-                      <div
-                        key={el.id}
-                        onClick={() => {
-                          setSelectedId(el.id);
-                          if (isPreviewMode || isBuilderEditable) {
-                            setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
-                          }
-                        }}
-                        className={`flex justify-between items-center px-2 py-1 rounded cursor-pointer mb-1 ${
-                          selectedId === el.id ? "bg-accent/20" : "hover:bg-accent/10"
-                        }`}
-                      >
-                        <span className="text-sm">
-                          {el.type} {el.role && `(${el.role})`}
-                        </span>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isBuilderEditable) return;
-                            removeElement(el.id);
-                            if (selectedId === el.id) setSelectedId(null);
-                          }}
-                          className={`text-xs ${
-                            isBuilderEditable
-                              ? "text-red-500 hover:text-red-400"
-                              : "text-red-500/40 cursor-not-allowed"
-                          }`}
-                          title={isBuilderEditable ? "Delete" : "No build permission"}
-                          type="button"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </>
-          )}
+          {activeTab === "Layers" &&
+            visibleElements.map((el) => (
+              <div
+                key={el.id}
+                onClick={() => {
+                  setSelectedId(el.id);
+                  onSelectedIdChange?.(el.id);
+                  setInspectorOpen((p) => ({
+                    ...p,
+                    [currentRoleKey]: true,
+                  }));
+                }}
+                className={`px-2 py-1 rounded cursor-pointer ${
+                  selectedId === el.id
+                    ? "bg-accent/20"
+                    : "hover:bg-accent/10"
+                }`}
+              >
+                {el.type}
+              </div>
+            ))}
         </div>
       )}
 
-      {/* Canvas + Inspector */}
-      <div className="flex flex-col flex-1 relative bg-panel min-w-0">
-        {/* Toolbar */}
-        <div className="relative flex items-center gap-4 mb-4 pr-16">
-          <select
-            value={device}
-            onChange={(e) => setDevice(e.target.value)}
-            className="bg-panel text-text-primary border border-border rounded-lg px-3 py-1"
-          >
-            <option value="desktop">Desktop</option>
-            <option value="tablet">Tablet</option>
-            <option value="mobile">Mobile</option>
-          </select>
-
-          <label className="text-text-primary whitespace-nowrap">
-            Zoom:
-            <input
-              type="range"
-              min="0.5"
-              max="1"
-              step="0.05"
-              value={scale}
-              onChange={(e) => setScale(parseFloat(e.target.value))}
-              className="ml-2"
-            />
-            <span className="ml-2">{Math.round(scale * 100)}%</span>
-          </label>
-          {/* Calls panel (Jan): preview-only */}
-          {isPreviewMode && (
-            <CallsPanel isEmployee={!!canBuild} actionCtx={actionCtx} />
-          )}
-
-
-          {!isPreviewMode && !isBuilderEditable && (
-            <div
-              style={{
-                marginLeft: 12,
-                padding: "4px 8px",
-                borderRadius: 999,
-                border: "1px solid #333",
-                color: "#aaa",
-                fontSize: 12,
-              }}
-            >
-              View-only (no build permission)
-            </div>
-          )}
-
-          {showRightTools && (
-            <div className="absolute right-0 top-0 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBackgroundClick}
-                className="p-1.5 rounded border border-border text-text-muted hover:text-accent hover:border-accent transition"
-                title="Background"
-              >
-                <ImageIcon size={14} />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleDebugClick}
-                className="p-1.5 rounded border border-border text-text-muted hover:text-accent hover:border-accent transition"
-                title="Show Debug"
-              >
-                <Bug size={14} />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Local Floating Panels */}
-        {showBgPanel && (
-          <div
-            className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
-            style={{
-              position: "absolute",
-              right: 12,
-              top: 52,
-              width: 260,
-              zIndex: 2000,
-              padding: 10,
-              fontSize: 11,
-            }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-text-primary">
-                Background ({role || "client"})
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowBgPanel(false)}
-                className="text-[10px] text-text-muted hover:text-accent"
-                title="Close"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="text-text-muted text-xs">
-              Background editor UI…
-              <br />
-              (Parent panel can override this)
-            </div>
-          </div>
-        )}
-
-        {showDebug && (
-          <div
-            className="pointer-events-auto bg-panel border border-border rounded-lg shadow-xl"
-            style={{
-              position: "absolute",
-              right: 12,
-              top: showBgPanel ? 52 + 220 : 52,
-              width: 320,
-              maxHeight: "50vh",
-              overflow: "auto",
-              zIndex: 2000,
-              padding: 10,
-              fontFamily: "monospace",
-              fontSize: 10,
-            }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-text-primary">Debug</span>
-              <button
-                type="button"
-                onClick={() => setShowDebug(false)}
-                className="text-[10px] text-text-muted hover:text-accent"
-                title="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <pre className="text-text-muted whitespace-pre-wrap">
-              {JSON.stringify(
-                {
-                  role,
-                  projectType,
-                  selectedId,
-                  visibleCount: visibleElements.length,
-                  isPreviewMode,
-                  canBuild,
-                  elements: elementTypeSnapshot, // ✅ here’s the check
-                  registryKeys: Object.keys(COMPONENTS),
-                },
-                null,
-                2
-              )}
-            </pre>
-          </div>
-        )}
-
-        {/* Canvas */}
+      {/* Canvas column */}
+      <div className="relative flex-1 min-w-0 overflow-hidden">
         <div
-          className="flex justify-center items-start overflow-auto relative flex-1 min-w-0"
-          onClick={(e) => {
-            if (e.target === canvasRef.current) setSelectedId(null);
+          ref={canvasRef}
+          onDrop={handleDrop}
+          onDragOver={(e) => isBuilderEditable && e.preventDefault()}
+          className="relative mx-auto border border-border rounded-xl overflow-hidden"
+          style={{
+            width: DEVICE_SIZES[device].width * scale,
+            height: DEVICE_SIZES[device].height * scale,
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
+            ...canvasBackgroundStyle,
           }}
         >
-          <div
-            ref={canvasRef}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            className="relative overflow-hidden rounded-lg shadow-md"
-            style={{
-              ...canvasBackgroundStyle,
-              width: deviceSize.width * scale,
-              height: deviceSize.height * scale,
-              transformOrigin: "top left",
-            }}
-          >
-            {visibleElements.map((el) => {
-              const ElementComp = COMPONENTS[el.type];
+          {visibleElements.map((el) => {
+            const Comp = COMPONENTS[el.type];
+            if (!Comp) return null;
 
-              const handleElementClick = async (event) => {
-                event.stopPropagation();
-                setSelectedId(el.id);
-
-                if (!ElementComp) {
-                  console.warn("Unknown element type:", el.type, "available:", Object.keys(COMPONENTS));
-                  return;
+            return (
+              <Rnd
+                key={el.id}
+                bounds="parent"
+                size={{ width: el.width, height: el.height }}
+                position={{ x: el.x, y: el.y }}
+                onClick={() => {
+                  setSelectedId(el.id);
+                  onSelectedIdChange?.(el.id);
+                  setInspectorOpen((p) => ({
+                    ...p,
+                    [currentRoleKey]: true,
+                  }));
+                }}
+                onDragStop={(e, d) =>
+                  updateElement(el.id, { x: d.x, y: d.y })
                 }
-
-                // Only auto-open inspector in preview or when editable
-                if (isPreviewMode || isBuilderEditable) {
-                  setInspectorState((prev) => ({ ...prev, [currentRoleKey]: true }));
+                onResizeStop={(e, dir, ref, delta, pos) =>
+                  updateElement(el.id, {
+                    width: parseFloat(ref.style.width),
+                    height: parseFloat(ref.style.height),
+                    x: pos.x,
+                    y: pos.y,
+                  })
                 }
-
-                const actionName = el.props?.onClick;
-                if (!isPreviewMode || !actionName) return;
-
-                try {
-                  await runAction(actionName, actionCtx, {
-                    ...el.props,
-                    elementId: el.id,
-                    role: el.role,
-                  });
-                } catch (err) {
-                  console.error("Action error:", err);
-                }
-              };
-
-              // If the registry is missing the component, render a visual placeholder
-              if (!ElementComp) {
-                return (
-                  <div
-                    key={el.id}
-                    style={{
-                      position: "absolute",
-                      left: el.x * scale,
-                      top: el.y * scale,
-                      width: el.width * scale,
-                      height: el.height * scale,
-                      border: "1px dashed #ff6b6b",
-                      color: "#ffb3b3",
-                      fontSize: 11,
-                      padding: 8,
-                      borderRadius: 8,
-                      background: "rgba(0,0,0,0.4)",
-                    }}
-                    title={`Unknown element type: ${el.type}`}
-                  >
-                    Unknown element: <b>{el.type}</b>
-                    <br />
-                    Check meta.name == registry key
-                  </div>
-                );
-              }
-
-              return (
-                <Rnd
-                  key={el.id}
-                  size={{ width: el.width, height: el.height }}
-                  position={{ x: el.x, y: el.y }}
-                  bounds="parent"
-                  scale={scale}
-                  onClick={handleElementClick}
-                  enableResizing={isBuilderEditable}
-                  disableDragging={!isBuilderEditable}
-                  onDragStop={(e, d) => {
-                    if (!isBuilderEditable) return;
-                    updateElement(el.id, { x: d.x, y: d.y });
-                  }}
-                  onResizeStop={(e, direction, ref, delta, position) => {
-                    if (!isBuilderEditable) return;
-                    updateElement(el.id, {
-                      width: parseFloat(ref.style.width),
-                      height: parseFloat(ref.style.height),
-                      ...position,
-                    });
-                  }}
-                  className={`group rounded-lg border-2 ${
-                    isPreviewMode
-                      ? "cursor-pointer"
-                      : isBuilderEditable
-                      ? "cursor-move"
-                      : "cursor-default"
-                  } ${
-                    selectedId === el.id
-                      ? isPreviewMode
-                        ? "border-blue-500"
-                        : "border-purple-500 shadow-[0_0_0_2px_rgba(168,85,247,0.5)]"
-                      : "border-gray-600 hover:border-purple-400"
-                  }`}
-                >
-                  <div className="w-full h-full pointer-events-none">
-                    <ElementComp {...el.props} {...(actionCtx.bindings?.[el.id] || {})} />
-                  </div>
-                </Rnd>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Inspector:
-            - show in preview (readOnly)
-            - show in editor ONLY if builder
-        */}
-        {isInspectorOpen && (isPreviewMode || isBuilderEditable) &&
-          (inspectorDocked ? (
-            <div
-              style={{
-                flexShrink: 0,
-                marginTop: 8,
-                display: "flex",
-                justifyContent: "center",
-                width: "100%",
-                zIndex: 50,
-              }}
-            >
-              <div
-                className="bg-panel border border-border rounded-lg shadow-soft flex flex-col"
+                disableDragging={!isBuilderEditable}
+                enableResizing={isBuilderEditable}
+                scale={scale}
                 style={{
-                  width: "min(100%, 480px)",
-                  height: "40vh",
-                  overflow: "hidden",
+                  border:
+                    el.id === selectedId
+                      ? "1px dashed #6366f1"
+                      : "none",
                 }}
               >
-                <div
-                  className="flex items-center justify-between px-3 py-2 border-b border-border bg-panel-dark select-none"
-                  style={{ userSelect: "none", minWidth: 0, overflow: "visible" }}
-                >
-                  <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
-                    <Move size={14} />
-                    Inspector
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="text-xs text-text-muted hover:text-accent transition"
-                      onClick={toggleDock}
-                      title="Undock Inspector"
-                      type="button"
-                    >
-                      <Dock size={14} />
-                    </button>
-                    <button
-                      className="text-xs text-text-muted hover:text-accent transition"
-                      onClick={toggleInspector}
-                      title="Close Inspector"
-                      type="button"
-                    >
-                      {isInspectorOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </button>
-                  </div>
+                <div className="w-full h-full">
+                  {el.type === "AgoraFeed" ? (
+                    <LazyAgoraFeed {...el.props} />
+                  ) : (
+                    <Comp
+                      {...el.props}
+                      {...(actionCtx.bindings?.[el.id] || {})}
+                    />
+                  )}
                 </div>
+              </Rnd>
+            );
+          })}
+        </div>
 
-                <div className="p-4 flex-1 overflow-y-auto" ref={inspectorRef} style={{ minHeight: 0 }}>
-                  <InspectorPanel
-                    element={elements.find((el) => el.id === selectedId)}
-                    elements={visibleElements}
-                    onUpdate={(updates) => updateElement(selectedId, updates)}
-                    onDelete={() => {
-                      if (!isBuilderEditable) return;
-                      removeElement(selectedId);
-                    }}
-                    readOnly={isPreviewMode || !isBuilderEditable}
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div
-              className="bg-panel rounded-lg shadow-2xl border border-border transition-all duration-150"
-              style={{
-                position: "absolute",
-                top: inspectorPosition.y,
-                left: inspectorPosition.x,
-                zIndex: 999,
-                display: "flex",
-                flexDirection: "column",
-                minWidth: 260,
-                maxWidth: 420,
-                maxHeight: "60vh",
-              }}
-            >
-              <div
-                className="inspector-drag-handle flex items-center justify-between px-3 py-2 border-b border-border bg-panel-dark select-none"
-                style={{ userSelect: "none", minWidth: 200, overflow: "visible" }}
-                onMouseDown={handleInspectorDragStart}
-              >
-                <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
-                  <Move size={14} />
-                  Inspector
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    className="text-xs text-text-muted hover:text-accent transition"
-                    onClick={toggleDock}
-                    title="Dock Inspector"
-                    type="button"
-                  >
-                    <Dock size={14} />
-                  </button>
-                  <button
-                    className="text-xs text-text-muted hover:text-accent transition"
-                    onClick={toggleInspector}
-                    title="Close Inspector"
-                    type="button"
-                  >
-                    {isInspectorOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                  </button>
-                </div>
-              </div>
+        {/* Docked inspector (ALWAYS mounted here) */}
+         {isInspectorVisible && effectiveLayout === "docked" && (
+          <div
+            className="absolute bottom-0 left-0 right-0 z-30"
+            style={{ height: "40%" }}   // 👈 controls inspector size
+          >
+            <InspectorContent
+              layout="docked"
+              selectedId={selectedId}
+              elements={visibleElements}
+              updateElement={updateElement}
+              toggleDock={!isSplitPreview ? toggleDock : null}
+              toggleOpen={toggleInspector}
+            />
+          </div>
+        )}
 
-              <div className="p-4 overflow-y-auto flex-1" ref={inspectorRef} style={{ minHeight: 0 }}>
-                <InspectorPanel
-                  element={elements.find((el) => el.id === selectedId)}
-                  elements={visibleElements}
-                  onUpdate={(updates) => updateElement(selectedId, updates)}
-                  onDelete={() => {
-                    if (!isBuilderEditable) return;
-                    removeElement(selectedId);
-                  }}
-                  readOnly={isPreviewMode || !isBuilderEditable}
-                />
-              </div>
-            </div>
-          ))}
-      </div>
+      
+
+      {/* Right-side inspector (single mode) */}
+        {isInspectorVisible && effectiveLayout === "right" && (
+          <InspectorContent
+            layout="right"
+            selectedId={selectedId}
+            elements={visibleElements}
+            updateElement={updateElement}
+            toggleDock={toggleDock}
+            toggleOpen={toggleInspector}
+          />
+        )}
+
+
+      {/* Floating inspector */}
+      {isInspectorVisible && effectiveLayout === "floating" && (
+        <InspectorContent
+          layout="floating"
+          position={floatingPos}
+          setPosition={setFloatingPos}
+          selectedId={selectedId}
+          elements={visibleElements}
+          updateElement={updateElement}
+          toggleDock={toggleDock}
+          toggleOpen={toggleInspector}
+        />
+      )}
+    </div>
     </div>
   );
 }

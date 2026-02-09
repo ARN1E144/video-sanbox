@@ -1,5 +1,5 @@
 // src/MainApp.js
-import React, { useState, useContext, useMemo } from "react";
+import React, { useState, useContext, useMemo, useCallback } from "react";
 import PromptForm from "./components/PromptForm";
 import ProjectSidebar from "./components/ProjectSidebar";
 import TemplateCarousel from "./components/TemplateCarousel";
@@ -143,6 +143,25 @@ export default function MainApp() {
     });
   };
 
+    const handleClientSelect = useCallback((id) => {
+    setSelectedByRole((prev) =>
+        prev.client === id ? prev : { ...prev, client: id }
+      );
+    }, []);
+
+    const handleHostSelect = useCallback((id) => {
+      setSelectedByRole((prev) =>
+        prev.host === id ? prev : { ...prev, host: id }
+      );
+    }, []);
+
+    const handleSingleSelect = useCallback((role, id) => {
+      setSelectedByRole((prev) =>
+        prev[role] === id ? prev : { ...prev, [role]: id }
+      );
+    }, []);
+
+
    if (loading) {
     return <div style={{ color: "#aaa", padding: 20 }}>Loading session…</div>;
   }
@@ -150,6 +169,7 @@ export default function MainApp() {
   if (!session) {
     return <AuthPortal />;
   }
+
 
   // NOTE:
   // We are now storing backgrounds per ROLE (client/host).
@@ -171,9 +191,9 @@ export default function MainApp() {
       <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <MainMenu currentView={currentView} setCurrentView={setCurrentView} />
 
-        <div style={{ padding: 8, borderBottom: "1px solid #222" }}>
+        {/* <div style={{ padding: 8, borderBottom: "1px solid #222" }}>
           <button onClick={() => setCurrentView("auth")}>Auth</button>
-        </div>
+        </div> */}
 
 
         {currentView === "templates" && (
@@ -186,8 +206,8 @@ export default function MainApp() {
         {currentView === "build" && (
           <div style={{ display: "flex", flexDirection: "column", height: "100%", backgroundColor: "#0f0f0f" }}>
             <div style={{ flexShrink: 0, padding: "12px 16px", borderBottom: "1px solid #222" }}>
-              <PromptForm />
               <ModeMenu />
+              <PromptForm />
             </div>
 
             {/* Workspace (position:relative so panels can overlay) */}
@@ -219,9 +239,7 @@ export default function MainApp() {
                         <Canvas
                           role="client"
                           showRightTools={true}
-                          onSelectedIdChange={(id) =>
-                            setSelectedByRole((prev) => ({ ...prev, client: id }))
-                          }
+                          onSelectedIdChange={handleHostSelect}
                           onRequestBackground={() => {
                             setPanelTargetRole("client");
                             setShowBgPanel(true);
@@ -240,9 +258,7 @@ export default function MainApp() {
                         <Canvas
                           role="host"
                           showRightTools={true}
-                          onSelectedIdChange={(id) =>
-                            setSelectedByRole((prev) => ({ ...prev, host: id }))
-                          }
+                          onSelectedIdChange={handleHostSelect}
                           onRequestBackground={() => {
                             setPanelTargetRole("host");
                             setShowBgPanel(true);
@@ -401,11 +417,11 @@ export default function MainApp() {
           </div>
         )}
 
-        {currentView === "auth" && (
+        {/* {currentView === "auth" && (
           <div style={{ height: "100%", overflow: "hidden" }}>
             <AuthPortal />
           </div>
-        )}
+        )} */}
 
 
         {currentView === "settings" && (

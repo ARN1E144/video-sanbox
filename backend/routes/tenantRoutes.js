@@ -19,10 +19,11 @@ function roleToPermissions(role) {
   if (role === "owner" || role === "admin") return { canBuild: true, canInvite: true };
   if (role === "builder") return { canBuild: true, canInvite: false };
   if (role === "operative") return { canBuild: true, canInvite: false };
+
   return { canBuild: false, canInvite: false }; // member
 }
 
-const ALLOWED_ROLES = ["owner", "admin", "builder", "member"];
+const ALLOWED_ROLES = ["owner", "admin", "builder", "operative" ,"member"];
 
 router.get('/', (req, res) => {
   res.send('TENANT Routes are working', req.method, req.originalUrl);
@@ -93,6 +94,7 @@ router.post(
         : role === "builder"
         ? { canBuild: true, canInvite: false }
         : { canBuild: false, canInvite: false };
+        
 
     const membership = await Membership.findOneAndUpdate(
       { tenantId, userId: user._id },

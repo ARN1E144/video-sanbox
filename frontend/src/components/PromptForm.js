@@ -46,7 +46,48 @@ export default function PromptForm() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {/* 💬 Prompt + Generate / Refine */}
+      {/* 🔁 Build / Preview toggle row */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <span style={{ fontSize: 12, color: '#888' }}>Mode:</span>
+        <div
+          style={{
+            display: 'inline-flex',
+            padding: 2,
+            borderRadius: 999,
+            backgroundColor: '#141414',
+            border: '1px solid #333',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setIsPreviewMode(false)}
+            style={{
+              ...toggleButtonBase,
+              ...(isPreviewMode ? {} : activeStyle),
+            }}
+          >
+            Build
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsPreviewMode(true)}
+            style={{
+              ...toggleButtonBase,
+              ...(isPreviewMode ? activeStyle : {}),
+            }}
+          >
+            Preview
+          </button>
+        </div>
+      </div>
+        {/* 💬 Prompt + Generate / Refine */}
       <form onSubmit={onGenerate} style={{ display: 'flex', gap: 8 }}>
         <input
           value={prompt}
@@ -93,47 +134,6 @@ export default function PromptForm() {
           Refine
         </button>
       </form>
-      {/* 🔁 Build / Preview toggle row */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
-        <span style={{ fontSize: 12, color: '#888' }}>Mode:</span>
-        <div
-          style={{
-            display: 'inline-flex',
-            padding: 2,
-            borderRadius: 999,
-            backgroundColor: '#141414',
-            border: '1px solid #333',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setIsPreviewMode(false)}
-            style={{
-              ...toggleButtonBase,
-              ...(isPreviewMode ? {} : activeStyle),
-            }}
-          >
-            Build
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsPreviewMode(true)}
-            style={{
-              ...toggleButtonBase,
-              ...(isPreviewMode ? activeStyle : {}),
-            }}
-          >
-            Preview
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

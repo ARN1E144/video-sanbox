@@ -1,31 +1,71 @@
-import React, { createContext, useContext, useMemo, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  useEffect,
+} from "react";
 import { authApi } from "../services/authApi";
 import { setApiToken } from "../services/api";
+
 const AuthContext = createContext(null);
 const LS_KEY = "vs_auth";
 
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(LS_KEY)) || null;
-    } catch {
-      return null;
-    }
-  });
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  /* --------------------------------------------
+   * Hydrate session on boot
+   * ------------------------------------------ */
   useEffect(() => {
-  console.log("[Auth] session", session);
-}, [session]);
+    const hydrate = async () => {
+      try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw) {
+          setSession(null);
+          return;
+        }
 
+        const stored = JSON.parse(raw);
+        const token = stored?.tokens?.accessToken;
+
+        if (!token) {
+          setSession(stored);
+          return;
+        }
+
+        // ✅ Prime axios BEFORE any API calls
+        setApiToken(token);
+
+        // ✅ Re-validate session
+        const meRes = await authApi.me();
+
+        setSession({ ...stored, me: meRes.data });
+        localStorage.setItem(
+          LS_KEY,
+          JSON.stringify({ ...stored, me: meRes.data })
+        );
+      } catch (err) {
+        console.warn("[Auth] hydration failed, clearing session", err);
+        localStorage.removeItem(LS_KEY);
+        setSession(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    hydrate();
+  }, []);
+
+  /* --------------------------------------------
+   * Session helpers
+   * ------------------------------------------ */
   const save = (next) => {
-
-    console.log("[AuthProvider] Save Session Tokens", next);
-
     setSession(next);
     localStorage.setItem(LS_KEY, JSON.stringify(next));
   };
 
-  // ✅ merges into the latest session (prevents stale closure issues)
   const mergeSave = (patch) => {
     setSession((prev) => {
       const next = { ...(prev || {}), ...(patch || {}) };
@@ -34,15 +74,20 @@ export function AuthProvider({ children }) {
     });
   };
 
-  const clear = () => {
-    setSession(null);
+  const logout = () => {
     localStorage.removeItem(LS_KEY);
+    setSession(null);
+
+    // ✅ Hard reset guarantees clean slate (Agora, canvas, tenant, etc)
+    window.location.reload();
   };
 
+  /* --------------------------------------------
+   * Derived auth state + actions
+   * ------------------------------------------ */
   const value = useMemo(() => {
     const token = session?.tokens?.accessToken || null;
 
-    // Prefer tenantId from /api/me, then fallback to login/register payload
     const tenantId =
       session?.me?.membership?.tenantId ||
       session?.membership?.tenantId ||
@@ -70,18 +115,17 @@ export function AuthProvider({ children }) {
 
     const refreshMe = async () => {
       if (!token) throw new Error("No access token");
-      setApiToken(token); // ensure axios is primed (important on reload)
+      setApiToken(token);
       const res = await authApi.me();
-      mergeSave({ me:res.data });
+      mergeSave({ me: res.data });
       return res.data;
     };
-
 
     const register = async (payload) => {
       const res = await authApi.register(payload);
       const data = res.data;
-      const nextToken = data?.tokens?.accessToken;
 
+      const nextToken = data?.tokens?.accessToken;
       if (!nextToken) {
         save(data);
         return data;
@@ -89,58 +133,55 @@ export function AuthProvider({ children }) {
 
       setApiToken(nextToken);
       const meRes = await authApi.me();
-
       save({ ...data, me: meRes.data });
       return data;
     };
 
-
     const login = async (payload) => {
-  console.log("[AuthProvider] login", payload);
+      const res = await authApi.login(payload);
+      const data = res.data;
 
-  const res = await authApi.login(payload);
-  const data = res.data;
+      const nextToken = data?.tokens?.accessToken;
+      if (!nextToken) {
+        save(data);
+        return data;
+      }
 
-  console.log("[AuthProvider] login response", data);
+      // ✅ Token FIRST
+      setApiToken(nextToken);
 
-  const nextToken = data?.tokens?.accessToken;
-          if (!nextToken) {
-            save(data);
-            return data;
-          }
-          
-          // ✅ Set token FIRST
-          setApiToken(nextToken);
+      // ✅ Then hydrate /me
+      const meRes = await authApi.me();
+      save({ ...data, me: meRes.data });
 
-          // ✅ Now authenticated requests work
-          const meRes = await authApi.me();
-
-          save({ ...data, me : meRes.data });
-
-          return data;
-        };
-
+      return data;
+    };
 
     return {
       session,
+      loading,
+
       token,
       tenantId,
-
       role,
       permissions,
       canBuild,
       canInvite,
 
-      register,
       login,
-      me: refreshMe,
+      register,
       refreshMe,
+      me: refreshMe,
 
-      logout: clear,
+      logout,
     };
-  }, [session]); // keep as-is (simple + correct)
+  }, [session, loading]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

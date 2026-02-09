@@ -9,7 +9,7 @@
     "uid": 0,
     "token": "",
     "tokenEndpoint": "/agora/token",
-    "autoJoin": true,
+    "autoJoin": false,
     "publishLocal": true,
     "muted": false,
     "cameraOff": false,

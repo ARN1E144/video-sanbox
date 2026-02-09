@@ -15,11 +15,40 @@ export function ProjectProvider({ children }) {
   const [viewMode, setViewMode] = useState("preview");
   const [projectType, setProjectType] = useState("single");
 
-  const [backgroundConfigs, setBackgroundConfigs] = useState(
-    DEFAULT_BACKGROUND_CONFIGS
-  );
+  const [backgroundConfigs, setBackgroundConfigs] = useState(DEFAULT_BACKGROUND_CONFIGS);
 
-    const value = useMemo(
+  // New: track all saved projects
+  const [projects, setProjects] = useState([]);
+
+  // Save current project with a name
+  const saveProject = (name) => {
+    if (!name.trim()) return;
+    const id = Date.now(); // simple unique ID
+    const newProject = {
+      id,
+      name,
+      type: projectType,
+      schema: projectSchema,
+      backgroundConfigs,
+    };
+    setProjects((prev) => [...prev, newProject]);
+  };
+
+  // Load a project into the context
+  const loadProject = (id) => {
+    const proj = projects.find((p) => p.id === id);
+    if (!proj) return;
+    setProjectType(proj.type || "single");
+    setProjectSchema(proj.schema || makeEmptyProjectSchema());
+    setBackgroundConfigs(proj.backgroundConfigs || DEFAULT_BACKGROUND_CONFIGS);
+  };
+
+  // Delete a saved project
+  const deleteProject = (id) => {
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const value = useMemo(
     () => ({
       projectSchema,
       setProjectSchema,
@@ -27,18 +56,19 @@ export function ProjectProvider({ children }) {
       setViewMode,
       projectType,
       setProjectType,
-
-      // ✅ add these
       backgroundConfigs,
       setBackgroundConfigs,
+
+      // new
+      projects,
+      saveProject,
+      loadProject,
+      deleteProject,
     }),
-    [projectSchema, viewMode, projectType, backgroundConfigs]
+    [projectSchema, viewMode, projectType, backgroundConfigs, projects]
   );
 
-
-  return (
-    <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>
-  );
+  return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }
 
 export function useProjectContext() {

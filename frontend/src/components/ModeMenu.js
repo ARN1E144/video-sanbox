@@ -1,5 +1,5 @@
 // src/components/ModeMenu.js
-import React, { useContext } from "react";
+import React, { useContext, useState } from "react";
 import { ProjectContext } from "../context/ProjectContext";
 import { usePreviewMode } from "../context/PreviewContext";
 import { useCanvasState } from "../context/CanvasContext";
@@ -10,6 +10,8 @@ export default function ModeMenu() {
 
   const { previewView, setPreviewView } = usePreviewMode();
   const { elements, loadElements, clearCanvas } = useCanvasState();
+  const { projects, saveProject: saveProjectToContext } = useContext(ProjectContext);
+  const [projectName, setProjectName] = useState("");
 
   const activeStyle = {
     backgroundColor: "#2a2a2a",
@@ -48,6 +50,13 @@ export default function ModeMenu() {
     gap: 6,
     alignItems: "center",
   };
+
+  // save project handler
+    const saveProject = () => {
+      if (!projectName.trim()) return alert("Enter a project name");
+      saveProjectToContext({ name: projectName });
+      setProjectName("");
+    };
 
   const maybeWipeCanvas = () => {
     const wipe = window.confirm(
@@ -127,7 +136,7 @@ export default function ModeMenu() {
       }}
     >
       {/* Left: Preview / Actions */}
-      <div style={{ display: "flex", gap: 8, flex: 1, minWidth: 220 }}>
+      {/* <div style={{ display: "flex", gap: 8, flex: 1, minWidth: 220 }}>
         <div
           style={viewMode === "preview" ? { ...buttonStyle, ...activeStyle } : buttonStyle}
           onClick={() => setViewMode("preview")}
@@ -140,11 +149,43 @@ export default function ModeMenu() {
         >
           Actions
         </div>
+      </div> */}
+
+      {/* Save Project Name */}
+      <div style={{ ...pillRowStyle, marginBottom: 8 }}>
+        <input
+          type="text"
+          value={projectName}
+          onChange={(e) => setProjectName(e.target.value)}
+          placeholder="Project Name"
+          style={{
+            flex: 1,
+            padding: "6px 8px",
+            borderRadius: 4,
+            border: "1px solid #333",
+            background: "#1a1a1a",
+            color: "#fff",
+          }}
+        />
+        <button
+          onClick={saveProject}
+          style={{
+            marginLeft: 6,
+            padding: "6px 12px",
+            borderRadius: 4,
+            border: "1px solid #333",
+            background: "#333",
+            color: "#fff",
+            cursor: "pointer",
+          }}
+        >
+          Save
+        </button>
       </div>
 
       {/* Middle: Project Type */}
       <div style={{ ...pillRowStyle }}>
-        <div style={{ color: "#aaa", fontSize: 12, marginRight: 6 }}>Project</div>
+        <div style={{ color: "#aaa", fontSize: 12, marginRight: 6 }}>Project Type:</div>
 
         <div
           style={
@@ -172,30 +213,31 @@ export default function ModeMenu() {
       </div>
 
       {/* Right: Client / Host / Split */}
-      {viewMode === "preview" && (
-        <div style={{ ...pillRowStyle }}>
-          {["client", "host", "split"].map((mode) => (
-            <div
-              key={mode}
-              style={
-                previewView === mode
-                  ? { ...smallButtonStyle, background: "#333", color: "#fff" }
-                  : smallButtonStyle
-              }
-              onClick={() => setPreviewWithTypeRules(mode)}
-              title={
-                mode === "split"
+        {viewMode === "preview" && (
+          <div style={{ ...pillRowStyle }}>
+            {(projectType === "multi" ? ["client", "host", "split"] : ["client"]).map((mode) => (
+              <div
+                key={mode}
+                style={
+                  previewView === mode
+                    ? { ...smallButtonStyle, background: "#333", color: "#fff" }
+                    : smallButtonStyle
+                }
+                onClick={() => setPreviewWithTypeRules(mode)}
+                title={
+                  mode === "split"
+                    ? "Client / Host"
+                    : mode.charAt(0).toUpperCase() + mode.slice(1)
+                }
+              >
+                {mode === "split"
                   ? "Client / Host"
-                  : mode.charAt(0).toUpperCase() + mode.slice(1)
-              }
-            >
-              {mode === "split"
-                ? "Client / Host"
-                : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                  : mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </div>
+            ))}
+          </div>
+        )}
+
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+          );
+        }
