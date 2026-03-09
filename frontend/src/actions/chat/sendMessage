@@ -1,0 +1,25 @@
+import api from "../../services/api";
+
+export default async function sendMessage(ctx, params = {}) {
+  const { text, value, message, targetId } = params; // allow multiple possible sources
+  const payloadText = text ?? value ?? message ?? "";
+  console.log("[runAction:SendMessage] payloadText", payloadText);
+  console.log("[runAction:SendMessage] targetId", targetId);
+
+  // You can still call your API if you want
+  const { data } = await api.post("/chat/send", { text: payloadText });
+  console.log("[runAction:SendMessage] response", data);
+
+  // ✅ append into the specific ChatPanel instance
+  if (targetId) {
+    ctx.appendFeed(targetId, data.message ?? payloadText);
+  } else {
+    // fallback (old behaviour) so you don't break anything immediately
+    console.warn(
+      "[runAction:SendMessage] No targetId provided; falling back to 'ChatPanel' key"
+    );
+    ctx.appendFeed("ChatPanel", data.message ?? payloadText);
+  }
+
+  return data;
+}

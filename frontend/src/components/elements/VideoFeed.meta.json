@@ -3,21 +3,107 @@
   "type": "video",
   "category": "media",
   "icon": "📹",
+
   "editableProps": {
-    "mode": "auto",
-    "src": "",
-    "deviceId": "",
+    "mode": {
+      "type": "select",
+      "label": "Mode",
+      "default": "local",
+      "options": [
+        { "value": "local", "label": "Local Camera" },
+        { "value": "remote", "label": "Remote / URL" }
+      ]
+    },
 
-    "enabled": true,
-    "playing": true,
-    "muted": true,
-    "mirror": true,
+    "src": {
+      "type": "string",
+      "label": "Video Source (URL)",
+      "placeholder": "https://example.com/video.mp4",
+      "visibleWhen": { "mode": "remote" }
+    },
 
-    "objectFit": "cover",
-    "borderRadius": 12,
+    "deviceId": {
+      "type": "string",
+      "label": "Camera Device ID",
+      "visibleWhen": { "mode": "local" }
+    },
+
+    "enabled": {
+      "type": "boolean",
+      "label": "Enabled",
+      "default": true
+    },
+
+    "playing": {
+      "type": "boolean",
+      "label": "Playing",
+      "default": true
+    },
+
+    "muted": {
+      "type": "boolean",
+      "label": "Muted",
+      "default": true
+    },
+
+    "mirror": {
+      "type": "boolean",
+      "label": "Mirror Video",
+      "default": true,
+      "visibleWhen": { "mode": "local" }
+    },
+
+    "poster": {
+      "type": "string",
+      "label": "Poster Image",
+      "placeholder": "https://example.com/poster.jpg"
+    },
+
+    "showSpinner": {
+      "type": "boolean",
+      "label": "Show Loading Spinner",
+      "default": true
+    },
+
+    "objectFit": {
+      "type": "select",
+      "label": "Object Fit",
+      "default": "cover",
+      "options": [
+        { "value": "cover", "label": "Cover" },
+        { "value": "contain", "label": "Contain" },
+        { "value": "fill", "label": "Fill" }
+      ]
+    },
+
+    "borderRadius": {
+      "type": "number",
+      "label": "Border Radius",
+      "default": 12
+    },
 
     "style": {
-      "backgroundColor": "#000000"
+      "type": "style",
+      "label": "Style",
+      "default": {
+        "backgroundColor": "#000000"
+      }
     }
-  }
+  },
+
+  "actions": [
+    { "value": "StartStream", "label": "Start Video Stream" },
+    { "value": "StopStream", "label": "Stop Video Stream" },
+    { "value": "TogglePlay", "label": "Toggle Play / Pause" },
+    { "value": "LoadRemote", "label": "Load Remote Video" },
+    { "value": "CaptureFrame", "label": "Capture Frame" },
+    { "value": "custom", "label": "Custom JS" }
+  ],
+
+  "conditions": [
+    { "value": "isEnabled", "label": "Is Enabled" },
+    { "value": "isPlaying", "label": "Is Playing" },
+    { "value": "hasSource", "label": "Has Video Source" },
+    { "value": "isRemote", "label": "Mode Is Remote" }
+  ]
 }

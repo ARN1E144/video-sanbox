@@ -22,6 +22,7 @@ import { connectWithRetry } from "./db/connect.js";
 import tenantRoutes from "./routes/tenantRoutes.js";
 import meRoutes from "./routes/me.js";
 import callRoutes from "./routes/callRoutes.js";
+import videoRoutes from "./routes/videoRoutes.js";
 
 
 
@@ -38,6 +39,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/tenant", tenantRoutes);
 app.use("/api", meRoutes);
 app.use("/api/calls", callRoutes);
+app.use("/api/videos", videoRoutes);
 
 
 app.get("/", (req, res) => {

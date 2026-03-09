@@ -1,20 +1,27 @@
+// src/components/elements/AgoraFeed.js
 import React, { useRef, useState, useEffect } from "react";
 import AgoraRTC from "agora-rtc-sdk-ng";
 import api from "../../services/api";
 import "../../css/AgoraFeed.css";
 
 export default function AgoraFeed({
+  // Runtime props
   tokenEndpoint = "/agora/token",
   channel = "test-call",
-
   muted = false,
   cameraOff = false,
+  autoJoin = false,
+  publishLocal = true,
 
+  // Build/visual props
   mirror = true,
   objectFit = "cover",
   borderRadius = 12,
   style = {},
-  autoJoin = false, // new prop
+
+  // Universal action system
+  emit,
+  id, // element id
 }) {
   const remoteRef = useRef(null);
   const localRef = useRef(null);
@@ -27,7 +34,7 @@ export default function AgoraFeed({
   const [error, setError] = useState(null);
 
   /* --------------------------------------------
-   * Init client ONCE
+   * Init Agora client ONCE
    * ------------------------------------------ */
   if (!clientRef.current) {
     clientRef.current = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
@@ -36,7 +43,16 @@ export default function AgoraFeed({
   const client = clientRef.current;
 
   /* --------------------------------------------
-   * Join call (USER GESTURE REQUIRED)
+   * Emit helper
+   * ------------------------------------------ */
+  const emitEvent = (eventName, payload = {}) => {
+    if (typeof emit === "function") {
+      emit(eventName, { ...payload, elementId: id });
+    }
+  };
+
+  /* --------------------------------------------
+   * Join call
    * ------------------------------------------ */
   const handleJoin = async () => {
     if (joining || joined) return;
@@ -66,24 +82,31 @@ export default function AgoraFeed({
         if (mediaType === "video" && remoteRef.current) {
           user.videoTrack.play(remoteRef.current, { fit: objectFit });
           setRemoteJoined(true);
+          emitEvent("RemoteJoined", { uid: user.uid, mediaType });
         }
         if (mediaType === "audio") user.audioTrack.play();
       });
 
       client.on("user-unpublished", (_, mediaType) => {
-        if (mediaType === "video") setRemoteJoined(false);
+        if (mediaType === "video") {
+          setRemoteJoined(false);
+          emitEvent("RemoteLeft", { mediaType });
+        }
       });
 
-      // Play local video preview
-      video.play(localRef.current, { fit: objectFit });
+      // Play local preview if publishing
+      if (publishLocal) video.play(localRef.current, { fit: objectFit });
 
-      // Publish local tracks
-      await client.publish([audio, video]);
+      // Publish local tracks if enabled
+      if (publishLocal) await client.publish([audio, video]);
+
       setJoined(true);
+      emitEvent("JoinedCall", { uid, channel });
       console.log("[AgoraFeed] Joined + published");
     } catch (err) {
       console.error("[AgoraFeed] Join error", err);
       setError(err.message || "Failed to join call");
+      emitEvent("JoinError", { error: err.message || err });
       await cleanup();
     } finally {
       setJoining(false);
@@ -91,7 +114,7 @@ export default function AgoraFeed({
   };
 
   /* --------------------------------------------
-   * Cleanup
+   * Cleanup / leave
    * ------------------------------------------ */
   const cleanup = async () => {
     try {
@@ -103,6 +126,7 @@ export default function AgoraFeed({
       video?.close();
       tracksRef.current = { audio: null, video: null };
       if (client.connectionState !== "DISCONNECTED") await client.leave();
+      emitEvent("LeftCall", { channel });
     } catch (e) {
       console.warn("[AgoraFeed] Cleanup error", e);
     } finally {
@@ -117,12 +141,11 @@ export default function AgoraFeed({
   }, []);
 
   /* --------------------------------------------
-   * Auto-join (only if explicitly requested)
+   * Auto-join if requested
    * ------------------------------------------ */
   useEffect(() => {
-    if (autoJoin) {
-      handleJoin();
-    }
+    if (autoJoin) handleJoin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoJoin]);
 
   /* --------------------------------------------
@@ -130,10 +153,12 @@ export default function AgoraFeed({
    * ------------------------------------------ */
   useEffect(() => {
     tracksRef.current.audio?.setEnabled(!muted).catch(() => {});
+    emitEvent("MicToggled", { muted });
   }, [muted]);
 
   useEffect(() => {
     tracksRef.current.video?.setEnabled(!cameraOff).catch(() => {});
+    emitEvent("CameraToggled", { cameraOff });
   }, [cameraOff]);
 
   /* --------------------------------------------
@@ -154,11 +179,15 @@ export default function AgoraFeed({
       {/* Remote video */}
       <div
         ref={remoteRef}
-        style={{ width: "100%", height: "100%", transform: mirror ? "scaleX(-1)" : "none" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          transform: mirror ? "scaleX(-1)" : "none",
+        }}
       />
 
       {/* Local preview */}
-      {joined && (
+      {joined && publishLocal && (
         <div
           ref={localRef}
           className="agora_video_player"
@@ -183,7 +212,13 @@ export default function AgoraFeed({
           <button
             onClick={handleJoin}
             disabled={joining}
-            style={{ padding: "8px 14px", fontSize: 12, borderRadius: 6, border: "none", cursor: "pointer" }}
+            style={{
+              padding: "8px 14px",
+              fontSize: 12,
+              borderRadius: 6,
+              border: "none",
+              cursor: "pointer",
+            }}
           >
             {joining ? "Connecting…" : "Join Call"}
           </button>

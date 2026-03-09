@@ -1,38 +1,64 @@
 // src/components/elements/VideoFeed.js
 import React, { useEffect, useRef, useState } from "react";
+import { bindActions } from "../../utils/actionBinder";
+import { useActionContext } from "../../context/ActionContext";
+import { getActionOptions } from "../../actions/getActionsOptions";
+import { actionRegistry } from "../../actions/actionsRegistry";
+import { Play, Pause, Video, Square } from "lucide-react";
 
 export default function VideoFeed(props) {
   const {
-    mode = "auto", // "auto" | "local" | "remote"
-    src, // remote URL (mp4/webm/m3u8)
-    deviceId,
-    enabled = true,
-    playing = true,
-    muted = true,
-    mirror = true,
+    id,
+    meta,
+    poster,
+    showSpinner = true,
     objectFit = "cover",
     borderRadius = 12,
     style = {},
-    ...rest
+    mirror = true,
+    mode: propMode = "local",
+    src: propSrc = null,
+    enabled: propEnabled = true,
+    playing: propPlaying = true,
+    muted: propMuted = true,
+    ...restProps
   } = props;
+
+  const { bindings } = useActionContext();
+  const binding = bindings[id] || {};
+
+  const mode = binding.mode?.value ?? propMode;
+  const src = binding.src ?? propSrc;
+  const enabled = binding.enabled ?? propEnabled;
+  const playing = binding.playing ?? propPlaying;
+  const muted = binding.muted ?? propMuted;
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const hlsRef = useRef(null);
 
-  const [error, setError] = useState(null);
+  const actionCtx = useActionContext?.();
+  const actionHandlers = bindActions(meta, actionCtx, id);
 
-  const isHlsUrl = (u) =>
-    typeof u === "string" && /\.m3u8(\?.*)?$/i.test(u.trim());
+  const videoActions = getActionOptions().filter((a) =>
+    ["startStream", "stopStream", "togglePlay"].includes(a.value)
+  );
+
+  const actionIcons = {
+    startStream: Video,
+    stopStream: Square,
+    togglePlay: playing ? Pause : Play
+  };
+
+  const isHlsUrl = (u) => typeof u === "string" && /\.m3u8(\?.*)?$/i.test(u.trim());
 
   const destroyHls = () => {
-    try {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-    } catch {
-      // ignore
+    if (hlsRef.current) {
+      try { hlsRef.current.destroy(); } catch {}
+      hlsRef.current = null;
     }
   };
 
@@ -41,251 +67,155 @@ export default function VideoFeed(props) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
-    const videoEl = videoRef.current;
-    if (videoEl) {
-      videoEl.srcObject = null;
-    }
   };
 
-  const resetRemotePlayback = () => {
-    const videoEl = videoRef.current;
-    if (!videoEl) return;
+  const resetVideoElement = () => {
+    const video = videoRef.current;
+    if (!video) return;
 
     destroyHls();
-
-    // stop any remote playback cleanly
-    try {
-      videoEl.pause();
-    } catch {
-      // ignore
-    }
-
-    // ensure src + srcObject are cleared
-    videoEl.srcObject = null;
-    videoEl.removeAttribute("src");
-    videoEl.load();
-  };
-
-  // cleanup on unmount
-  useEffect(() => {
-    return () => {
-      destroyHls();
-      stopLocalStream();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const attachRemote = async ({ videoEl, url }) => {
-    if (!videoEl) return;
-
-    // stop local camera
     stopLocalStream();
 
-    // reset any previous remote pipeline
-    resetRemotePlayback();
+    try { video.pause(); } catch {}
+    video.srcObject = null;
+    video.removeAttribute("src");
+    video.load();
+  };
 
-    videoEl.playsInline = true;
-    videoEl.muted = muted;
+  const attachLocalCamera = async () => {
+    const video = videoRef.current;
+    if (!video || streamRef.current) return;
 
-    if (!url) {
+    resetVideoElement();
+    setIsLoading(true);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      streamRef.current = stream;
+      video.srcObject = stream;
+      video.muted = true;
+      await video.play()?.catch(() => {});
+      setIsLoading(false);
       setError(null);
-      return;
+    } catch (err) {
+      console.error("[VideoFeed] local camera error:", err);
+      setError("Camera unavailable");
+      setIsLoading(false);
     }
+  };
 
-    // HLS (.m3u8)
+  const attachRemote = async (url) => {
+    const video = videoRef.current;
+    if (!video || !url) return;
+
+    resetVideoElement();
+    setIsLoading(true);
+
     if (isHlsUrl(url)) {
-      const canNativeHls =
-        typeof videoEl.canPlayType === "function" &&
-        videoEl.canPlayType("application/vnd.apple.mpegurl") !== "";
-
-      // Safari/iOS native HLS
-      if (canNativeHls) {
-        videoEl.src = url;
-        videoEl.load();
-        if (playing) {
-          try {
-            await videoEl.play();
-          } catch {
-            // autoplay may be blocked
-          }
-        } else {
-          videoEl.pause();
-        }
-        setError(null);
-        return;
-      }
-
-      // Chrome/Firefox/Edge: hls.js
       try {
         const mod = await import("hls.js");
         const Hls = mod.default || mod;
 
-        if (!Hls?.isSupported?.()) {
-          setError("HLS is not supported in this browser.");
+        if (!Hls.isSupported()) {
+          setError("HLS not supported");
+          setIsLoading(false);
           return;
         }
 
         const hls = new Hls();
         hlsRef.current = hls;
-
-        hls.attachMedia(videoEl);
-
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-          hls.loadSource(url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          setIsLoading(false);
+          setError(null);
+          if (playing) video.play()?.catch(() => {});
         });
-
         hls.on(Hls.Events.ERROR, (_evt, data) => {
           if (data?.fatal) {
-            setError(`HLS error: ${data?.type || "fatal"}`);
+            setError("Stream error");
+            setIsLoading(false);
           }
         });
-
-        if (playing) {
-          // allow attach to settle
-          setTimeout(() => {
-            videoEl.play().catch(() => {});
-          }, 0);
-        } else {
-          videoEl.pause();
-        }
-
-        setError(null);
-        return;
-      } catch {
-        setError(
-          "This .m3u8 stream needs hls.js installed (npm i hls.js), or use Safari native HLS."
-        );
-        return;
-      }
-    }
-
-    // Non-HLS remote (MP4/WebM/etc.)
-    videoEl.src = url;
-    videoEl.load();
-
-    if (playing) {
-      try {
-        await videoEl.play();
-      } catch {
-        // autoplay may be blocked
+      } catch (err) {
+        console.error("[VideoFeed] HLS load error", err);
+        setError("Stream load failed");
+        setIsLoading(false);
       }
     } else {
-      videoEl.pause();
+      video.srcObject = null;
+      video.src = url;
+      video.load();
+      if (playing) video.play()?.catch(() => {});
+      setIsLoading(false);
+      setError(null);
     }
-
-    setError(null);
   };
 
-  // main mode effect
+  /* -------------------- Playback / Mute -------------------- */
   useEffect(() => {
-    const videoEl = videoRef.current;
+    const video = videoRef.current;
+    if (!video) return;
+    if (playing) video.play()?.catch(() => {});
+    else video.pause();
+  }, [playing]);
 
-    // disabled stops everything hard
-    if (!enabled) {
-      destroyHls();
-      stopLocalStream();
-      if (videoEl) videoEl.pause();
-      setError(null);
-      return;
-    }
-
-    // REMOTE
-    if (mode === "remote") {
-      attachRemote({ videoEl, url: src || "" });
-      return;
-    }
-
-    // LOCAL/AUTO
-    resetRemotePlayback(); // avoids src fighting srcObject
-    if (videoEl) {
-      videoEl.playsInline = true;
-    }
-
-    // pause only (keep stream alive)
-    if (!playing) {
-      if (videoEl) videoEl.pause();
-      setError(null);
-      return;
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError("Camera not supported in this browser.");
-      return;
-    }
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        // reuse existing stream
-        if (streamRef.current && videoEl) {
-          videoEl.srcObject = streamRef.current;
-          videoEl.muted = muted;
-          try {
-            await videoEl.play();
-          } catch {
-            // ignore
-          }
-          setError(null);
-          return;
-        }
-
-        const constraints = {
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-        };
-
-        if (deviceId) {
-          constraints.video.deviceId = { exact: deviceId };
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-
-        if (videoEl) {
-          videoEl.srcObject = stream;
-          videoEl.muted = muted;
-          try {
-            await videoEl.play();
-          } catch {
-            // ignore
-          }
-        }
-
-        setError(null);
-      } catch (err) {
-        console.error("getUserMedia failed:", err);
-        setError(err?.message || "Camera error");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, src, deviceId, enabled, playing]);
-
-  // muted effect: no lifecycle changes
   useEffect(() => {
-    const videoEl = videoRef.current;
-    if (!videoEl) return;
-
-    videoEl.muted = muted;
-
-    if (streamRef.current && typeof streamRef.current.getAudioTracks === "function") {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = muted;
+    if (streamRef.current?.getAudioTracks) {
       streamRef.current.getAudioTracks().forEach((track) => {
         track.enabled = !muted;
       });
     }
   }, [muted]);
 
+  /* -------------------- Video Mode Effect -------------------- */
+  useEffect(() => {
+    if (!enabled) {
+      resetVideoElement();
+      return;
+    }
+
+    if (mode === "local") {
+      attachLocalCamera();
+    } else if (mode === "remote") {
+      stopLocalStream();
+      if (src) attachRemote(src);
+      else {
+        resetVideoElement(); // black screen until URL provided
+        setIsLoading(false);
+      }
+    }
+    return () => {
+      stopLocalStream();
+      destroyHls();
+    };
+  }, [mode, src, enabled]);
+
+  /* -------------------- Actions -------------------- */
+  const handleAction = async (actionValue) => {
+    if (!actionValue) return;
+
+    const flattened = Object.values(actionRegistry).flatMap((cat) =>
+      Object.entries(cat).map(([key, fn]) => ({ key, fn }))
+    );
+
+    const found = flattened.find((a) => a.key === actionValue);
+    if (found?.fn) {
+      try {
+        await found.fn(actionCtx, { id, targetId: id, videoRef, streamRef });
+      } catch (err) {
+        console.error("[VideoFeed] Action error:", err);
+      }
+    }
+  };
+
+  /* -------------------- Render -------------------- */
   return (
     <div
+      {...actionHandlers}
       style={{
         width: "100%",
         height: "100%",
@@ -295,52 +225,60 @@ export default function VideoFeed(props) {
         backgroundColor: "#000",
         ...style,
       }}
-      {...rest}
+      {...restProps}
     >
-      <video
-        ref={videoRef}
-        playsInline
-        muted={muted}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit,
-          transform: mirror ? "scaleX(-1)" : "none",
-        }}
-      />
-
-      {!enabled && (
-        <div
+      {(mode === "local" || (mode === "remote" && src)) && (
+        <video
+          ref={videoRef}
+          playsInline
+          muted={muted}
           style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(0,0,0,0.6)",
-            color: "#fff",
-            fontSize: 12,
+            width: "100%",
+            height: "100%",
+            objectFit,
+            transform: mirror && mode === "local" ? "scaleX(-1)" : "none",
           }}
-        >
-          Camera off
+        />
+      )}
+
+      {isLoading && poster && (
+        <img
+          src={poster}
+          alt="Video poster"
+          className="absolute inset-0 w-full h-full object-cover"
+          draggable={false}
+        />
+      )}
+
+      {isLoading && showSpinner && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+          <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent" />
+        </div>
+      )}
+
+      {/* -------------------- Video Controls Overlay -------------------- */}
+      {(mode === "local" || mode === "remote") && (
+        <div className="absolute bottom-2 left-2 flex gap-2 bg-black/60 backdrop-blur px-2 py-1 rounded-md">
+          {videoActions.map((act) => {
+            const Icon = actionIcons[act.value];
+            if (!Icon) return null;
+
+            return (
+              <button
+                key={act.value}
+                onClick={() => handleAction(act.value)}
+                title={act.label}
+                className="p-1.5 text-white hover:bg-white/20 rounded"
+              >
+                <Icon size={14} />
+              </button>
+            );
+          })}
         </div>
       )}
 
       {error && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(0,0,0,0.7)",
-            color: "tomato",
-            fontSize: 12,
-            padding: 8,
-            textAlign: "center",
-          }}
-        >
+        <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-red-400 text-xs p-2 text-center">
           {error}
         </div>
       )}

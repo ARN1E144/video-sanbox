@@ -1,15 +1,42 @@
-import { runAction } from '../utils/actionExecutor';
+import startCall from "./call/startCall";
+import acceptCall from "./call/acceptCall";
+import endCall from "./call/endCall";
 
+import startStream from "./video/startStream";
+import stopStream from "./video/stopStream";
 
-const actionsRegistry = {
-StartStream: (ctx, params) => runAction('StartStream', ctx, params),
-StopStream: (ctx, params) => runAction('StopStream', ctx, params),
-LoadVideo: (ctx, params) => runAction('LoadVideo', ctx, params),
-SendMessage: (ctx, params) => runAction('SendMessage', ctx, params),
-ReceiveMessage: (ctx, params) => runAction('ReceiveMessage', ctx, params),
-ToggleMic: (ctx, params) => runAction('ToggleMic', ctx, params),
-EndCall: (ctx, params) => runAction('EndCall', ctx, params),
+import sendMessage from "./chat/sendMessage";
+
+import toggle from "./system/toggleMic";
+import api from "../../src/services/api";
+import loadVideo from "./video/loadVideo";
+import loadRemote from "./video/loadRemote";
+import togglePlay from "./video/togglePlay";
+import fetchAvailableCalls from "./call/fetchAvailableCalls";
+import toggleMic from "./system/toggleMic";
+
+export const actionRegistry = {
+  call: {
+    startCall,
+    acceptCall,
+    endCall,
+    fetchAvailableCalls,
+  },
+
+  video: {
+    startStream,
+    stopStream,
+    loadVideo,
+    loadRemote,
+    togglePlay,
+  },
+
+  chat: {
+    sendMessage
+  },
+
+  system: {
+    toggleMic,
+    api
+  }
 };
-
-
-export default actionsRegistry;
