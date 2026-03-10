@@ -1,0 +1,29 @@
+{
+  "name": "Host-to-Many Video Call",
+  "type": "confo",
+  "description": "A host streams to multiple participants",
+  "elements": [
+    {
+      "type": "AgoraFeed",
+      "id": "agora_host",
+      "props": {
+        "channel": "hostmany_channel",
+        "autoJoin": true,
+        "publishLocal": true,
+        "muted": false,
+        "cameraOff": false,
+        "mirror": true,
+        "objectFit": "cover",
+        "borderRadius": 12,
+        "style": { "backgroundColor": "#000000" }
+      },
+      "actions": [
+        { "name": "call.startCall", "trigger": "click" },
+        { "name": "call.toggleMic", "trigger": "click" },
+        { "name": "call.toggleCamera", "trigger": "click" },
+        { "name": "call.endCall", "trigger": "click" },
+        { "name": "call.spotlightUser", "trigger": "click" }
+      ]
+    }
+  ]
+}

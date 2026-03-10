@@ -5,26 +5,32 @@ import { useActionContext } from "../../context/ActionContext";
 import { getActionOptions } from "../../actions/getActionsOptions";
 import { actionRegistry } from "../../actions/actionsRegistry";
 import { Play, Pause, Video, Square } from "lucide-react";
+import { runAction } from "../../utils/actionExecutor";
+
 
 export default function VideoFeed(props) {
-  const {
-    id,
-    meta,
-    poster,
-    showSpinner = true,
-    objectFit = "cover",
-    borderRadius = 12,
-    style = {},
-    mirror = true,
-    mode: propMode = "local",
-    src: propSrc = null,
-    enabled: propEnabled = true,
-    playing: propPlaying = true,
-    muted: propMuted = true,
-    ...restProps
-  } = props;
-
-  const { bindings } = useActionContext();
+const {
+  id,
+  meta,
+  poster,
+  showSpinner = true,
+  objectFit = "cover",
+  borderRadius = 12,
+  style = {},
+  mirror = true,
+  deviceId,
+  emitAction,
+  mode: propMode = "local",
+  src: propSrc = null,
+  enabled: propEnabled = true,
+  playing: propPlaying = true,
+  muted: propMuted = true,
+  ...restProps
+} = props;
+  
+  
+  const actionCtx = useActionContext?.();
+  const { bindings } = actionCtx;
   const binding = bindings[id] || {};
 
   const mode = binding.mode?.value ?? propMode;
@@ -39,18 +45,25 @@ export default function VideoFeed(props) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const hlsRef = useRef(null);
+  
 
-  const actionCtx = useActionContext?.();
+  // Fix "Auto" / invalid src
+  const actualMode = mode === "Auto" ? (src ? "remote" : "local") : mode;
+
   const actionHandlers = bindActions(meta, actionCtx, id);
 
   const videoActions = getActionOptions().filter((a) =>
     ["startStream", "stopStream", "togglePlay"].includes(a.value)
   );
 
+  console.log("[VideoFeed] Video Actions:", videoActions);
+
+  
+
   const actionIcons = {
     startStream: Video,
     stopStream: Square,
-    togglePlay: playing ? Pause : Play
+    togglePlay: playing ? Pause : Play, 
   };
 
   const isHlsUrl = (u) => typeof u === "string" && /\.m3u8(\?.*)?$/i.test(u.trim());
@@ -195,93 +208,72 @@ export default function VideoFeed(props) {
   }, [mode, src, enabled]);
 
   /* -------------------- Actions -------------------- */
-  const handleAction = async (actionValue) => {
-    if (!actionValue) return;
 
-    const flattened = Object.values(actionRegistry).flatMap((cat) =>
-      Object.entries(cat).map(([key, fn]) => ({ key, fn }))
-    );
-
-    const found = flattened.find((a) => a.key === actionValue);
-    if (found?.fn) {
-      try {
-        await found.fn(actionCtx, { id, targetId: id, videoRef, streamRef });
-      } catch (err) {
-        console.error("[VideoFeed] Action error:", err);
-      }
-    }
-  };
+  const VIDEO_ACTION_KEY_MAP = {
+  startStream: "video.startStream",
+  stopStream: "video.stopStream",
+  togglePlay: "video.togglePlay",
+};
+   
+   const handleAction = (actionValue) => {
+  if (!actionValue) return;
+  console.log(`[VideoFeed] Running action: ${actionValue} with context:`, actionCtx);
+  runAction(VIDEO_ACTION_KEY_MAP[actionValue] || actionValue, actionCtx, {
+    id,
+    targetId: id,
+    videoRef,
+    streamRef,
+  });
+};
 
   /* -------------------- Render -------------------- */
   return (
-    <div
-      {...actionHandlers}
-      style={{
-        width: "100%",
-        height: "100%",
-        position: "relative",
-        overflow: "hidden",
-        borderRadius,
-        backgroundColor: "#000",
-        ...style,
-      }}
-      {...restProps}
-    >
-      {(mode === "local" || (mode === "remote" && src)) && (
-        <video
-          ref={videoRef}
-          playsInline
-          muted={muted}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit,
-            transform: mirror && mode === "local" ? "scaleX(-1)" : "none",
-          }}
-        />
-      )}
+  <div {...actionHandlers} style={{ ...style, width: "100%", height: "100%", position: "relative", overflow: "hidden", borderRadius, backgroundColor: "#000" }} {...restProps}>
+    
+    {(actualMode === "local" || (actualMode === "remote" && src)) && (
+      <video
+        ref={videoRef}
+        playsInline
+        muted={muted}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit,
+          transform: mirror && actualMode === "local" ? "scaleX(-1)" : "none",
+        }}
+      />
+    )}
 
-      {isLoading && poster && (
-        <img
-          src={poster}
-          alt="Video poster"
-          className="absolute inset-0 w-full h-full object-cover"
-          draggable={false}
-        />
-      )}
+    {isLoading && poster && <img src={poster} alt="Video poster" className="absolute inset-0 w-full h-full object-cover" draggable={false} />}
+    {isLoading && showSpinner && <div className="absolute inset-0 flex items-center justify-center bg-black/30"><div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent" /></div>}
 
-      {isLoading && showSpinner && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-          <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent" />
-        </div>
-      )}
+    {(actualMode === "local" || actualMode === "remote") && (
+      <div className="absolute bottom-2 left-2 flex gap-2 bg-black/60 backdrop-blur px-2 py-1 rounded-md">
+        {videoActions.map((act) => {
+          const Icon = actionIcons[act.value];
+          if (!Icon) return null;
+          return (
+            <button
+          key={act.value}
+          title={act.label}
+          className="p-1.5 text-white hover:bg-white/20 rounded"
+          onClick={() =>
+          runAction(VIDEO_ACTION_KEY_MAP[act.value] || act.value, actionCtx, {
+            id,
+            targetId: id,
+            videoRef,
+            streamRef,
+          })
+        }
+        >
+          <Icon size={14} />
+        </button>
+          );
+        })}
+      </div>
+    )}
 
-      {/* -------------------- Video Controls Overlay -------------------- */}
-      {(mode === "local" || mode === "remote") && (
-        <div className="absolute bottom-2 left-2 flex gap-2 bg-black/60 backdrop-blur px-2 py-1 rounded-md">
-          {videoActions.map((act) => {
-            const Icon = actionIcons[act.value];
-            if (!Icon) return null;
-
-            return (
-              <button
-                key={act.value}
-                onClick={() => handleAction(act.value)}
-                title={act.label}
-                className="p-1.5 text-white hover:bg-white/20 rounded"
-              >
-                <Icon size={14} />
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-red-400 text-xs p-2 text-center">
-          {error}
-        </div>
-      )}
-    </div>
-  );
+    {error && <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-red-400 text-xs p-2 text-center">{error}</div>}
+  </div>
+);
 }

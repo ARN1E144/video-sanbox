@@ -1,0 +1,29 @@
+{
+  "name": "1-to-Many Video Call",
+  "type": "confo",
+  "description": "One client connects, multiple users alerted, first to accept joins",
+  "elements": [
+    {
+      "type": "AgoraFeed",
+      "id": "agora_client",
+      "props": {
+        "channel": "1tomany_channel",
+        "autoJoin": false,
+        "publishLocal": true,
+        "muted": false,
+        "cameraOff": false,
+        "mirror": true,
+        "objectFit": "cover",
+        "borderRadius": 12,
+        "style": { "backgroundColor": "#000000" }
+      },
+      "actions": [
+        { "name": "call.fetchAvailableCalls", "trigger": "click" },
+        { "name": "call.acceptCall", "trigger": "click" },
+        { "name": "call.endCall", "trigger": "click" },
+        { "name": "call.toggleMic", "trigger": "click" },
+        { "name": "call.toggleCamera", "trigger": "click" }
+      ]
+    }
+  ]
+}

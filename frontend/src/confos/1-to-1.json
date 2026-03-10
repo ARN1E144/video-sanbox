@@ -1,0 +1,28 @@
+{
+  "name": "1-to-1 Video Call",
+  "type": "confo",
+  "description": "One-on-one video call setup using AgoraFeed",
+  "elements": [
+    {
+      "type": "AgoraFeed",
+      "id": "agora_local",
+      "props": {
+        "channel": "1to1_channel",
+        "autoJoin": true,
+        "publishLocal": true,
+        "muted": false,
+        "cameraOff": false,
+        "mirror": true,
+        "objectFit": "cover",
+        "borderRadius": 12,
+        "style": { "backgroundColor": "#000000" }
+      },
+      "actions": [
+        { "name": "call.startCall", "trigger": "click" },
+        { "name": "call.toggleMic", "trigger": "click" },
+        { "name": "call.toggleCamera", "trigger": "click" },
+        { "name": "call.endCall", "trigger": "click" }
+      ]
+    }
+  ]
+}

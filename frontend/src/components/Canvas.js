@@ -19,6 +19,20 @@ const DEVICE_SIZES = {
   mobile: { width: 390, height: 844 },
 };
 
+/* -------------------- NEW: Extract defaults from meta.editableProps -------------------- */
+const extractDefaults = (editableProps = {}) => {
+  const result = {};
+
+  Object.entries(editableProps).forEach(([key, cfg]) => {
+    if (cfg?.default !== undefined) {
+      result[key] = cfg.default;
+    }
+  });
+
+  return result;
+};
+/* -------------------------------------------------------------------- */
+
 export default function Canvas({ role, onSelectedIdChange }) {
   const { isPreviewMode } = usePreviewMode();
   const { elements, addElement, updateElement } = useCanvasState();
@@ -64,27 +78,34 @@ export default function Canvas({ role, onSelectedIdChange }) {
   });
 
   const handleDrop = (e) => {
-    if (!isBuilderEditable) return;
-    e.preventDefault();
+  if (!isBuilderEditable) return;
+  e.preventDefault();
 
-    const meta = JSON.parse(e.dataTransfer.getData("application/json") || "{}");
-    if (!meta?.name || !canvasRef.current) return;
+  const meta = JSON.parse(e.dataTransfer.getData("application/json") || "{}");
+  if (!meta?.name || !canvasRef.current) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
+  const rect = canvasRef.current.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / scale;
+  const y = (e.clientY - rect.top) / scale;
 
-    const defaultPropsByType = {
-      ControlButton: { label: "Button", action: "", targetId: "", apiUrl: "" },
-      MicButton: { label: "Mic", action: "ToggleMic" },
-      VideoFeed: { label: "Video", mode: "Auto", src: "local", playing: true, enabled: true, muted: false },
-      Text: { label: "Text" },
-      ChatPanel: { label: "Chat" },
-    };
+  const defaultPropsByType = {
+    ControlButton: { label: "Button", action: "", targetId: "", apiUrl: "" },
+    MicButton: { label: "Mic", action: "ToggleMic" },
+    VideoFeed: {
+      label: "Video",
+      mode: "local",   // default local
+      src: "",         // empty for remote to show placeholder
+      playing: true,
+      enabled: true,
+      muted: false,
+    },
+    Text: { label: "Text" },
+    ChatPanel: { label: "Chat" },
+  };
 
-    const newId = uuid();
+  const newId = uuid();
 
-    addElement({
+  addElement({
     id: newId,
     type: meta.name,
     role: projectType === "single" ? "client" : role,
@@ -92,29 +113,17 @@ export default function Canvas({ role, onSelectedIdChange }) {
     y: y - 75,
     width: 300,
     height: 150,
-    props: { ...(defaultPropsByType[meta.name] || {}), ...(meta.editableProps || {}) },
+    props: {
+      ...(defaultPropsByType[meta.name] || {}),
+      ...extractDefaults(meta.editableProps),
+    },
   });
 
   // Start local camera immediately
   if (meta.name === "VideoFeed") {
     actionCtx?.cameraOn?.(newId);
-
-    // Optionally, also load remote if mode is remote
-    if (meta.editableProps?.mode === "remote") {
-      import("../../src/actions/video/loadRemote").then((mod) =>
-        mod.default(actionCtx, {
-          targetId: newId,
-          src: meta.editableProps.src,
-        })
-      );
-    }
   }
-
-    // Start local camera if VideoFeed
-    if (meta.name === "VideoFeed") {
-      actionCtx?.cameraOn?.(newId);
-    }
-  };
+};
 
   const toggleInspector = () => setInspectorOpen((p) => ({ ...p, [currentRoleKey]: !p[currentRoleKey] }));
 
@@ -154,7 +163,6 @@ export default function Canvas({ role, onSelectedIdChange }) {
             if (!Comp) return null;
             const binding = bindings[el.id] || {};
 
-            // Only pass special props to known components
             const extraProps = el.type === "VideoFeed" || el.type === "AgoraFeed" ? {
               src: binding.src ?? el.props.src,
               playing: binding.playing ?? el.props.playing ?? true,

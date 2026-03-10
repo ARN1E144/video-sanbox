@@ -92,13 +92,13 @@
   },
 
   "actions": [
-    { "value": "StartStream", "label": "Start Video Stream" },
-    { "value": "StopStream", "label": "Stop Video Stream" },
-    { "value": "TogglePlay", "label": "Toggle Play / Pause" },
-    { "value": "LoadRemote", "label": "Load Remote Video" },
-    { "value": "CaptureFrame", "label": "Capture Frame" },
-    { "value": "custom", "label": "Custom JS" }
-  ],
+  { "value": "video.startStream", "label": "Start Video Stream" },
+  { "value": "video.stopStream", "label": "Stop Video Stream" },
+  { "value": "video.togglePlay", "label": "Toggle Play / Pause" },
+  { "value": "video.loadRemote", "label": "Load Remote Video" },
+  { "value": "video.captureFrame", "label": "Capture Frame" },
+  { "value": "custom", "label": "Custom JS" }
+],
 
   "conditions": [
     { "value": "isEnabled", "label": "Is Enabled" },
