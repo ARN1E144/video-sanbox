@@ -1,39 +1,31 @@
-// src/components/elements/withActions.js
 import React from "react";
+import { runAction } from "../../utils/actionExecutor";
 import { useActionContext } from "../../context/ActionContext";
-import { useCanvasState } from "../../context/CanvasContext";
 
-export default function withActions(WrappedComponent) {
-  return function ActionableComponent(props) {
+export default function withActions(Component) {
+
+  return function ActionWrapped(props) {
+
     const actionCtx = useActionContext();
-    const { selectedId } = useCanvasState(); // optional if needed for default target
 
-    const emitAction = async (eventName, payload = {}) => {
-  if (!actionCtx) return;
+    const emitAction = (action, params = {}) => {
 
-  const targetId = props.targetId || props.id || selectedId;
+      console.log("[emitAction]", action);
 
-  console.log("[emitAction]", {
-    eventName,
-    payload,
-    targetId,
-    elementId: props.id,
-  });
+      runAction(action, actionCtx, {
+        ...params,
+        id: props.id,
+        targetId: props.id
+      });
 
-  const params = {
-    ...payload,
-    targetId,
-    elementId: props.id,
-  };
+    };
 
-  // 🔹 Support pipelines OR single actions
-  if (Array.isArray(eventName)) {
-    await actionCtx.runActionPipeline?.(eventName, actionCtx, params);
-  } else {
-    await actionCtx.runAction?.(eventName, actionCtx, params);
-  }
-};
+    return (
+      <Component
+        {...props}
+        emitAction={emitAction}
+      />
+    );
 
-    return <WrappedComponent {...props} emitAction={emitAction} />;
   };
 }

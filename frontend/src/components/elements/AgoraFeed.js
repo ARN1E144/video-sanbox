@@ -1,257 +1,275 @@
 // src/components/elements/AgoraFeed.js
-import React, { useRef, useState, useEffect } from "react";
+
+import React, { useEffect, useRef, useState } from "react";
 import AgoraRTC from "agora-rtc-sdk-ng";
 import api from "../../services/api";
-import "../../css/AgoraFeed.css";
+import { bindActions } from "../../utils/actionBinder";
+import { useActionContext } from "../../context/ActionContext";
+import { getActionOptions } from "../../actions/getActionsOptions";
+import { runAction } from "../../utils/actionExecutor";
+import { Play, Video, Square, VolumeX, Volume } from "lucide-react";
 
-export default function AgoraFeed({
-  // Runtime props
-  tokenEndpoint = "/agora/token",
-  channel = "test-call",
-  muted = false,
-  cameraOff = false,
-  autoJoin = false,
-  publishLocal = true,
+export default function AgoraFeed(props) {
+  const {
+    id,
+    meta = {},
+    style = {},
+    borderRadius = 12,
+    objectFit = "cover",
+    mirror = true,
+    ...rest
+  } = props;
 
-  // Build/visual props
-  mirror = true,
-  objectFit = "cover",
-  borderRadius = 12,
-  style = {},
+  const channel = meta.channel || "test-call";
+  const tokenEndpoint = meta.tokenEndpoint || "/agora/token";
 
-  // Universal action system
-  emit,
-  id, // element id
-}) {
-  const remoteRef = useRef(null);
-  const localRef = useRef(null);
+  const actionCtx = useActionContext?.();
+  const { bindings } = actionCtx || {};
+  const binding = bindings?.[id] || {};
+
+  const isPlaying = binding?.playing ?? true;
+ 
+
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+
   const clientRef = useRef(null);
-  const tracksRef = useRef({ audio: null, video: null });
+  const localVideoTrack = useRef(null);
+  const localAudioTrack = useRef(null);
+  const remoteUsersRef = useRef({});
+  const localRef = useRef(null);
+  const remoteRef = useRef(null);
 
-  const [joined, setJoined] = useState(false);
-  const [remoteJoined, setRemoteJoined] = useState(false);
-  const [joining, setJoining] = useState(false);
-  const [error, setError] = useState(null);
+  const actionHandlers = bindActions(meta, actionCtx, id);
 
-  /* --------------------------------------------
-   * Init Agora client ONCE
-   * ------------------------------------------ */
-  if (!clientRef.current) {
-    clientRef.current = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-    console.log("[AgoraFeed] Client created");
+  const videoActions = getActionOptions().filter((a) =>
+    [
+      "agora.startAgoraStream",
+      "agora.stopAgoraStream",
+      "agora.toggleAgoraPlay",
+      "agora.toggleAgoraAudio",
+    ].includes(a.value)
+  );
+
+  const actionIcons = {
+    "agora.startAgoraStream": Video,
+    "agora.stopAgoraStream": Square,
+    "agora.toggleAgoraPlay": Play,
+    "agora.toggleAgoraAudio": isAudioEnabled ? Volume : VolumeX,
+  };
+
+  // --- INITIALIZE CLIENT ---
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+      try {
+        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        clientRef.current = client;
+
+        client.on("user-published", async (user, mediaType) => {
+          try {
+            await client.subscribe(user, mediaType);
+          } catch (err) {
+            console.warn("[AgoraFeed] subscribe skipped:", err?.message);
+            return;
+          }
+
+          remoteUsersRef.current[user.uid] = user;
+
+          if (mediaType === "video" && user.videoTrack) {
+            setHasRemoteVideo(true);
+            user.videoTrack.play(remoteRef.current);
+          }
+          if (mediaType === "audio" && user.audioTrack) {
+            user.audioTrack.play();
+          }
+        });
+
+        client.on("user-unpublished", (user, mediaType) => {
+          if (mediaType === "video") {
+            delete remoteUsersRef.current[user.uid];
+            setHasRemoteVideo(false);
+          }
+        });
+
+        client.on("user-left", (user) => {
+          delete remoteUsersRef.current[user.uid];
+          setHasRemoteVideo(false);
+        });
+
+        // --- FETCH TOKEN & JOIN ---
+        const { data } = await api.get(tokenEndpoint, { params: { channel } });
+        const { appId, token, uid } = data;
+        await client.join(appId, channel, token, uid);
+
+        // --- CREATE LOCAL TRACKS ---
+        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        const videoTrack = await AgoraRTC.createCameraVideoTrack();
+        localAudioTrack.current = audioTrack;
+        localVideoTrack.current = videoTrack;
+
+        videoTrack.play(localRef.current);
+        await client.publish([audioTrack, videoTrack]);
+
+        if (mounted) setIsLoading(false);
+      } catch (err) {
+        console.error("[AgoraFeed] init error", err);
+      }
+    };
+
+    init();
+
+    return () => {
+      mounted = false;
+      localVideoTrack.current?.stop();
+      localVideoTrack.current?.close();
+      localAudioTrack.current?.stop();
+      localAudioTrack.current?.close();
+      clientRef.current?.leave();
+    };
+  }, [channel, tokenEndpoint]);
+
+  // --- TOGGLE CAMERA ---
+  useEffect(() => {
+    if (!localVideoTrack.current) return;
+    if (binding?.playing === false) {
+      localVideoTrack.current.setEnabled(false);
+    } else {
+      localVideoTrack.current.setEnabled(true);
+      localVideoTrack.current.play(localRef.current);
+    }
+  }, [binding?.playing]);
+
+  // --- TOGGLE AUDIO ---
+  useEffect(() => {
+    if (!localAudioTrack.current) return;
+    localAudioTrack.current.setEnabled(isAudioEnabled);
+  }, [isAudioEnabled]);
+
+  // --- HANDLE ACTIONS ---
+const handleAction = async (actionValue) => {
+  if (actionValue === "agora.toggleAgoraPlay") {
+    if (localVideoTrack.current) {
+      const newState = !isVideoEnabled;
+      setIsVideoEnabled(newState);
+      localVideoTrack.current.setEnabled(newState);
+      if (newState) localVideoTrack.current.play(localRef.current);
+    }
+    return;
   }
-  const client = clientRef.current;
 
-  /* --------------------------------------------
-   * Emit helper
-   * ------------------------------------------ */
-  const emitEvent = (eventName, payload = {}) => {
-    if (typeof emit === "function") {
-      emit(eventName, { ...payload, elementId: id });
+  if (actionValue === "agora.toggleAgoraAudio") {
+    if (localAudioTrack.current) {
+      const newState = !isAudioEnabled;
+      setIsAudioEnabled(newState);
+      localAudioTrack.current.setEnabled(newState);
     }
-  };
+    return;
+  }
 
-  /* --------------------------------------------
-   * Join call
-   * ------------------------------------------ */
-  const handleJoin = async () => {
-    if (joining || joined) return;
+  // Other actions like StopStream or StartStream (optional)
+  await runAction(actionValue, actionCtx, {
+    id,
+    targetId: id,
+    clientRef,
+    localVideoTrack,
+    localAudioTrack,
+  });
+};
 
-    setJoining(true);
-    setError(null);
-
-    try {
-      console.log("[AgoraFeed] Fetching token…");
-      const { data } = await api.get(tokenEndpoint, { params: { channel } });
-      const { appId, token, uid } = data;
-      console.log("[AgoraFeed] Token received");
-
-      // Create tracks
-      const audio = await AgoraRTC.createMicrophoneAudioTrack();
-      const video = await AgoraRTC.createCameraVideoTrack();
-      await audio.setEnabled(!muted);
-      await video.setEnabled(!cameraOff);
-      tracksRef.current = { audio, video };
-
-      // Join channel
-      await client.join(appId, channel, token, uid);
-
-      // Subscribe to remote users
-      client.on("user-published", async (user, mediaType) => {
-        await client.subscribe(user, mediaType);
-        if (mediaType === "video" && remoteRef.current) {
-          user.videoTrack.play(remoteRef.current, { fit: objectFit });
-          setRemoteJoined(true);
-          emitEvent("RemoteJoined", { uid: user.uid, mediaType });
-        }
-        if (mediaType === "audio") user.audioTrack.play();
-      });
-
-      client.on("user-unpublished", (_, mediaType) => {
-        if (mediaType === "video") {
-          setRemoteJoined(false);
-          emitEvent("RemoteLeft", { mediaType });
-        }
-      });
-
-      // Play local preview if publishing
-      if (publishLocal) video.play(localRef.current, { fit: objectFit });
-
-      // Publish local tracks if enabled
-      if (publishLocal) await client.publish([audio, video]);
-
-      setJoined(true);
-      emitEvent("JoinedCall", { uid, channel });
-      console.log("[AgoraFeed] Joined + published");
-    } catch (err) {
-      console.error("[AgoraFeed] Join error", err);
-      setError(err.message || "Failed to join call");
-      emitEvent("JoinError", { error: err.message || err });
-      await cleanup();
-    } finally {
-      setJoining(false);
-    }
-  };
-
-  /* --------------------------------------------
-   * Cleanup / leave
-   * ------------------------------------------ */
-  const cleanup = async () => {
-    try {
-      client.removeAllListeners();
-      const { audio, video } = tracksRef.current;
-      audio?.stop();
-      audio?.close();
-      video?.stop();
-      video?.close();
-      tracksRef.current = { audio: null, video: null };
-      if (client.connectionState !== "DISCONNECTED") await client.leave();
-      emitEvent("LeftCall", { channel });
-    } catch (e) {
-      console.warn("[AgoraFeed] Cleanup error", e);
-    } finally {
-      setJoined(false);
-      setRemoteJoined(false);
-    }
-  };
-
-  useEffect(() => {
-    return () => cleanup();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /* --------------------------------------------
-   * Auto-join if requested
-   * ------------------------------------------ */
-  useEffect(() => {
-    if (autoJoin) handleJoin();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoJoin]);
-
-  /* --------------------------------------------
-   * Mic / Camera toggles
-   * ------------------------------------------ */
-  useEffect(() => {
-    tracksRef.current.audio?.setEnabled(!muted).catch(() => {});
-    emitEvent("MicToggled", { muted });
-  }, [muted]);
-
-  useEffect(() => {
-    tracksRef.current.video?.setEnabled(!cameraOff).catch(() => {});
-    emitEvent("CameraToggled", { cameraOff });
-  }, [cameraOff]);
-
-  /* --------------------------------------------
-   * Render
-   * ------------------------------------------ */
   return (
     <div
+      {...actionHandlers}
       style={{
+        ...style,
         width: "100%",
         height: "100%",
         position: "relative",
+        background: "#000",
         overflow: "hidden",
         borderRadius,
-        backgroundColor: "#000",
-        ...style,
       }}
+      {...rest}
     >
-      {/* Remote video */}
+      {/* REMOTE FULLSCREEN */}
       <div
         ref={remoteRef}
         style={{
           width: "100%",
           height: "100%",
-          transform: mirror ? "scaleX(-1)" : "none",
+          objectFit,
+          display: "block",
         }}
       />
 
-      {/* Local preview */}
-      {joined && publishLocal && (
+      {/* LOCAL PIP */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "4%",
+          right: "4%",
+          width: "25%",
+          height: "25%",
+          borderRadius: 8,
+          overflow: "hidden",
+          background: "#000",
+          border: "1px solid #333",
+        }}
+      >
         <div
           ref={localRef}
-          className="agora_video_player"
           style={{
-            position: "absolute",
-            right: 5,
-            bottom: 5,
-            width: "35%",
-            height: "35%",
-            borderRadius: 10,
-            overflow: "hidden",
-            border: "1px solid rgba(255,255,255,0.15)",
-            background: "#000",
+            width: "100%",
+            height: "100%",
             transform: mirror ? "scaleX(-1)" : "none",
           }}
         />
+
+        {/* Camera off overlay */}
+        {binding?.playing === false && (
+          <div className="absolute inset-0 flex items-center justify-center text-white text-xs opacity-60">
+            Camera off
+          </div>
+        )}
+      </div>
+
+      {/* REMOTE WAITING SCREEN */}
+      {!hasRemoteVideo && (
+        <div className="absolute inset-0 flex items-center justify-center text-white text-xs opacity-60">
+          Waiting for participant
+        </div>
       )}
 
-      {/* Overlay states */}
-      {!joined && !error && !autoJoin && (
-        <Overlay>
-          <button
-            onClick={handleJoin}
-            disabled={joining}
-            style={{
-              padding: "8px 14px",
-              fontSize: 12,
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            {joining ? "Connecting…" : "Join Call"}
-          </button>
-        </Overlay>
+      {/* ACTION BUTTONS */}
+      <div className="absolute bottom-2 left-2 flex gap-2 bg-black/60 backdrop-blur px-2 py-1 rounded-md">
+        {videoActions.map((act) => {
+          const Icon =
+            act.value === "agora.toggleAgoraAudio"
+              ? isAudioEnabled
+                ? Volume
+                : VolumeX
+              : actionIcons[act.value];
+          if (!Icon) return null;
+          return (
+            <button
+              key={`${id}-${act.value}`}
+              className="p-1.5 text-white hover:bg-white/20 rounded"
+              onClick={() => handleAction(act.value)}
+            >
+              <Icon size={14} />
+            </button>
+          );
+        })}
+      </div>
+
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center text-white text-xs">
+          Connecting...
+        </div>
       )}
-
-      {joined && !remoteJoined && <Overlay>Waiting for other participant…</Overlay>}
-      {error && <Overlay error>{error}</Overlay>}
-    </div>
-  );
-}
-
-/* --------------------------------------------
- * Overlay helper
- * ------------------------------------------ */
-function Overlay({ children, error }) {
-  return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: error ? "tomato" : "#fff",
-        fontSize: 12,
-        padding: 10,
-        textAlign: "center",
-        background: "rgba(0,0,0,0.6)",
-        zIndex: 5,
-      }}
-    >
-      {children}
     </div>
   );
 }

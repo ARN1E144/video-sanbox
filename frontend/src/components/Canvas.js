@@ -22,15 +22,13 @@ const DEVICE_SIZES = {
 /* -------------------- NEW: Extract defaults from meta.editableProps -------------------- */
 const extractDefaults = (editableProps = {}) => {
   const result = {};
-
   Object.entries(editableProps).forEach(([key, cfg]) => {
-    if (cfg?.default !== undefined) {
-      result[key] = cfg.default;
-    }
+    result[key] = typeof cfg === "object" && cfg.default !== undefined ? cfg.default : cfg;
   });
-
   return result;
 };
+
+  
 /* -------------------------------------------------------------------- */
 
 export default function Canvas({ role, onSelectedIdChange }) {
@@ -134,6 +132,8 @@ export default function Canvas({ role, onSelectedIdChange }) {
 
   const { bindings } = useActionContext();
 
+  console.log("[Canvas] visibleElements", visibleElements);
+
   return (
     <div className="flex w-full h-full gap-4 relative overflow-hidden">
       {!isSplitPreview && (
@@ -159,27 +159,52 @@ export default function Canvas({ role, onSelectedIdChange }) {
       <div className="relative flex-1 min-w-0 overflow-hidden">
         <div ref={canvasRef} onDrop={handleDrop} onDragOver={(e) => isBuilderEditable && e.preventDefault()} className="relative mx-auto border border-border rounded-xl overflow-hidden" style={{ width: DEVICE_SIZES[device].width * scale, height: DEVICE_SIZES[device].height * scale, transform: `scale(${scale})`, transformOrigin: "top left", ...canvasBackgroundStyle }}>
           {visibleElements.map((el) => {
+
             const Comp = COMPONENTS[el.type];
-            if (!Comp) return null;
+
+            if (!Comp) {
+              console.warn("Component not found:", el.type);
+              return null;
+            }
+
             const binding = bindings[el.id] || {};
 
-            const extraProps = el.type === "VideoFeed" || el.type === "AgoraFeed" ? {
-              src: binding.src ?? el.props.src,
-              playing: binding.playing ?? el.props.playing ?? true,
-              muted: binding.muted ?? el.props.muted ?? true,
-              enabled: binding.enabled ?? el.props.enabled ?? true,
-              deviceId: el.props.deviceId,
-              emitAction: el.props.emitAction,
-            } : {};
+            const extraProps = {
+              ...binding,
+            };
 
             return (
-              <Rnd key={el.id} bounds="parent" size={{ width: el.width, height: el.height }} position={{ x: el.x, y: el.y }} onClick={() => { setSelectedId(el.id); onSelectedIdChange?.(el.id); setInspectorOpen((p) => ({ ...p, [currentRoleKey]: true })); }} onDragStop={(e, d) => updateElement(el.id, { x: d.x, y: d.y })} onResizeStop={(e, dir, ref, delta, pos) => updateElement(el.id, { width: parseFloat(ref.style.width), height: parseFloat(ref.style.height), x: pos.x, y: pos.y })} disableDragging={!isBuilderEditable} enableResizing={isBuilderEditable} scale={scale} style={{ border: el.id === selectedId ? "1px dashed #6366f1" : "none" }}>
+             <Rnd
+                key={el.id}
+                bounds="parent"
+                size={{ width: el.width, height: el.height }}
+                position={{ x: el.x, y: el.y }}
+                scale={scale}
+                onClick={() => {
+                  setSelectedId(el.id);
+                  onSelectedIdChange?.(el.id);
+                }}
+                onDragStop={(e, d) => {
+                  updateElement(el.id, {
+                    x: d.x,
+                    y: d.y,
+                  });
+                }}
+                onResizeStop={(e, direction, ref, delta, position) => {
+                  updateElement(el.id, {
+                    width: parseInt(ref.style.width),
+                    height: parseInt(ref.style.height),
+                    x: position.x,
+                    y: position.y,
+                  });
+                }}
+              >
                 <div className="w-full h-full">
-                  {el.type === "AgoraFeed" ? (
-                    <LazyAgoraFeed {...el.props} {...extraProps} />
-                  ) : (
-                    <Comp {...el.props} {...extraProps} id={el.id} meta={el.meta} />
-                  )}
+                  <Comp
+                    id={el.id}
+                    {...el.props}
+                    {...extraProps}
+                  />
                 </div>
               </Rnd>
             );

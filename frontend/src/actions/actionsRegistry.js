@@ -15,10 +15,20 @@ import togglePlay from "./video/togglePlay";
 import fetchAvailableCalls from "./call/fetchAvailableCalls";
 import leaveCall from "./call/leaveCall";
 import spotlightUser from "./call/spotlightUser";
+import StartStream from "./agora/StartStream";
+import StopStream from "./agora/StopStream";
+import TogglePlay from "./agora/TogglePlay";
+
 // import toggleCamera from "./system/toggleCamera";
 import toggleMic from "./system/toggleMic";
 
 export const actionRegistry = {
+  agora: {
+    startAgoraStream: { run: StartStream, roles: ["host", "participant"] },
+    stopAgoraStream: { run: StopStream, roles: ["host", "participant"] },
+    toggleAgoraPlay: { run: TogglePlay, roles: ["host", "participant"] },
+  },
+
   call: {
     startCall: { run: startCall, roles: ["host", "participant"] },
     acceptCall: { run: acceptCall, roles: ["participant"] },
