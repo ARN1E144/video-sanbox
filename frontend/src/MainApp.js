@@ -12,6 +12,9 @@ import { usePreviewMode } from "./context/PreviewContext";
 import AuthPortal from "./components/AuthPortal";
 import CallsPortal from "./components/CallsPortal";
 import { useAuth } from "./context/AuthContext";
+import SplitPreviewLayout from "./components/splitPreviewLayout";
+import { useCanvasState } from "./context/CanvasContext";
+import InspectorContent from "./components/inspectorPanel/InspectorContent";
 
 
 
@@ -97,9 +100,10 @@ function DraggablePanel({ title, onClose, children, initial = { x: 16, y: 16 }, 
 
 
 export default function MainApp() {
-  const { viewMode, backgroundConfigs, setBackgroundConfigs } = useContext(ProjectContext);
+  const { viewMode, backgroundConfigs, setBackgroundConfigs, collapsed } = useContext(ProjectContext);
   const { previewView } = usePreviewMode();
   const { session, loading } = useAuth();
+  const { elements, updateElement } = useCanvasState();
 
   const [currentView, setCurrentView] = useState("templates"); // templates | auth | build | settings
 
@@ -180,7 +184,7 @@ export default function MainApp() {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "260px 1fr",
+        gridTemplateColumns: collapsed ? "40px 1fr" : "260px 1fr",
         height: "100vh",
         backgroundColor: "#0f0f0f",
         color: "#fff",
@@ -225,61 +229,30 @@ export default function MainApp() {
               {viewMode === "preview" ? (
                 <>
                   {previewView === "split" ? (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 0, // important: no gap so divider looks real
-                        flexGrow: 1,
-                        overflow: "hidden",
-                      }}
-                    >
-                      {/* LEFT PANE (client) */}
-                      <div style={{ borderRight: "1px solid #222", overflow: "hidden" }}>
-                        <Canvas
-                          role="client"
-                          showRightTools={true}
-                          onSelectedIdChange={handleHostSelect}
-                          onRequestBackground={() => {
-                            setPanelTargetRole("client");
-                            setShowBgPanel(true);
-                            setShowDebug(false);
-                          }}
-                          onRequestDebug={() => {
-                            setPanelTargetRole("client");
-                            setShowDebug(true);
-                            setShowBgPanel(false);
-                          }}
-                        />
-                      </div>
+                    <>
+                      <SplitPreviewLayout
+                        onClientSelect={handleClientSelect}
+                        onHostSelect={handleHostSelect}
+                        onRequestBackground={(role) => {
+                          setPanelTargetRole(role);
+                          setShowBgPanel(true);
+                          setShowDebug(false);
+                        }}
+                        onRequestDebug={(role) => {
+                          setPanelTargetRole(role);
+                          setShowDebug(true);
+                          setShowBgPanel(false);
+                        }}
+                      />
 
-                      {/* RIGHT PANE (host) */}
-                      <div style={{ overflow: "hidden" }}>
-                        <Canvas
-                          role="host"
-                          showRightTools={true}
-                          onSelectedIdChange={handleHostSelect}
-                          onRequestBackground={() => {
-                            setPanelTargetRole("host");
-                            setShowBgPanel(true);
-                            setShowDebug(false);
-                          }}
-                          onRequestDebug={() => {
-                            setPanelTargetRole("host");
-                            setShowDebug(true);
-                            setShowBgPanel(false);
-                          }}
-                        />
-                      </div>
-                    </div>
+                      {/* ✅ GLOBAL BOTTOM INSPECTOR */}
+                    </>
                   ) : (
                     <div style={{ flexGrow: 1, overflow: "hidden" }}>
                       <Canvas
-                        role={previewView}
-                        showRightTools={true}
-                        onSelectedIdChange={(id) =>
-                          setSelectedByRole((prev) => ({ ...prev, [previewView]: id }))
-                        }
+                        role="host"
+                        forcePreview={true}
+                        onSelectedIdChange={handleHostSelect}
                         onRequestBackground={() => {
                           setPanelTargetRole(previewView);
                           setShowBgPanel(true);

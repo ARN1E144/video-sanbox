@@ -18,7 +18,7 @@ const ELEMENT_ACTION_CATEGORIES = {
   VideoFeed: ["Video"],
   ChatPanel: ["Chat"],
   MicButton: ["System"],
-  ControlButton: ["Video", "Chat", "System"], // optional full control
+  ControlButton: ["Video", "Chat", "System"],
 };
 
 const ELEMENT_CAPABILITIES = {
@@ -31,12 +31,11 @@ const ELEMENT_CAPABILITIES = {
   Text: { showActions: false, showTargeting: false, showConditions: false },
 };
 
-
-
 const InspectorContent = forwardRef(function InspectorContent(
   {
     layout = "right",
     position = { x: 100, y: 100 },
+    setPosition,
     toggleDock,
     toggleOpen,
     selectedId,
@@ -44,6 +43,8 @@ const InspectorContent = forwardRef(function InspectorContent(
     updateElement,
     onDelete,
     readOnly,
+    pinInspector,
+    togglePin,
   },
   ref
 ) {
@@ -52,6 +53,8 @@ const InspectorContent = forwardRef(function InspectorContent(
   const element = elements.find((e) => e.id === selectedId);
   const canEditBuilder = !!canBuild && !readOnly;
   const isSingleProject = projectType === "single";
+
+  const inspectorWidth = layout === "right" ? 280 : layout === "docked" || layout === "bottom" ? "100%" : 280;
 
   const caps = useMemo(() => {
     if (!element) return DEFAULT_CAPS;
@@ -62,51 +65,34 @@ const InspectorContent = forwardRef(function InspectorContent(
     return next;
   }, [element, isSingleProject]);
 
-  // Extract selectedAction separately to avoid passing to DOM
   const { selectedaction, ...safeProps } = element?.props || {};
 
- const actionOptions = useMemo(() => {
-  const allActions = getActionOptions(); // gets value, label, category from registry
-  const categorized = {};
+  const actionOptions = useMemo(() => {
+    const allActions = getActionOptions();
+    const categorized = {};
+    allActions.forEach((act) => {
+      const category = act.category || "General";
+      if (!categorized[category]) categorized[category] = [];
+      categorized[category].push(act);
+    });
+    return Object.entries(categorized).map(([category, options]) => ({ category, options }));
+  }, []);
 
-  allActions.forEach((act) => {
-    const category = act.category || "General"; // use category from registry
-    if (!categorized[category]) categorized[category] = [];
-    categorized[category].push(act);
-  });
+  const filteredActionOptions = useMemo(() => {
+    if (!element) return [];
+    const allowedCategories = ELEMENT_ACTION_CATEGORIES[element.type] || [];
+    return actionOptions.filter((opt) => allowedCategories.includes(opt.category));
+  }, [element, actionOptions]);
 
-  console.log("Categorized action options", categorized);
-
-  return Object.entries(categorized).map(([category, options]) => ({
-    category,
-    options,
-  }));
-}, []);
-
-const filteredActionOptions = useMemo(() => {
-  if (!element) return [];
-  const allowedCategories = ELEMENT_ACTION_CATEGORIES[element.type] || [];
-  return actionOptions.filter(opt => allowedCategories.includes(opt.category));
-}, [element, actionOptions]);
-
-
-const handleAction = async (actionValue) => {
-  const actionFn = getActionByValue(actionValue);
-
-  if (!actionFn) {
-    console.warn("Action not found:", actionValue);
-    return;
-  }
-
-  try {
-    // Optionally pass element props or any context needed
-    await actionFn({ element, projectType });
-    console.log(`Action "${actionValue}" executed successfully.`);
-  } catch (err) {
-    console.error(`Error executing action "${actionValue}":`, err);
-  }
-};
-
+  const handleAction = async (actionValue) => {
+    const actionFn = getActionByValue(actionValue);
+    if (!actionFn) return console.warn("Action not found:", actionValue);
+    try {
+      await actionFn({ element, projectType });
+    } catch (err) {
+      console.error(`Error executing action "${actionValue}":`, err);
+    }
+  };
 
   const targetOptions = useMemo(() => {
     if (!element) return [];
@@ -130,14 +116,11 @@ const handleAction = async (actionValue) => {
     );
   }
 
-  const updateProps = (patch) => {
-    updateElement(element.id, { props: { ...(safeProps || {}), ...patch } });
-  };
+  const updateProps = (patch) => updateElement(element.id, { props: { ...(safeProps || {}), ...patch } });
 
   const renderVideoFeedProps = () => {
     if (element.type !== "VideoFeed") return null;
     const props = safeProps;
-
     return (
       <div className="space-y-2">
         <div>
@@ -159,15 +142,15 @@ const handleAction = async (actionValue) => {
             <input
               type="text"
               disabled={readOnly || !canEditBuilder}
-              value={typeof props.src === "string" ? props.src : ""} // <- value is empty if no string
+              value={typeof props.src === "string" ? props.src : ""}
               onChange={(e) => updateProps({ src: e.target.value })}
               placeholder={typeof props.src === "string" ? "" : props.src?.placeholder || "Video/Audio URL"}
               className="w-full px-2 py-1 rounded bg-surface border border-border text-text-primary text-sm"
             />
-</div>
+          </div>
         )}
 
-        {['enabled','playing','muted','mirror'].map((key) => (
+        {["enabled", "playing", "muted", "mirror"].map((key) => (
           <label key={key} className="flex items-center gap-2 text-xs text-text-primary">
             <input
               type="checkbox"
@@ -185,7 +168,7 @@ const handleAction = async (actionValue) => {
   const renderGenericProps = () => {
     const editableProps = element?.meta?.editableProps || {};
     return Object.entries(editableProps).map(([key, defaultValue]) => {
-      if (["mode","enabled","playing","muted","mirror","src"].includes(key)) return null;
+      if (["mode", "enabled", "playing", "muted", "mirror", "src"].includes(key)) return null;
       const value = safeProps[key] ?? defaultValue;
 
       if (typeof defaultValue === "boolean") {
@@ -264,8 +247,10 @@ const handleAction = async (actionValue) => {
   const body = (
     <div
       ref={ref}
-      className={`bg-panel border border-border shadow-soft flex flex-col ${layout === "docked" ? "w-full h-full" : "w-[280px] h-[380px]"}`}
+      className={`bg-panel border border-border shadow-soft flex flex-col`}
+      style={{ width: inspectorWidth, height: layout === "docked" || layout === "bottom" ? 300 : 380 }}
     >
+      {/* HEADER */}
       <div className="inspector-drag-handle flex items-center justify-between px-4 py-3 border-b border-border shrink-0 cursor-move">
         <h3 className="text-lg font-semibold">Inspector</h3>
         <div className="flex items-center gap-2">
@@ -274,16 +259,26 @@ const handleAction = async (actionValue) => {
               <Dock size={14} />
             </button>
           )}
+          {togglePin && (
+            <button
+              onClick={togglePin}
+              className={`p-1 rounded hover:bg-accent/10 ${pinInspector ? "text-accent" : "text-muted"}`}
+              title={pinInspector ? "Unpin Inspector" : "Pin Inspector"}
+            >
+              {pinInspector ? "📌" : "📍"}
+            </button>
+          )}
           <button onClick={toggleOpen} className="p-1 rounded hover:bg-accent/10" title="Close">
             <X size={14} />
           </button>
         </div>
       </div>
 
+      {/* BODY */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         <InspectorSection title="Position & Size">
           <div className="grid grid-cols-2 gap-2">
-            {["x","y","width","height"].map((field) => (
+            {["x", "y", "width", "height"].map((field) => (
               <div key={field}>
                 <label className="block text-xs text-text-muted mb-1">{field}</label>
                 <input
@@ -307,27 +302,22 @@ const handleAction = async (actionValue) => {
             <div>
               <label className="block text-xs text-text-muted mb-1">Action</label>
               <select
-                  disabled={readOnly || !canEditBuilder}
-                  value={selectedaction || ""}
-                  onChange={(e) => {
-                    const action = e.target.value;
-                    updateProps({ selectedaction: action });
-                    handleAction(action);
-                  }}
-                  className="w-full px-2 py-1 rounded bg-surface border border-border text-text-primary"
-                >
-                  <option value="">None</option>
-
-                  {filteredActionOptions.map(act => {
-                    if (act.category !== "Video") return null;
-
-                    return (
-                      <option key={act.value} value={act.value}>
-                        {act.label}
-                      </option>
-                    );
-                  })}
-                </select>
+                disabled={readOnly || !canEditBuilder}
+                value={selectedaction || ""}
+                onChange={(e) => {
+                  const action = e.target.value;
+                  updateProps({ selectedaction: action });
+                  handleAction(action);
+                }}
+                className="w-full px-2 py-1 rounded bg-surface border border-border text-text-primary"
+              >
+                <option value="">None</option>
+                {filteredActionOptions.map((act) => (
+                  <option key={act.value} value={act.value}>
+                    {act.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </InspectorSection>
         )}
@@ -345,11 +335,12 @@ const handleAction = async (actionValue) => {
                 >
                   <option value="">None</option>
                   {targetOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
                   ))}
                 </select>
               </div>
-
               <div>
                 <label className="block text-xs text-text-muted mb-1">Target ID (manual)</label>
                 <input
@@ -388,7 +379,9 @@ const handleAction = async (actionValue) => {
         {(canBuild || readOnly) && (
           <InspectorSection title="Danger Zone" defaultOpen={false}>
             <button
-              onClick={() => { if (!readOnly && canBuild) onDelete?.(); }}
+              onClick={() => {
+                if (!readOnly && canBuild) onDelete?.();
+              }}
               disabled={readOnly || !canBuild}
               className="mt-2 w-full px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -400,22 +393,28 @@ const handleAction = async (actionValue) => {
     </div>
   );
 
+  // --- RENDER LAYOUTS ---
   if (layout === "floating") {
     return (
       <Rnd
         className="rnd-wrapper"
-        default={{ x: position.x, y: position.y, width: 300, height: 380 }}
         bounds="window"
         dragHandleClassName="inspector-drag-handle"
         enableResizing={false}
         minWidth={280}
+        position={position}
+        onDragStop={(e, d) => setPosition?.({ x: d.x, y: d.y })}
+        default={{ x: position.x, y: position.y, width: 300, height: 380 }}
       >
         {body}
       </Rnd>
     );
   }
 
-  return layout === "right" ? <div className="shrink-0">{body}</div> : <div className="w-full border-t border-border mt-2">{body}</div>;
+  if (layout === "right") return <div className="shrink-0">{body}</div>;
+  if (layout === "docked" || layout === "bottom") return <div className="w-full border-t border-border mt-2">{body}</div>;
+
+  return null;
 });
 
 export default InspectorContent;
