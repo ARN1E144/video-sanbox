@@ -14,6 +14,7 @@ export function ProjectProvider({ children }) {
   const [projectSchema, setProjectSchema] = useState(makeEmptyProjectSchema());
   const [viewMode, setViewMode] = useState("preview");
   const [projectType, setProjectType] = useState("single");
+  const [collapsed, setCollapsed] = useState(false);
 
   const [backgroundConfigs, setBackgroundConfigs] = useState(DEFAULT_BACKGROUND_CONFIGS);
 
@@ -49,24 +50,24 @@ export function ProjectProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({
-      projectSchema,
-      setProjectSchema,
-      viewMode,
-      setViewMode,
-      projectType,
-      setProjectType,
-      backgroundConfigs,
-      setBackgroundConfigs,
-
-      // new
-      projects,
-      saveProject,
-      loadProject,
-      deleteProject,
-    }),
-    [projectSchema, viewMode, projectType, backgroundConfigs, projects]
-  );
+  () => ({
+    projectSchema,
+    setProjectSchema,
+    viewMode,
+    setViewMode,
+    projectType,
+    setProjectType,
+    backgroundConfigs,
+    setBackgroundConfigs,
+    projects,
+    saveProject,
+    loadProject,
+    deleteProject,
+    collapsed,
+    setCollapsed,
+  }),
+  [projectSchema, viewMode, projectType, backgroundConfigs, projects, collapsed]
+);
 
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }

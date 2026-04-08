@@ -2,9 +2,15 @@ import React, { useState, useContext } from "react";
 import { ProjectContext } from "../context/ProjectContext";
 
 export default function ProjectSidebar() {
-  const [collapsed, setCollapsed] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
-  const { projects, loadProject, deleteProject, saveProject } = useContext(ProjectContext);
+  const { 
+  projects, 
+  loadProject, 
+  deleteProject, 
+  saveProject,
+  collapsed,
+  setCollapsed
+} = useContext(ProjectContext);
 
   const handleSave = () => {
     if (!newProjectName.trim()) return alert("Enter a project name");

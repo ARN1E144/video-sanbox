@@ -14,6 +14,7 @@ import { useActionContext } from "../context/ActionContext";
 import { useAuth } from "../context/AuthContext";
 
 
+
 const DEVICE_SIZES = {
   desktop: { width: 1440, height: 900 },
   tablet: { width: 1024, height: 768 },
@@ -116,12 +117,6 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
 
   const selectedElement = visibleElements.find(el => el.id === selectedId) || null;
 
-  // Auto-calculate canvas width based on sidebar and inspector
-  const sidebarWidth = sidebarCollapsed ? 40 : 260;
-  const inspectorWidth =
-    !isSplitView && effectiveLayout === "right" ? 280 : 0;
-  const gap = 24;
-  const canvasWidth = window.innerWidth - sidebarWidth - inspectorWidth - gap;
 
   // Drop handler
   const handleDrop = (e) => {
@@ -186,7 +181,7 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
   return (
     <div className="flex w-full h-full relative overflow-hidden gap-4">
       {/* LEFT ELEMENTS / LAYERS SIDEBAR */}
-      <div className="bg-panel border-r border-border p-3" style={{ width: sidebarWidth }}>
+      <div className="bg-panel border-r border-border p-3" style={{ width: 250 }}>
         <Tabs activeTab={activeTab} setActiveTab={setActiveTab} tabs={["Elements", "Layers"]} />
 
         {activeTab === "Elements" &&
@@ -230,7 +225,7 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
           onDragOver={(e) => isBuilderEditable && e.preventDefault()}
           className="relative border border-border rounded-xl overflow-hidden"
           style={{
-            width: canvasWidth,
+            width: "100%",
             height: DEVICE_SIZES[device].height * scale,
             transform: `scale(${scale})`,
             transformOrigin: "top left",
