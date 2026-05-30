@@ -9,6 +9,7 @@ import AppBar from './AppBar';
 import Container from './Container';
 import Text from './Text';
 import withActions from './withActions';
+import ControlPanel from './ControlPanel';  
 
 /**
  * Wrap all components with withActions HOC
@@ -20,6 +21,7 @@ const registry = {
   ChatPanel: withActions(ChatPanel),
   TextBox: withActions(TextBox),
   MicButton: withActions(MicButton),
+  ControlPanel: withActions(ControlPanel),
   ControlButton: withActions(ControlButton),
   AppBar: withActions(AppBar),
   Container: withActions(Container),

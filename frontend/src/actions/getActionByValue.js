@@ -1,10 +1,9 @@
-// src/actions/getActionByValue.js
-import { actionRegistry } from "../actions/actionsRegistry";
+import { actionRegistry } from "./actionsRegistry";
 
 export function getActionByValue(value) {
-  for (const categoryKey of Object.keys(actionRegistry)) {
-    const category = actionRegistry[categoryKey];
-    if (category[value]) return category[value];
-  }
-  return null;
+  if (!value) return null;
+
+  const [category, name] = value.split(".");
+
+  return actionRegistry?.[category]?.[name] || null;
 }

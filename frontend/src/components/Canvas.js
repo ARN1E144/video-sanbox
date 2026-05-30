@@ -12,6 +12,7 @@ import { useCanvasState } from "../context/CanvasContext";
 import { useProjectContext, ProjectContext } from "../context/ProjectContext";
 import { useActionContext } from "../context/ActionContext";
 import { useAuth } from "../context/AuthContext";
+import { CONTROL_TEMPLATES } from "../constants/controlTemplates";
 
 
 
@@ -29,6 +30,12 @@ const extractDefaults = (editableProps = {}) => {
   });
   return result;
 };
+
+const SYSTEM_LOCKED_KEYS = new Set([
+  "controls",
+  "action",
+  "bindings"
+]);
 
 export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
   const { isPreviewMode, previewView } = usePreviewMode();
@@ -115,6 +122,8 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
     return el.role === role;
   });
 
+  console.log("[CANVAS] visibleElements", visibleElements);
+
   const selectedElement = visibleElements.find(el => el.id === selectedId) || null;
 
 
@@ -132,6 +141,15 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
 
     const defaultPropsByType = {
       ControlButton: { label: "Button", action: "", targetId: "", apiUrl: "" },
+      ControlPanel: {
+        layout: "vertical",
+        position: "left",
+        controls: [
+          CONTROL_TEMPLATES.mic,
+          CONTROL_TEMPLATES.camera,
+          CONTROL_TEMPLATES.end
+        ]
+      },
       MicButton: { label: "Mic", action: "ToggleMic" },
       VideoFeed: {
         label: "Video",
@@ -145,6 +163,21 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
       ChatPanel: { label: "Chat" },
     };
 
+    const system = defaultPropsByType[meta.name] || {};
+    const metaDefaults = extractDefaults(meta.editableProps) || {};
+
+    const sanitizeProps = (system, meta) => {
+      const clean = { ...meta };
+
+      SYSTEM_LOCKED_KEYS.forEach((key) => {
+        if (system[key] !== undefined) {
+          clean[key] = system[key];
+        }
+      });
+
+      return clean;
+    };
+
     const newId = uuid();
 
     addElement({
@@ -155,10 +188,11 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
       y: y - 75,
       width: 300,
       height: 150,
+
+      // ONLY UI props
       props: {
-        ...(defaultPropsByType[meta.name] || {}),
-        ...extractDefaults(meta.editableProps),
-      },
+        ...sanitizeProps(system, metaDefaults)
+      }
     });
 
     if (meta.name === "VideoFeed" && cameraOn) {
@@ -305,7 +339,7 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
           position={floatingPos}
           setPosition={setFloatingPos}
           selectedId={selectedId}
-          elements={visibleElements}
+          elements={selectedElement ? [selectedElement] : []}
           updateElement={updateElement}
           toggleDock={toggleDock}
           toggleOpen={toggleInspector}

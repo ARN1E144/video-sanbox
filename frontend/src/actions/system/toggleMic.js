@@ -1,18 +1,41 @@
-// src/actions/call/toggleMic.js
 export default async function toggleMic(ctx, params = {}) {
-  const { id, targetId, muted } = params;
-  const bindId = targetId || id;
+  try {
+    const {
+      targetId,
+      bindId: paramBindId,
+      id,
+    } = params;
 
-  if (typeof muted !== "boolean") {
-    console.warn("[toggleMic] 'muted' must be a boolean");
-    return;
+    const bindId =
+      targetId ||
+      paramBindId ||
+      ctx.targetId ||
+      ctx.agora?.userId ||
+      id ||
+      ctx.id;
+
+    if (!bindId) {
+      console.log("[toggleMic] Falling back to global agora state");
+      return ctx.toggleMic?.();
+    }
+
+    const currentBinding =
+      ctx.bindings?.[bindId] || {};
+
+    const nextMuted =
+      !(currentBinding.muted === true);
+
+    ctx.updateBinding(bindId, {
+      muted: nextMuted,
+    });
+
+    ctx.notify?.(
+      nextMuted ? "Microphone muted" : "Microphone unmuted"
+    );
+
+    return { muted: nextMuted };
+  } catch (err) {
+    console.error("[toggleMic] failed", err);
+    return null;
   }
-
-  // Update binding so AgoraFeed can enable/disable audio track
-  ctx.updateBinding(bindId, { muted });
-
-  ctx.notify(`Microphone ${muted ? "muted" : "unmuted"}`);
-  console.log("[toggleMic] Mic state updated", { bindId, muted });
-
-  return { muted };
 }

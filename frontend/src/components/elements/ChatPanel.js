@@ -1,8 +1,19 @@
-// src/components/elements/ChatPanel.js
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { useRuntimeState } from "../../context/RuntimeStateContext";
 
-export default function ChatPanel({ style, items }) {
-  const list = Array.isArray(items) ? items : [];
+export default function ChatPanel({ style, bindKey = "chat.messages" }) {
+  const runtimeState = useRuntimeState();
+
+  const [messages, setMessages] = useState([]);
+
+  // pull initial state
+  useEffect(() => {
+    setMessages(runtimeState.get(bindKey) || []);
+
+    return runtimeState.subscribe(bindKey, (value) => {
+      setMessages(value || []);
+    });
+  }, [bindKey, runtimeState]);
 
   return (
     <div
@@ -13,12 +24,14 @@ export default function ChatPanel({ style, items }) {
         borderRadius: style?.borderRadius || 8,
       }}
     >
-      {list.length === 0 ? (
+      {messages.length === 0 ? (
         <div style={{ opacity: 0.7 }}>No messages yet…</div>
       ) : (
-        list.map((msg, i) => (
-          <div key={i} style={{ marginBottom: 6, lineHeight: 1.25 }}>
-            {typeof msg === "string" ? msg : msg?.text ?? JSON.stringify(msg)}
+        messages.map((msg, i) => (
+          <div key={i} style={{ marginBottom: 6 }}>
+            {typeof msg === "string"
+              ? msg
+              : msg?.text ?? JSON.stringify(msg)}
           </div>
         ))
       )}

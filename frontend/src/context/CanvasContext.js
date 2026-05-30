@@ -50,6 +50,7 @@ export function CanvasProvider({ children }) {
     }
 
     const project = projects[activeProject];
+    
     if (project && Array.isArray(project.elements)) {
       const normalized = normalizeElements(project.elements);
       setElements(normalized);

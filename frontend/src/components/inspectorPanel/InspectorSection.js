@@ -5,7 +5,7 @@ export default function InspectorSection({ title, children, defaultOpen = true }
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="border-b border-border last:border-b-0">
+    <div className="border-b border-border last:border-b-0 space-y-2 min-h-0">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -24,7 +24,7 @@ export default function InspectorSection({ title, children, defaultOpen = true }
           open ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
-        {open && <div className="pb-3 space-y-3">{children}</div>}
+        {open && <div className="pb-3 space-y-3 min-h-0 overflow-y-auto max-h-[250px]">{children}</div>}
       </div>
     </div>
   );

@@ -1,0 +1,24 @@
+{
+  "name": "ControlPanel",
+  "category": "controls",
+  "icon": "🎛️",
+  "editableProps": {
+    "layout": {
+      "type": "select",
+      "default": "vertical",
+      "options": [
+        { "label": "Vertical", "value": "vertical" },
+        { "label": "Horizontal", "value": "horizontal" }
+      ]
+    },
+    "position": {
+      "type": "select",
+      "default": "left",
+      "options": [
+        { "label": "Left", "value": "left" },
+        { "label": "Right", "value": "right" },
+        { "label": "Bottom", "value": "bottom" }
+      ]
+    }
+  }
+}

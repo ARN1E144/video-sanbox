@@ -1,267 +1,152 @@
 // src/context/ActionContext.js
 
-import React, { createContext, useContext, useState, useCallback } from "react";
-import { actionRegistry } from "../actions/actionsRegistry";
-import { runAction } from "../utils/actionExecutor";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
+
+import { runRuntimeAction } from "../runtime/runRuntimeAction";
 import { runActionPipeline } from "../utils/actionPipeline";
+import { useRuntimeState } from "./RuntimeStateContext";
 
 const ActionContext = createContext(null);
 
-const LOG_PREFIX = "[ActionContext]";
-
 export function ActionProvider({ children }) {
-  /**
-   * Element bindings
-   * Runtime state applied to elements (VideoFeed, ChatPanel etc)
-   */
   const [bindings, setBindings] = useState({});
 
-  /**
-   * Global runtime state
-   * Used for workflows, API results, etc
-   */
-  const [state, setState] = useState({});
+  // =====================================================
+  // RUNTIME STATE (SINGLE SOURCE OF TRUTH)
+  // =====================================================
+  const runtimeState = useRuntimeState();
 
-  /**
-   * --------------------------------
-   * Element Binding Management
-   * --------------------------------
-   */
+  const get = runtimeState.get;
+  const set = runtimeState.set;
+  const patch = runtimeState.patch;
 
-  const updateBinding = useCallback((elementId, partialProps) => {
-    if (!elementId) return;
-
-    setBindings((prev) => {
-      const prevBinding = prev[elementId] || {};
-      const nextBinding = { ...prevBinding, ...partialProps };
-
-      console.log(`${LOG_PREFIX} updateBinding`, {
-        elementId,
-        partialProps,
-        nextBinding,
-      });
-
-      return { ...prev, [elementId]: nextBinding };
-    });
-  }, []);
-
+  // =====================================================
+  // BINDINGS
+  // =====================================================
   const getBinding = useCallback(
-    (elementId) => (elementId ? bindings[elementId] : undefined),
+    (id) => bindings[id] || null,
     [bindings]
   );
 
-  const clearBinding = useCallback((elementId) => {
-    if (!elementId) return;
-
+  const updateBinding = useCallback((id, patchData = {}) => {
     setBindings((prev) => {
-      if (!prev[elementId]) return prev;
+      const cur = prev[id] || {};
 
+      return {
+        ...prev,
+        [id]: {
+          ...cur,
+          ...patchData,
+          config: { ...(cur.config || {}), ...(patchData.config || {}) },
+          state: { ...(cur.state || {}), ...(patchData.state || {}) },
+        },
+      };
+    });
+  }, []);
+
+  const removeBinding = useCallback((id) => {
+    setBindings((prev) => {
       const next = { ...prev };
-      delete next[elementId];
-
-      console.log(`${LOG_PREFIX} clearBinding`, { elementId });
-
+      delete next[id];
       return next;
     });
   }, []);
 
-  const clearAllBindings = useCallback(() => {
-    console.log(`${LOG_PREFIX} clearAllBindings`);
-    setBindings({});
-  }, []);
+  const clearBindings = useCallback(() => setBindings({}), []);
 
-  /**
-   * --------------------------------
-   * Chat / Feed helpers
-   * --------------------------------
-   */
-
-  const appendFeed = useCallback((elementId, message) => {
-    if (!elementId) return;
-
+  const appendFeedItem = useCallback((id, item) => {
     setBindings((prev) => {
-      const existing = prev[elementId]?.items || [];
-      const nextItems = [...existing, message];
-
-      const nextBinding = {
-        ...(prev[elementId] || {}),
-        items: nextItems,
+      const cur = prev[id] || {};
+      return {
+        ...prev,
+        [id]: {
+          ...cur,
+          items: [...(cur.items || []), item],
+        },
       };
-
-      console.log(`${LOG_PREFIX} appendFeed`, {
-        elementId,
-        message,
-        nextBinding,
-      });
-
-      return { ...prev, [elementId]: nextBinding };
     });
   }, []);
 
-  /**
-   * --------------------------------
-   * Global State
-   * --------------------------------
-   */
-
-  const get = useCallback((key) => state[key], [state]);
-
-  const set = useCallback((key, value) => {
-    console.log(`${LOG_PREFIX} set`, { key, value });
-
-    setState((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-  }, []);
-
-  /**
-   * --------------------------------
-   * Notifications
-   * --------------------------------
-   */
-
+  // =====================================================
+  // NOTIFY (V1)
+  // =====================================================
   const notify = useCallback((msg) => {
-    console.log("[Action notify]", msg);
+    console.log("[notify]", msg);
   }, []);
 
-  /**
-   * --------------------------------
-   * Camera Helpers (VideoFeed)
-   * --------------------------------
-   */
+  // =====================================================
+  // SAFE RUNTIME CONTEXT BUILDER
+  // =====================================================
+  const buildRuntimeContext = useCallback(() => {
+    return {
+      bindings,
 
-  const cameraOn = useCallback(
-    (elementId) => {
-      console.log(`${LOG_PREFIX} cameraOn`, { elementId });
+      get,
+      set,
+      patch,
 
-      updateBinding(elementId, {
-        enabled: true,
-        playing: true,
-      });
-    },
-    [updateBinding]
-  );
+      notify,
 
-  const cameraOff = useCallback(
-    (elementId) => {
-      console.log(`${LOG_PREFIX} cameraOff`, { elementId });
+      getBinding,
+      updateBinding,
+      removeBinding,
+      clearBindings,
+      appendFeedItem,
 
-      updateBinding(elementId, {
-        enabled: false,
-        playing: false,
-      });
-    },
-    [updateBinding]
-  );
+      // 🔥 SAFE OPTIONAL MODULE (NO HARD DEPENDENCY)
+      agora: runtimeState?.agora ?? null,
+    };
+  }, [
+    bindings,
+    get,
+    set,
+    patch,
+    notify,
+    getBinding,
+    updateBinding,
+    removeBinding,
+    clearBindings,
+    appendFeedItem,
+    runtimeState,
+  ]);
 
-  const cameraToggleEnabled = useCallback((elementId) => {
-    if (!elementId) return;
-
-    setBindings((prev) => {
-      const current = prev[elementId] || {};
-      const nextEnabled = !(current.enabled ?? true);
-
-      console.log(`${LOG_PREFIX} cameraToggleEnabled`, {
-        elementId,
-        prevEnabled: current.enabled,
-        nextEnabled,
-      });
-
-      return {
-        ...prev,
-        [elementId]: { ...current, enabled: nextEnabled },
-      };
-    });
-  }, []);
-
-  const cameraTogglePlaying = useCallback((elementId) => {
-    if (!elementId) return;
-
-    setBindings((prev) => {
-      const current = prev[elementId] || {};
-      const nextPlaying = !(current.playing ?? true);
-
-      console.log(`${LOG_PREFIX} cameraTogglePlaying`, {
-        elementId,
-        prevPlaying: current.playing,
-        nextPlaying,
-      });
-
-      return {
-        ...prev,
-        [elementId]: { ...current, playing: nextPlaying },
-      };
-    });
-  }, []);
-
-  const cameraSetDevice = useCallback(
-    (elementId, deviceId) => {
-      console.log(`${LOG_PREFIX} cameraSetDevice`, { elementId, deviceId });
-
-      updateBinding(elementId, { deviceId });
-    },
-    [updateBinding]
-  );
-
-  const cameraSetMuted = useCallback(
-    (elementId, muted) => {
-      console.log(`${LOG_PREFIX} cameraSetMuted`, { elementId, muted });
-
-      updateBinding(elementId, { muted });
-    },
-    [updateBinding]
-  );
-
-  /**
-   * --------------------------------
-   * ACTION EXECUTION (Registry Based)
-   * --------------------------------
-   */
-
+  // =====================================================
+  // ACTION EXECUTION
+  // =====================================================
   const executeAction = useCallback(
-    async (actionName, payload = {}) => {
-      const entry = actionRegistry[actionName];
+    async (actionName, params = {}) => {
+      runtimeState.beginTransaction();
 
-      if (!entry) {
-        console.warn(`${LOG_PREFIX} Unknown action`, actionName);
-        return;
-      }
+      const ctx = buildRuntimeContext();
 
       try {
-        console.log(`${LOG_PREFIX} executeAction`, {
-          action: actionName,
-          payload,
-        });
+        const result = await runRuntimeAction(
+          actionName,
+          ctx,
+          params
+        );
 
-        await entry.run(payload, {
-          bindings,
-          state,
-          get,
-          set,
-          notify,
-          updateBinding,
-          appendFeed,
-        });
+        runtimeState.commit();
+
+        return result;
       } catch (err) {
-        console.error(`${LOG_PREFIX} Action failed`, actionName, err);
+        runtimeState.commit();
+        throw err;
       }
     },
-    [bindings, state, get, set, notify, updateBinding, appendFeed]
+    [runtimeState, buildRuntimeContext]
   );
-
-  /**
-   * --------------------------------
-   * ACTION PIPELINE (Workflows)
-   * --------------------------------
-   */
 
   const executePipeline = useCallback(
     async (pipeline = [], payload = {}) => {
-      console.log(`${LOG_PREFIX} executePipeline`, pipeline);
-
-      await runActionPipeline(pipeline, payload, {
-        runAction: executeAction,
+      return runActionPipeline(pipeline, payload, {
+        runRuntimeAction: executeAction,
         get,
         set,
         notify,
@@ -270,45 +155,56 @@ export function ActionProvider({ children }) {
     [executeAction, get, set, notify]
   );
 
-  /**
-   * --------------------------------
-   * Context Value
-   * --------------------------------
-   */
+  // =====================================================
+  // CONTEXT VALUE
+  // =====================================================
+  const value = useMemo(
+    () => ({
+      runtimeState,
+      bindings,
 
-  const value = {
-    bindings,
+      getBinding,
+      updateBinding,
+      removeBinding,
+      clearBindings,
+      appendFeedItem,
 
-    getBinding,
-    updateBinding,
-    clearBinding,
-    clearAllBindings,
-    appendFeed,
+      get,
+      set,
 
-    get,
-    set,
+      runRuntimeAction: executeAction,
+      runActionPipeline: executePipeline,
 
-    notify,
+      notify,
+    }),
+    [
+      runtimeState,
+      bindings,
+      getBinding,
+      updateBinding,
+      removeBinding,
+      clearBindings,
+      appendFeedItem,
+      get,
+      set,
+      executeAction,
+      executePipeline,
+      notify,
+    ]
+  );
 
-    cameraOn,
-    cameraOff,
-    cameraToggleEnabled,
-    cameraTogglePlaying,
-    cameraSetDevice,
-    cameraSetMuted,
-
-    runAction: executeAction,
-    runActionPipeline: executePipeline,
-  };
-
-  return <ActionContext.Provider value={value}>{children}</ActionContext.Provider>;
+  return (
+    <ActionContext.Provider value={value}>
+      {children}
+    </ActionContext.Provider>
+  );
 }
 
 export function useActionContext() {
   const ctx = useContext(ActionContext);
 
   if (!ctx) {
-    throw new Error("useActionContext must be used inside <ActionProvider>");
+    throw new Error("useActionContext must be used inside provider");
   }
 
   return ctx;
