@@ -12,7 +12,7 @@ import requireTenant from "../middleware/requireTenant.js";
 const router = express.Router();
 
 function isEmployeeRole(role) {
-  return role === "owner" || role === "admin" || role === "builder";
+  return role === "owner" || role === "admin" || role === "builder" || role === "operative";
 }
 
 async function loadMembership(req) {
@@ -31,8 +31,8 @@ function makeChannelName({ tenantId, userId }) {
 // "room"  = creator makes a channel; others can join (no claim needed)
 const DEFAULT_CALL_POLICY = {
   mode: "queue",
-  creators: ["member"], // who can create a call
-  responders: ["owner", "admin", "builder"], // who can accept/claim
+  creators: ["member", "owner", "admin", "builder", "operative"], // who can create a call
+  responders: ["owner", "admin", "builder", "operative"], // who can accept/claim
 };
 
 // role helpers using policy (NOT platform permissions)
@@ -49,6 +49,7 @@ function canAcceptCall(membership, policy = DEFAULT_CALL_POLICY) {
  * POST /api/calls
  */
 router.post("/", requireAuth, requireTenant, async (req, res) => {
+  console.log("REQ USER:", req.user);
     
   try {
     const membership = await loadMembership(req);

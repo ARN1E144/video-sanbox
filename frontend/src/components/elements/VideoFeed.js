@@ -1,72 +1,99 @@
-// src/components/elements/VideoFeed.js
 import React, { useEffect, useRef, useState } from "react";
-import { bindActions } from "../../utils/actionBinder";
+
 import { useActionContext } from "../../context/ActionContext";
-import { getActionOptions } from "../../actions/getActionsOptions";
-import { actionRegistry } from "../../actions/actionsRegistry";
-import { Play, Pause, Video, Square } from "lucide-react";
+import { bindActions } from "../../utils/actionBinder";
 import { runAction } from "../../utils/actionExecutor";
 
-
 export default function VideoFeed(props) {
-const {
-  id,
-  meta,
-  poster,
-  showSpinner = true,
-  objectFit = "cover",
-  borderRadius = 12,
-  style = {},
-  mirror = true,
-  deviceId,
-  emitAction,
-  mode: propMode = "local",
-  src: propSrc = null,
-  enabled: propEnabled = true,
-  playing: propPlaying = true,
-  muted: propMuted = true,
-  ...restProps
-} = props;
-  
-  
+  const {
+    id,
+    meta = {},
+    style = {},
+    ...restProps
+  } = props;
+
+  // =====================================================
+  // CONTEXT
+  // =====================================================
+
   const actionCtx = useActionContext?.();
-  const { bindings } = actionCtx;
-  const binding = bindings[id] || {};
+  const { bindings = {} } = actionCtx || {};
 
-  const mode = binding.mode?.value ?? propMode;
-  const src = binding.src ?? propSrc;
-  const enabled = binding.enabled ?? propEnabled;
-  const playing = binding.playing ?? propPlaying;
-  const muted = binding.muted ?? propMuted;
+  const binding = bindings?.[id] || {};
 
-  const [isLoading, setIsLoading] = useState(true);
+  // =====================================================
+  // META DEFAULTS (INSPECTOR DRIVEN)
+  // =====================================================
+
+  const defaults = meta?.editableProps || {};
+
+  const mode =
+    binding.mode ??
+    defaults.mode?.default ??
+    "local";
+
+  const src =
+    binding.src ??
+    defaults.src?.default ??
+    null;
+
+  const enabled =
+    binding.enabled ??
+    defaults.enabled?.default ??
+    true;
+
+  const playing =
+    binding.playing ??
+    defaults.playing?.default ??
+    true;
+
+  const muted =
+    binding.muted ??
+    defaults.muted?.default ??
+    true;
+
+  const mirror =
+    binding.mirror ??
+    defaults.mirror?.default ??
+    true;
+
+  const objectFit =
+    binding.objectFit ??
+    defaults.objectFit?.default ??
+    "cover";
+
+  const borderRadius =
+    binding.borderRadius ??
+    defaults.borderRadius?.default ??
+    12;
+
+  // =====================================================
+  // STATE (FIXED — REQUIRED FOR YOUR LOGIC)
+  // =====================================================
+
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // =====================================================
+  // REFS
+  // =====================================================
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const hlsRef = useRef(null);
-  
 
-  // Fix "Auto" / invalid src
-  const actualMode = mode === "Auto" ? (src ? "remote" : "local") : mode;
+  // =====================================================
+  // ACTION BINDING
+  // =====================================================
 
   const actionHandlers = bindActions(meta, actionCtx, id);
 
-  const videoActions = getActionOptions().filter((a) =>
-    ["startStream", "stopStream", "togglePlay"].includes(a.value)
-  );
+  // =====================================================
+  // HELPERS
+  // =====================================================
 
-  console.log("[VideoFeed] Video Actions:", videoActions);
-
-  
-
-  const actionIcons = {
-    startStream: Video,
-    stopStream: Square,
-    togglePlay: playing ? Pause : Play, 
-  };
-
-  const isHlsUrl = (u) => typeof u === "string" && /\.m3u8(\?.*)?$/i.test(u.trim());
+  const isHlsUrl = (u) =>
+    typeof u === "string" && /\.m3u8(\?.*)?$/i.test(u.trim());
 
   const destroyHls = () => {
     if (hlsRef.current) {
@@ -90,10 +117,15 @@ const {
     stopLocalStream();
 
     try { video.pause(); } catch {}
+
     video.srcObject = null;
     video.removeAttribute("src");
     video.load();
   };
+
+  // =====================================================
+  // MEDIA ATTACHMENT
+  // =====================================================
 
   const attachLocalCamera = async () => {
     const video = videoRef.current;
@@ -103,10 +135,15 @@ const {
     setIsLoading(true);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+
       streamRef.current = stream;
       video.srcObject = stream;
       video.muted = true;
+
       await video.play()?.catch(() => {});
       setIsLoading(false);
       setError(null);
@@ -137,13 +174,19 @@ const {
 
         const hls = new Hls();
         hlsRef.current = hls;
+
         hls.attachMedia(video);
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
+
+        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+          hls.loadSource(url);
+        });
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           setIsLoading(false);
           setError(null);
           if (playing) video.play()?.catch(() => {});
         });
+
         hls.on(Hls.Events.ERROR, (_evt, data) => {
           if (data?.fatal) {
             setError("Stream error");
@@ -159,32 +202,38 @@ const {
       video.srcObject = null;
       video.src = url;
       video.load();
+
       if (playing) video.play()?.catch(() => {});
+
       setIsLoading(false);
       setError(null);
     }
   };
 
-  /* -------------------- Playback / Mute -------------------- */
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (playing) video.play()?.catch(() => {});
-    else video.pause();
-  }, [playing]);
+  // =====================================================
+  // ACTION MAPPING
+  // =====================================================
 
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.muted = muted;
-    if (streamRef.current?.getAudioTracks) {
-      streamRef.current.getAudioTracks().forEach((track) => {
-        track.enabled = !muted;
-      });
-    }
-  }, [muted]);
+  const VIDEO_ACTION_KEY_MAP = {
+    startStream: "video.startStream",
+    stopStream: "video.stopStream",
+    togglePlay: "video.togglePlay",
+  };
 
-  /* -------------------- Video Mode Effect -------------------- */
+  const handleAction = (actionValue) => {
+    if (!actionValue) return;
+
+    runAction(
+      VIDEO_ACTION_KEY_MAP[actionValue] || actionValue,
+      actionCtx,
+      { id, targetId: id, videoRef, streamRef }
+    );
+  };
+
+  // =====================================================
+  // EFFECTS
+  // =====================================================
+
   useEffect(() => {
     if (!enabled) {
       resetVideoElement();
@@ -193,44 +242,36 @@ const {
 
     if (mode === "local") {
       attachLocalCamera();
-    } else if (mode === "remote") {
-      stopLocalStream();
-      if (src) attachRemote(src);
-      else {
-        resetVideoElement(); // black screen until URL provided
-        setIsLoading(false);
-      }
     }
+
+    if (mode === "remote" && src) {
+      attachRemote(src);
+    }
+
     return () => {
       stopLocalStream();
       destroyHls();
     };
   }, [mode, src, enabled]);
 
-  /* -------------------- Actions -------------------- */
+  // =====================================================
+  // RENDER
+  // =====================================================
 
-  const VIDEO_ACTION_KEY_MAP = {
-  startStream: "video.startStream",
-  stopStream: "video.stopStream",
-  togglePlay: "video.togglePlay",
-};
-   
-   const handleAction = (actionValue) => {
-  if (!actionValue) return;
-  console.log(`[VideoFeed] Running action: ${actionValue} with context:`, actionCtx);
-  runAction(VIDEO_ACTION_KEY_MAP[actionValue] || actionValue, actionCtx, {
-    id,
-    targetId: id,
-    videoRef,
-    streamRef,
-  });
-};
-
-  /* -------------------- Render -------------------- */
   return (
-  <div {...actionHandlers} style={{ ...style, width: "100%", height: "100%", position: "relative", overflow: "hidden", borderRadius, backgroundColor: "#000" }} {...restProps}>
-    
-    {(actualMode === "local" || (actualMode === "remote" && src)) && (
+    <div
+      {...actionHandlers}
+      {...restProps}
+      style={{
+        ...style,
+        width: "100%",
+        height: "100%",
+        position: "relative",
+        overflow: "hidden",
+        borderRadius,
+        backgroundColor: "#000",
+      }}
+    >
       <video
         ref={videoRef}
         playsInline
@@ -239,41 +280,24 @@ const {
           width: "100%",
           height: "100%",
           objectFit,
-          transform: mirror && actualMode === "local" ? "scaleX(-1)" : "none",
+          transform:
+            mirror && mode === "local"
+              ? "scaleX(-1)"
+              : "none",
         }}
       />
-    )}
 
-    {isLoading && poster && <img src={poster} alt="Video poster" className="absolute inset-0 w-full h-full object-cover" draggable={false} />}
-    {isLoading && showSpinner && <div className="absolute inset-0 flex items-center justify-center bg-black/30"><div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent" /></div>}
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center text-white text-xs bg-black/40">
+          Loading…
+        </div>
+      )}
 
-    {(actualMode === "local" || actualMode === "remote") && (
-      <div className="absolute bottom-2 left-2 flex gap-2 bg-black/60 backdrop-blur px-2 py-1 rounded-md">
-        {videoActions.map((act) => {
-          const Icon = actionIcons[act.value];
-          if (!Icon) return null;
-          return (
-            <button
-          key={act.value}
-          title={act.label}
-          className="p-1.5 text-white hover:bg-white/20 rounded"
-          onClick={() =>
-          runAction(VIDEO_ACTION_KEY_MAP[act.value] || act.value, actionCtx, {
-            id,
-            targetId: id,
-            videoRef,
-            streamRef,
-          })
-        }
-        >
-          <Icon size={14} />
-        </button>
-          );
-        })}
-      </div>
-    )}
-
-    {error && <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-red-400 text-xs p-2 text-center">{error}</div>}
-  </div>
-);
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center text-red-400 text-xs bg-black/70">
+          {error}
+        </div>
+      )}
+    </div>
+  );
 }

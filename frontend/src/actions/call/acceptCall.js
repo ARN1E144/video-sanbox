@@ -1,27 +1,38 @@
-// src/actions/call/acceptCall.js
 import api from "../../services/api";
 
 export default async function acceptCall(ctx, params = {}) {
-  const { id, targetId, callId } = params;
-  const bindId = targetId || id;
-
-  if (!callId) {
-    console.warn("No callId provided to acceptCall");
-    return;
-  }
-
   try {
+    const { callId } = params;
+
+    if (!callId) {
+      return {
+        ok: false,
+        error: "MISSING_CALL_ID",
+      };
+    }
+
     const { data } = await api.post(`/calls/${callId}/accept`);
 
-    // Update binding to mark the call as joined
-    ctx.updateBinding(bindId, { joined: true, callId: callId });
-    ctx.notify(`Call ${callId} accepted`);
+    const call = data.call;
 
-    console.log("[acceptCall] Call accepted", data);
-    return data;
+    const channel = call.channelName;
+
+    // 🔥 V1 SINGLE SOURCE OF TRUTH
+    ctx.set?.("call.callId", callId);
+    ctx.set?.("call.channel", channel);
+    ctx.set?.("call.state", "accepted");
+
+    return {
+      ok: true,
+      callId,
+      channel,
+    };
   } catch (err) {
-    console.error("[acceptCall] Error", err);
-    ctx.notify(`Failed to accept call: ${err.message || err}`);
-    return null;
+    console.error("[acceptCall]", err);
+
+    return {
+      ok: false,
+      error: err.message,
+    };
   }
 }

@@ -1,27 +1,36 @@
 // src/actions/call/endCall.js
+
 import api from "../../services/api";
 
 export default async function endCall(ctx, params = {}) {
-  const { id, targetId, callId } = params;
-  const bindId = targetId || id;
-
-  if (!callId) {
-    console.warn("No callId provided to endCall");
-    return;
-  }
-
   try {
-    const { data } = await api.post(`/calls/${callId}/end`);
+    const callId =
+      params.callId ||
+      ctx.get?.("call.id");
 
-    // Reset binding
-    ctx.updateBinding(bindId, { joined: false, callId: null });
-    ctx.notify(`Call ${callId} ended`);
+    if (!callId) {
+      return {
+        ok: false,
+        error: "MISSING_CALL_ID",
+      };
+    }
 
-    console.log("[endCall] Call ended", data);
-    return data;
+    await api.post(`/calls/${callId}/end`);
+
+    ctx.set?.("call.id", null);
+    ctx.set?.("call.channel", null);
+    ctx.set?.("call.joined", false);
+    ctx.set?.("call.state", "ended");
+
+    return {
+      ok: true,
+    };
   } catch (err) {
-    console.error("[endCall] Error", err);
-    ctx.notify(`Failed to end call: ${err.message || err}`);
-    return null;
+    console.error("[endCall]", err);
+
+    return {
+      ok: false,
+      error: err.message,
+    };
   }
 }

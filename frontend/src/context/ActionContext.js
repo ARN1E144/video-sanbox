@@ -6,6 +6,7 @@ import React, {
   useState,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 
 import { runRuntimeAction } from "../runtime/runRuntimeAction";
@@ -17,18 +18,16 @@ const ActionContext = createContext(null);
 export function ActionProvider({ children }) {
   const [bindings, setBindings] = useState({});
 
-  // =====================================================
-  // RUNTIME STATE (SINGLE SOURCE OF TRUTH)
-  // =====================================================
   const runtimeState = useRuntimeState();
+
+  const inFlightActions = useRef(new Set());
 
   const get = runtimeState.get;
   const set = runtimeState.set;
   const patch = runtimeState.patch;
 
-  // =====================================================
-  // BINDINGS
-  // =====================================================
+  /* ---------------- BINDINGS ---------------- */
+
   const getBinding = useCallback(
     (id) => bindings[id] || null,
     [bindings]
@@ -73,17 +72,17 @@ export function ActionProvider({ children }) {
     });
   }, []);
 
-  // =====================================================
-  // NOTIFY (V1)
-  // =====================================================
+  /* ---------------- NOTIFY ---------------- */
+
   const notify = useCallback((msg) => {
     console.log("[notify]", msg);
   }, []);
 
-  // =====================================================
-  // SAFE RUNTIME CONTEXT BUILDER
-  // =====================================================
+  /* ---------------- SAFE CTX BUILDER ---------------- */
+
   const buildRuntimeContext = useCallback(() => {
+    const agora = runtimeState?.agora;
+
     return {
       bindings,
 
@@ -99,8 +98,8 @@ export function ActionProvider({ children }) {
       clearBindings,
       appendFeedItem,
 
-      // 🔥 SAFE OPTIONAL MODULE (NO HARD DEPENDENCY)
-      agora: runtimeState?.agora ?? null,
+      // safe optional service
+      agora: agora || null,
     };
   }, [
     bindings,
@@ -116,32 +115,32 @@ export function ActionProvider({ children }) {
     runtimeState,
   ]);
 
-  // =====================================================
-  // ACTION EXECUTION
-  // =====================================================
-  const executeAction = useCallback(
-    async (actionName, params = {}) => {
-      runtimeState.beginTransaction();
+  /* ---------------- ACTION EXECUTION (HARDENED) ---------------- */
 
-      const ctx = buildRuntimeContext();
+  const executeAction = async (actionName, params) => {
+  if (!runtimeState.runtimeReady) return;
 
-      try {
-        const result = await runRuntimeAction(
-          actionName,
-          ctx,
-          params
-        );
+  runtimeState.beginTransaction();
 
-        runtimeState.commit();
+  const ctx = buildRuntimeContext();
 
-        return result;
-      } catch (err) {
-        runtimeState.commit();
-        throw err;
-      }
-    },
-    [runtimeState, buildRuntimeContext]
-  );
+  try {
+    const result = await runRuntimeAction(actionName, ctx, params);
+
+      runtimeState.commit();
+
+      console.log("[ACTION RAW RESULT]", {
+        actionName,
+        result,
+      });
+
+      return result; // 🔥 MUST RETURN
+  } catch (err) {
+    runtimeState.commit();
+    console.error("[Action Error]", actionName, err);
+    return null;
+  }
+};
 
   const executePipeline = useCallback(
     async (pipeline = [], payload = {}) => {
@@ -155,9 +154,8 @@ export function ActionProvider({ children }) {
     [executeAction, get, set, notify]
   );
 
-  // =====================================================
-  // CONTEXT VALUE
-  // =====================================================
+  /* ---------------- CONTEXT VALUE ---------------- */
+
   const value = useMemo(
     () => ({
       runtimeState,
@@ -202,10 +200,6 @@ export function ActionProvider({ children }) {
 
 export function useActionContext() {
   const ctx = useContext(ActionContext);
-
-  if (!ctx) {
-    throw new Error("useActionContext must be used inside provider");
-  }
-
+  if (!ctx) throw new Error("useActionContext must be used inside provider");
   return ctx;
 }

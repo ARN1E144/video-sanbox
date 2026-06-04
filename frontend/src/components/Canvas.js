@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useContext } from "react";
 import { Rnd } from "react-rnd";
 import { v4 as uuid } from "uuid";
 
-import COMPONENTS from "../components/elements/registry";
+import registry from "../components/elements/registry";
 import InspectorContent from "./inspectorPanel/InspectorContent";
 import Tabs from "./Tabs";
 
@@ -124,8 +124,12 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
 
   console.log("[CANVAS] visibleElements", visibleElements);
 
-  const selectedElement = visibleElements.find(el => el.id === selectedId) || null;
+  const selectedElement =
+  visibleElements.find((el) => el.id === selectedId) || null;
 
+    const selectedMeta = selectedElement
+      ? registry[selectedElement.type]?.meta
+      : null;
 
   // Drop handler
   const handleDrop = (e) => {
@@ -267,8 +271,10 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
           }}
         >
           {visibleElements.map((el) => {
-            const Comp = COMPONENTS[el.type];
-            if (!Comp) return null;
+            const entry = registry[el.type];
+            if (!entry?.component) return null;
+
+            const Comp = entry.component;
             const binding = bindings[el.id] || {};
 
             return (

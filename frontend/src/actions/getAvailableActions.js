@@ -1,21 +1,16 @@
 import { actionRegistry } from "./actionsRegistry";
 
 export function getAvailableActions(role = "participant") {
-
   const allowed = {};
 
-  Object.entries(actionRegistry).forEach(([groupName, group]) => {
+  Object.entries(actionRegistry).forEach(([group, actions]) => {
+    allowed[group] = {};
 
-    allowed[groupName] = {};
-
-    Object.entries(group).forEach(([actionName, action]) => {
-
+    Object.entries(actions).forEach(([name, action]) => {
       if (!action.roles || action.roles.includes(role)) {
-        allowed[groupName][actionName] = action;
+        allowed[group][name] = action;
       }
-
     });
-
   });
 
   return allowed;

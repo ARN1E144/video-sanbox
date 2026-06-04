@@ -2,6 +2,18 @@ export default {
   label: "Toggle Mic",
 
   run: async (ctx) => {
-    return await ctx.agora.toggleMic();
+    const agora = ctx?.agora;
+
+    if (!agora?.toggleMic) {
+      ctx?.notify?.("Audio controls unavailable");
+      return;
+    }
+
+    await agora.toggleMic();
+
+    const current = ctx.get?.("media.micEnabled");
+    ctx.set?.("media.micEnabled", !current);
+
+    return { success: true };
   },
 };

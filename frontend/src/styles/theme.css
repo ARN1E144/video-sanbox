@@ -1,0 +1,26 @@
+:root {
+  /* Core colors */
+  --accent: #7C3AED;
+  --accentLight: #A78BFA;
+  --background: #0E0E10;
+  --surface: #1A1A1D;
+  --border: #2A2A2E;
+  --textPrimary: #FFFFFF;
+  --textSecondary: #B3B3B3;
+  --danger: #EF4444;
+
+  /* spacing */
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+
+  /* radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+body {
+  background: var(--background);
+  color: var(--textPrimary);
+}

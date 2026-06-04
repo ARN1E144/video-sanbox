@@ -4,19 +4,77 @@
   "category": "media",
   "icon": "📡",
   "editableProps": {
-    "appId": "",
-    "channel": "",
-    "uid": 0,
-    "token": "",
-    "tokenEndpoint": "/agora/token",
-    "autoJoin": false,
-    "publishLocal": true,
-    "muted": false,
-    "cameraOff": false,
-    "mirror": true,
-    "objectFit": "cover",
-    "borderRadius": 12,
-    "style": { "backgroundColor": "#000000" }
+    "channel": {
+      "type": "string",
+      "ui": "build",
+      "label": "Channel",
+      "default": ""
+    },
+
+    "uid": {
+      "type": "number",
+      "ui": "runtime",
+      "label": "User ID",
+      "default": 0
+    },
+
+    "autoJoin": {
+      "type": "boolean",
+      "ui": "build",
+      "label": "Auto Join",
+      "default": false
+    },
+
+    "publishLocal": {
+      "type": "boolean",
+      "ui": "build",
+      "label": "Publish Local",
+      "default": true
+    },
+
+    "muted": {
+      "type": "boolean",
+      "ui": "runtime",
+      "label": "Muted",
+      "default": false
+    },
+
+    "cameraOff": {
+      "type": "boolean",
+      "ui": "runtime",
+      "label": "Camera Off",
+      "default": false
+    },
+
+    "mirror": {
+      "type": "boolean",
+      "ui": "advanced",
+      "label": "Mirror",
+      "default": true
+    },
+
+    "objectFit": {
+      "type": "select",
+      "ui": "advanced",
+      "label": "Object Fit",
+      "default": "cover",
+      "options": [
+        { "label": "Cover", "value": "cover" },
+        { "label": "Contain", "value": "contain" }
+      ]
+    },
+
+    "borderRadius": {
+      "type": "number",
+      "ui": "advanced",
+      "label": "Border Radius",
+      "default": 12
+    },
+
+    "style": {
+      "type": "object",
+      "ui": "advanced",
+      "label": "Style"
+    }
   }
 }
-

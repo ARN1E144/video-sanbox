@@ -1,180 +1,123 @@
-// src/components/elements/AgoraFeed.js
-
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import { useActionContext } from "../../context/ActionContext";
 import { useRuntimeValue } from "../../hooks/useRuntimeValue";
+import { useReactiveBindings } from "../../hooks/useReactiveBindings";
 import { bindActions } from "../../utils/actionBinder";
-import { runAction } from "../../utils/actionExecutor";
 
-import {
-  Video,
-  Square,
-  Play,
-  Volume,
-  VolumeX,
-} from "lucide-react";
+import { Video, Square, Play, Volume, VolumeX } from "lucide-react";
 
 export default function AgoraFeed(props) {
   const {
     id,
-
-    // 🔥 strip runtime/config props so they never hit DOM
-    appId,
-    tokenEndpoint,
-    autoJoin,
-    publishLocal,
-    cameraOff,
-    emitAction,
-
     meta = {},
     style = {},
-
     borderRadius = 12,
     objectFit = "cover",
     mirror = true,
-
+    autoJoin = false,
+    tokenEndpoint,
     ...domProps
   } = props;
 
   // =====================================================
   // CONTEXT
   // =====================================================
-
-  const actionCtx = useActionContext();
-
-  const runRuntimeAction =
-    actionCtx?.runRuntimeAction || (() => {});
+  const { runRuntimeAction } = useActionContext();
 
   // =====================================================
-  // RUNTIME STATE
+  // RUNTIME STATE (FLAT)
   // =====================================================
+  const remoteUsers = useRuntimeValue("users.remoteUsers") || {};
+  const micEnabled = useRuntimeValue("media.micEnabled");
+  const videoEnabled = useRuntimeValue("media.videoEnabled");
 
-  const joined =
-    useRuntimeValue("call.joined");
+  // =====================================================
+  // REACTIVE BINDING (SINGLE SOURCE)
+  // =====================================================
+  const channel =
+  useRuntimeValue("call.channel");
 
-  const remoteUsers =
-    useRuntimeValue("users.remoteUsers") || {};
+  const appId =
+    useRuntimeValue("agora.appId");
 
-  const micEnabled =
-    useRuntimeValue("media.micEnabled");
+  const uid =
+    useRuntimeValue("user.id");
 
-  const videoEnabled =
-    useRuntimeValue("media.videoEnabled");
-
-  const binding =
-    useRuntimeValue(`bindings.${id}`);
-
+  // =====================================================
+  // REFS
+  // =====================================================
   const localRef = useRef(null);
   const remoteRef = useRef(null);
 
   // =====================================================
-  // AUTO JOIN / LEAVE
+  // AUTO JOIN (SAFE + DETERMINISTIC)
   // =====================================================
-
   useEffect(() => {
     if (!autoJoin) return;
+    if (!channel) return;
 
     runRuntimeAction("agora.joinCall", {
-      channel:
-        meta.channel || "test-call",
-
-      tokenEndpoint:
-        meta.tokenEndpoint ||
-        tokenEndpoint ||
-        "/agora/token",
+      channel,
+      tokenEndpoint: meta.tokenEndpoint || tokenEndpoint,
     });
 
     return () => {
       runRuntimeAction("agora.leaveCall");
     };
-  }, [
-    autoJoin,
-    runRuntimeAction,
-    meta.channel,
-    meta.tokenEndpoint,
-    tokenEndpoint,
-  ]);
+  }, [autoJoin, channel]);
 
   // =====================================================
   // REMOTE VIDEO
   // =====================================================
-
   useEffect(() => {
-    const users =
-      Object.values(remoteUsers);
+    const users = Object.values(remoteUsers);
+    const first = users[0];
 
-    const firstUser = users[0];
+    if (!first?.videoTrack || !remoteRef.current) return;
 
-    if (
-      !firstUser?.videoTrack ||
-      !remoteRef.current
-    ) {
-      return;
-    }
-
-    try {
-      firstUser.videoTrack.play(
-        remoteRef.current
-      );
-    } catch (err) {
-      console.warn(
-        "[AgoraFeed] remote play failed",
-        err
-      );
-    }
+    first.videoTrack.play(remoteRef.current);
   }, [remoteUsers]);
 
   // =====================================================
-  // ACTIONS
+  // ACTION HANDLER
   // =====================================================
-
-  const handleAction = async (
-    actionName
-  ) => {
-    await runAction(
-      actionName,
-      actionCtx,
-      {
-        targetId: id,
-      }
-    );
+  const handleAction = (actionName) => {
+    runRuntimeAction(actionName, {
+      channel,
+      appId,
+      uid,
+      targetId: id,
+    });
   };
 
   // =====================================================
-  // UI CONFIG
+  // UI ACTIONS
   // =====================================================
-
-  const videoActions = [
-    "agora.joinCall",
-    "agora.leaveCall",
-    "agora.toggleVideo",
-    "agora.toggleMic",
-  ];
+  const videoActions = useMemo(
+    () => [
+      "agora.joinCall",
+      "agora.leaveCall",
+      "agora.toggleVideo",
+      "agora.toggleMic",
+    ],
+    []
+  );
 
   const iconMap = {
     "agora.joinCall": Video,
     "agora.leaveCall": Square,
     "agora.toggleVideo": Play,
-    "agora.toggleMic":
-      micEnabled
-        ? Volume
-        : VolumeX,
+    "agora.toggleMic": micEnabled ? Volume : VolumeX,
   };
 
-  const hasRemoteVideo =
-    Object.keys(remoteUsers).length > 0;
+  const hasRemote = Object.keys(remoteUsers).length > 0;
 
   // =====================================================
   // RENDER
   // =====================================================
-
   return (
     <div
-      {...bindActions(
-        meta,
-        actionCtx,
-        id
-      )}
+      {...bindActions(meta, null, id)}
       {...domProps}
       style={{
         ...style,
@@ -186,19 +129,13 @@ export default function AgoraFeed(props) {
         borderRadius,
       }}
     >
-      {/* REMOTE VIDEO */}
-
+      {/* REMOTE */}
       <div
         ref={remoteRef}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit,
-        }}
+        style={{ width: "100%", height: "100%", objectFit }}
       />
 
-      {/* LOCAL VIDEO */}
-
+      {/* LOCAL */}
       <div
         style={{
           position: "absolute",
@@ -206,10 +143,10 @@ export default function AgoraFeed(props) {
           right: "4%",
           width: "25%",
           height: "25%",
-          borderRadius: 8,
-          overflow: "hidden",
           background: "#000",
           border: "1px solid #333",
+          borderRadius: 8,
+          overflow: "hidden",
         }}
       >
         <div
@@ -217,49 +154,50 @@ export default function AgoraFeed(props) {
           style={{
             width: "100%",
             height: "100%",
-            transform:
-              mirror
-                ? "scaleX(-1)"
-                : "none",
+            transform: mirror ? "scaleX(-1)" : "none",
           }}
         />
 
         {!videoEnabled && (
-          <div className="absolute inset-0 flex items-center justify-center text-white text-xs opacity-60">
+          <div style={{ position: "absolute", inset: 0, color: "#fff" }}>
             Camera off
           </div>
         )}
       </div>
 
-      {!hasRemoteVideo && (
-        <div className="absolute inset-0 flex items-center justify-center text-white text-xs opacity-60">
+      {!hasRemote && (
+        <div style={{ position: "absolute", inset: 0, color: "#fff" }}>
           Waiting for participant
         </div>
       )}
 
-      <div className="absolute bottom-2 left-2 flex gap-2 bg-black/60 backdrop-blur px-2 py-1 rounded-md">
-        {videoActions.map(
-          (actionName) => {
-            const Icon =
-              iconMap[actionName];
+      {/* CONTROLS */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 8,
+          left: 8,
+          display: "flex",
+          gap: 8,
+          background: "rgba(0,0,0,0.6)",
+          padding: 6,
+          borderRadius: 8,
+        }}
+      >
+        {videoActions.map((a) => {
+          const Icon = iconMap[a];
+          if (!Icon) return null;
 
-            if (!Icon) return null;
-
-            return (
-              <button
-                key={`${id}-${actionName}`}
-                className="p-1.5 text-white hover:bg-white/20 rounded"
-                onClick={() =>
-                  handleAction(
-                    actionName
-                  )
-                }
-              >
-                <Icon size={14} />
-              </button>
-            );
-          }
-        )}
+          return (
+            <button
+              key={`${id}-${a}`}
+              onClick={() => handleAction(a)}
+              style={{ color: "white" }}
+            >
+              <Icon size={14} />
+            </button>
+          );
+        })}
       </div>
     </div>
   );

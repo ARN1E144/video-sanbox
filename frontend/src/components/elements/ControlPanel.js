@@ -1,65 +1,93 @@
-// src/components/ui/ControlPanel.js
-
 import React, { useMemo } from "react";
 import * as Icons from "lucide-react";
-
-import { useActionContext } from "../../context/ActionContext";
+import { useRuntimeValue } from "../../hooks/useRuntimeValue";
 import { useAuth } from "../../context/AuthContext";
+import { runActionTrace } from "../../runtime/runActionTrace";
+import { useRuntimeState } from "../../context/RuntimeStateContext";
+import ControlButtonBase from "../../ui/ControlButtonBase";
 
-export default function ControlPanel({
-  id,
-  layout = "vertical",
-  controls = [],
-}) {
-  const actionCtx = useActionContext();
-  const { runAction, state } = actionCtx;
+export default function ControlPanel({ layout = "vertical", controls = [] }) {
+  const runtime = useRuntimeState();
 
   const { role = "participant" } = useAuth() || {};
+  const callState = useRuntimeValue("call.state");
 
   const safeControls = Array.isArray(controls) ? controls : [];
 
   // =====================================================
-  // 🔥 VISIBILITY ENGINE (V1 SIMPLE)
+  // VISIBILITY FILTER
   // =====================================================
+  const visibleControls = useMemo(() => {
+    return safeControls.filter((ctrl) => {
+      const rules = ctrl.visibleWhen;
 
-  const isVisible = (ctrl) => {
-    const rules = ctrl.visibleWhen;
-    if (!rules) return true;
+      if (!rules) return true;
+      if (rules.role && !rules.role.includes(role)) return false;
+      if (rules.callState && callState && !rules.callState.includes(callState)) return false;
 
-    if (rules.role && !rules.role.includes(role)) return false;
+      return true;
+    });
+  }, [safeControls, role, callState]);
 
-    const callState = state?.call?.state;
-    if (
-      rules.callState &&
-      callState &&
-      !rules.callState.includes(callState)
-    ) {
-      return false;
-    }
+  // =====================================================
+  // CLICK HANDLER (V1 SAFE RESOLUTION)
+  // =====================================================
+  const handleClick = async (ctrl) => {
+    
 
-    return true;
+    const params = {
+      ...ctrl.config,
+
+      channel:
+        ctrl.config?.channel ||
+        runtime.get("call.channel"),
+
+      appId:
+        runtime.get("agora.appId"),
+
+      uid:
+        runtime.get("user.id"),
+
+      targetId:
+        ctrl.targetId,
+    };
+
+    console.log("[CONTROL CLICK]", ctrl);
+    console.log("[PARAMS]", params);
+    console.log(
+      "%c[CONTROLPANEL][RUNTIME CHANNEL]%c", 
+      "background: #007acc; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;",
+      "", // Resets the style for the actual data
+      runtime.get("call.channel")
+    );
+
+    console.log(
+      "%c[CONTROLPANEL][ALL RUNTIME STATE]%c", 
+      "background: #e67e22; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;",
+      "", // Resets the style for the actual data
+      runtime.snapshot()
+    );
+    const result = await runActionTrace(ctrl.action, runtime, params);
+
+    console.log("[ACTION RESULT]", result);
+
+    // =====================================================
+    // SAFE PATCH (DO NOT OVERWRITE WHOLE OBJECT)
+    // =====================================================
+    const existingBindings = runtime.get?.("bindings") || {};
+
+    runtime.set?.("bindings", {
+      ...existingBindings,
+      [ctrl.targetId]: {
+        ...existingBindings[ctrl.targetId],
+        channel: params.channel,
+      },
+    });
   };
 
-  const visibleControls = useMemo(
-    () => safeControls.filter(isVisible),
-    [safeControls, role, state?.call?.state]
-  );
-
   // =====================================================
-  // 🎮 ACTION EXECUTION
+  // RENDER
   // =====================================================
-
-  const handleControlClick = async (ctrl) => {
-    await actionCtx.runAction(ctrl.action, {
-      targetId: ctrl.targetId,
-      config: ctrl.config,
-    })
-  };
-
-  // =====================================================
-  // 🎨 RENDER
-  // =====================================================
-
   return (
     <div
       style={{
@@ -72,19 +100,13 @@ export default function ControlPanel({
         const Icon = Icons?.[ctrl.icon] || Icons.Circle;
 
         return (
-          <button
-            key={ctrl.id}
-            onClick={() => handleControlClick(ctrl)}
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 10,
-              background: "#fff",
-              border: "1px solid #ddd",
-            }}
-          >
-            <Icon size={16} />
-          </button>
+          <ControlButtonBase
+            key={ctrl.id || ctrl.targetId}
+            icon={ctrl.icon}
+            label={ctrl.label}
+            active={false}
+            onClick={() => handleClick(ctrl)}
+          />
         );
       })}
     </div>

@@ -3,10 +3,13 @@
 import React, {
   createContext,
   useContext,
+  useState,
   useRef,
   useCallback,
   useMemo,
 } from "react";
+
+import agoraEngine from "../services/agoraEngine";
 
 import { useRuntimeDebugger } from "./RuntimeDebuggerContext";
 
@@ -21,6 +24,19 @@ export function RuntimeStateProvider({ children }) {
 
   const subscribersRef = useRef({});
   const globalSubscribersRef = useRef(new Set());
+
+
+    // =====================================================
+  // 🔥 RUNTIME CONTEXT STATE
+  // =====================================================
+
+  const [runtimeReady, setRuntimeReady] = useState(false);
+
+   // =====================================================
+  // 🔥 AGORA STATE
+  // =====================================================
+
+  const [agora, setAgora] = useState(null);
 
   // =====================================================
   // 🧠 COMPUTED GRAPH
@@ -318,6 +334,10 @@ export function RuntimeStateProvider({ children }) {
     commit,
     flush,
     queueSet,
+    agora,
+    setAgora,
+    runtimeReady,
+    setRuntimeReady,
   }), [
     get,
     set,
@@ -331,6 +351,8 @@ export function RuntimeStateProvider({ children }) {
     commit,
     flush,
     queueSet,
+    runtimeReady,
+    setRuntimeReady,
   ]);
 
   return (

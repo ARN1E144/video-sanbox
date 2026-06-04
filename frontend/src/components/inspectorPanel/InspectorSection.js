@@ -5,27 +5,16 @@ export default function InspectorSection({ title, children, defaultOpen = true }
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="border-b border-border last:border-b-0 space-y-2 min-h-0">
+    <div className="border-b border-border space-y-2">
       <button
-        type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex justify-between items-center py-2 text-sm font-semibold text-text-primary hover:text-accent transition"
+        className="w-full flex justify-between py-2 text-sm font-semibold"
       >
-        <span>{title}</span>
-        {open ? (
-          <ChevronDown size={16} className="text-text-muted" />
-        ) : (
-          <ChevronRight size={16} className="text-text-muted" />
-        )}
+        {title}
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
       </button>
 
-      <div
-        className={`transition-all duration-300 overflow-hidden ${
-          open ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
-        }`}
-      >
-        {open && <div className="pb-3 space-y-3 min-h-0 overflow-y-auto max-h-[250px]">{children}</div>}
-      </div>
+      {open && <div className="space-y-2 pb-3">{children}</div>}
     </div>
   );
 }

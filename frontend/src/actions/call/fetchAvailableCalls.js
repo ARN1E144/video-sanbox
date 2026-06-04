@@ -1,22 +1,28 @@
 // src/actions/call/fetchAvailableCalls.js
+
 import api from "../../services/api";
 
-export default async function fetchAvailableCalls(ctx, params = {}) {
-  const { id, targetId } = params;
-  const bindId = targetId || id;
-
+export default async function fetchAvailableCalls(ctx) {
   try {
-    const { data } = await api.get("/calls/available");
+    const { data } = await api.get(
+      "/calls/available"
+    );
 
-    // Store available calls in the binding
-    ctx.updateBinding(bindId, { availableCalls: data || [] });
-    ctx.notify(`Fetched ${data?.length || 0} available calls`);
+    ctx.set?.(
+      "calls.available",
+      data || []
+    );
 
-    console.log("[fetchAvailableCalls] Data:", data);
-    return data;
+    return {
+      ok: true,
+      calls: data,
+    };
   } catch (err) {
-    console.error("[fetchAvailableCalls] Error", err);
-    ctx.notify(`Failed to fetch available calls: ${err.message || err}`);
-    return null;
+    console.error("[fetchAvailableCalls]", err);
+
+    return {
+      ok: false,
+      error: err.message,
+    };
   }
 }

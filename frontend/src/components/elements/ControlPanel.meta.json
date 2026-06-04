@@ -5,14 +5,17 @@
   "editableProps": {
     "layout": {
       "type": "select",
+      "ui": "build",
       "default": "vertical",
       "options": [
         { "label": "Vertical", "value": "vertical" },
         { "label": "Horizontal", "value": "horizontal" }
       ]
     },
+
     "position": {
       "type": "select",
+      "ui": "build",
       "default": "left",
       "options": [
         { "label": "Left", "value": "left" },
