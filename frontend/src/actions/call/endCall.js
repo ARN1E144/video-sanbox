@@ -1,36 +1,33 @@
-// src/actions/call/endCall.js
+export default async function endCall(ctx){
 
-import api from "../../services/api";
+    const agora = ctx.agora;
 
-export default async function endCall(ctx, params = {}) {
-  try {
-    const callId =
-      params.callId ||
-      ctx.get?.("call.id");
-
-    if (!callId) {
-      return {
-        ok: false,
-        error: "MISSING_CALL_ID",
-      };
+    if(agora){
+        await agora.leaveCall();
     }
 
-    await api.post(`/calls/${callId}/end`);
 
-    ctx.set?.("call.id", null);
-    ctx.set?.("call.channel", null);
-    ctx.set?.("call.joined", false);
-    ctx.set?.("call.state", "ended");
+    ctx.set("call",{
+
+        id:null,
+
+        channel:null,
+
+        joined:false,
+
+        state:"idle",
+
+        micMuted:false,
+
+        videoEnabled:false
+
+    });
+
+
 
     return {
-      ok: true,
+        ok:true,
+        ended:true
     };
-  } catch (err) {
-    console.error("[endCall]", err);
 
-    return {
-      ok: false,
-      error: err.message,
-    };
-  }
 }

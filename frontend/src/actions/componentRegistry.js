@@ -7,4 +7,5 @@ export const componentRegistry = {
   AgoraFeed: agoraMeta,
   VideoFeed: videoMeta,
   ControlPanel: controlMeta,
+  ChatPanel: chatMeta,
 };

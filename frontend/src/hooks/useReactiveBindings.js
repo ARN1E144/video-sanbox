@@ -9,7 +9,6 @@ export function useReactiveBindings(id) {
   const binding = useRuntimeValue(`bindings.${id}`) || {};
 
   const callChannel = useRuntimeValue("call.channel");
-  const appId = useRuntimeValue("agora.appId");
   const userId = useRuntimeValue("user.id");
 
   return useMemo(() => {
@@ -18,8 +17,7 @@ export function useReactiveBindings(id) {
 
       // 🔥 HARD GUARANTEED RESOLUTION LAYER
       channel: binding.channel || callChannel || null,
-      appId: binding.appId || appId || null,
       uid: binding.uid || userId || null,
     };
-  }, [binding, callChannel, appId, userId]);
+  }, [binding, callChannel, userId]);
 }

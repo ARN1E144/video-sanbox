@@ -1,170 +1,761 @@
-import React, { useState } from "react";
-import { useRuntimeState } from "../context/RuntimeStateContext";
+// src/dev/RuntimeTestPanel.js
+
+import React, {
+  useState,
+  useRef,
+} from "react";
+
 import { useActionContext } from "../context/ActionContext";
-import { Rnd } from "react-rnd";
+import { useRuntimeValue } from "../hooks/useRuntimeValue";
+import { useRuntimeState } from "../context/RuntimeStateContext";
+
 
 export default function RuntimeTestPanel() {
+
+
   const runtime = useRuntimeState();
-  const actions = useActionContext();
 
-  const [position, setPosition] = useState({ x: 20, y: 20 });
-  const [size, setSize] = useState({ width: 320, height: 420 });
+  const {
+    runRuntimeAction
+  } = useActionContext();
 
-  const [key, setKey] = useState("media.micEnabled");
-  const [value, setValue] = useState(true);
-  const [log, setLog] = useState([]);
 
-  const parseValue = (v) => {
-    if (v === "true") return true;
-    if (v === "false") return false;
-    if (!isNaN(v)) return Number(v);
-    return v;
+
+  // =====================================================
+  // DRAGGING
+  // =====================================================
+
+  const [position,setPosition] = useState({
+
+    x:
+      window.innerWidth - 390,
+
+    y:
+      window.innerHeight - 620
+
+  });
+
+
+
+  const dragRef = useRef({
+
+    dragging:false,
+
+    offsetX:0,
+
+    offsetY:0
+
+  });
+
+
+
+  const handleDragStart = (e)=>{
+
+
+    dragRef.current.dragging = true;
+
+
+    dragRef.current.offsetX =
+      e.clientX - position.x;
+
+
+    dragRef.current.offsetY =
+      e.clientY - position.y;
+
+
+
+    document.addEventListener(
+      "pointermove",
+      handleDragging
+    );
+
+
+    document.addEventListener(
+      "pointerup",
+      handleDragEnd
+    );
+
   };
 
-  const pushLog = (msg) => {
-    setLog((prev) => [{ msg, time: Date.now() }, ...prev.slice(0, 30)]);
-  };
 
-  // =========================
-  // STATE TEST
-  // =========================
-  const handleSetState = () => {
-    runtime.beginTransaction();
-    runtime.queueSet(key, value);
-    runtime.commit();
 
-    pushLog(`STATE SET → ${key} = ${JSON.stringify(value)}`);
-  };
+  const handleDragging = (e)=>{
 
-  // =========================
-  // ACTION TEST
-  // =========================
-  const handleAction = async () => {
-    await actions.runRuntimeAction("agora.toggleMic", {
-      source: "runtime-test-panel",
+
+    if(
+      !dragRef.current.dragging
+    ){
+      return;
+    }
+
+
+
+    setPosition({
+
+      x:
+        e.clientX -
+        dragRef.current.offsetX,
+
+
+      y:
+        e.clientY -
+        dragRef.current.offsetY
+
     });
 
-    pushLog("ACTION → agora.toggleMic");
+
   };
 
-  // =========================
-  // TRIGGER TEST
-  // =========================
-  const handleTriggerTest = () => {
-    runtime.beginTransaction();
-    runtime.queueSet("media.micEnabled", true);
-    runtime.commit();
 
-    pushLog("TRIGGER TEST → media.micEnabled = true");
+
+  const handleDragEnd = ()=>{
+
+
+    dragRef.current.dragging = false;
+
+
+
+    document.removeEventListener(
+      "pointermove",
+      handleDragging
+    );
+
+
+    document.removeEventListener(
+      "pointerup",
+      handleDragEnd
+    );
+
+
   };
 
-  // =========================
-  // COMPUTED TEST
-  // =========================
-  const handleComputedTest = () => {
-    const current = runtime.get("media.micEnabled");
 
-    runtime.set("media.micEnabled", !current);
 
-    runtime.compute("test.doubleMic", (state) => {
-      return state.media?.micEnabled ? 2 : 0;
-    });
 
-    pushLog("COMPUTED TEST → test.doubleMic updated");
+
+  // =====================================================
+  // RUNTIME
+  // =====================================================
+
+  const runtimeReady =
+    useRuntimeValue(
+      "runtime.ready"
+    );
+
+
+
+  const agora =
+    runtime.agora;
+
+
+
+  // =====================================================
+  // CALL STATE
+  // =====================================================
+
+  const callId =
+    useRuntimeValue(
+      "call.id"
+    );
+
+
+  const callChannel =
+    useRuntimeValue(
+      "call.channel"
+    );
+
+
+  const callState =
+    useRuntimeValue(
+      "call.state"
+    );
+
+
+  const joined =
+    useRuntimeValue(
+      "call.joined"
+    );
+
+
+  const micMuted =
+    useRuntimeValue(
+      "call.micMuted"
+    );
+
+
+  const videoEnabled =
+    useRuntimeValue(
+      "call.videoEnabled"
+    );
+
+
+
+
+
+  // =====================================================
+  // ACTION RUNNER
+  // =====================================================
+
+  const run = async(
+    action,
+    params={}
+  )=>{
+
+
+    console.group(
+      `▶ ${action}`
+    );
+
+
+    try{
+
+
+      const result =
+        await runRuntimeAction(
+          action,
+          params
+        );
+
+
+      console.log(
+        "Result:",
+        result
+      );
+
+
+      return result;
+
+
+    }
+    catch(err){
+
+
+      console.error(
+        err
+      );
+
+
+    }
+    finally{
+
+
+      console.groupEnd();
+
+
+    }
+
   };
 
-  const handleToggleMicState = () => {
-    const current = runtime.get("media.micEnabled");
 
-    runtime.beginTransaction();
-    runtime.queueSet("media.micEnabled", !current);
-    runtime.commit();
 
-    pushLog(`TOGGLE → media.micEnabled = ${!current}`);
+
+
+
+  // =====================================================
+  // SNAPSHOT
+  // =====================================================
+
+  const snapshotRuntime = ()=>{
+
+
+    return {
+
+
+      runtimeReady,
+
+
+      call:{
+
+
+        id:
+          callId ?? null,
+
+
+        channel:
+          callChannel ?? null,
+
+
+        state:
+          callState ?? "idle",
+
+
+        joined:
+          joined ?? false,
+
+
+        micMuted:
+          micMuted ?? false,
+
+
+        videoEnabled:
+          videoEnabled ?? false,
+
+
+      },
+
+
+
+      agora:{
+
+
+        uid:
+          agora?.uid ?? null,
+
+
+        localAudioTrack:
+          !!agora?.localAudioTrack,
+
+
+        localVideoTrack:
+          !!agora?.localVideoTrack
+
+
+      }
+
+
+    };
+
+
   };
+
+
+
+
+
+
+  // =====================================================
+  // CLEANUP VALIDATION
+  // =====================================================
+
+  const validateCleanup = ()=>{
+
+
+    const snapshot =
+      snapshotRuntime();
+
+
+
+    const runtimePassed =
+
+      snapshot.call.id === null &&
+
+      snapshot.call.channel === null &&
+
+      snapshot.call.state === "idle" &&
+
+      snapshot.call.joined === false &&
+
+      snapshot.call.micMuted === false &&
+
+      snapshot.call.videoEnabled === false;
+
+
+
+    const agoraPassed =
+
+
+      snapshot.agora.uid === null &&
+
+      snapshot.agora.localAudioTrack === false &&
+
+      snapshot.agora.localVideoTrack === false;
+
+
+
+    const passed =
+      runtimePassed &&
+      agoraPassed;
+
+
+
+    console.group(
+
+      passed
+
+        ? "✅ RUNTIME CLEANUP PASSED"
+
+        : "❌ RUNTIME CLEANUP FAILED"
+
+    );
+
+
+
+    console.log(
+      snapshot
+    );
+
+
+    console.log(
+      {
+        runtimePassed,
+        agoraPassed
+      }
+    );
+
+
+    console.groupEnd();
+
+
+  };
+
+
+
+
+
+
+  // =====================================================
+  // UI
+  // =====================================================
 
   return (
-    <Rnd
-      size={size}
-      position={position}
-      onDragStop={(e, d) => setPosition({ x: d.x, y: d.y })}
-      onResizeStop={(e, direction, ref, delta, pos) => {
-        setSize({
-          width: parseInt(ref.style.width, 10),
-          height: parseInt(ref.style.height, 10),
-        });
-        setPosition(pos);
+
+
+    <div
+
+      style={{
+
+        position:"fixed",
+
+
+        left:position.x,
+
+
+        top:position.y,
+
+
+        width:360,
+
+
+        background:"#1d1d1d",
+
+
+        color:"#fff",
+
+
+        borderRadius:12,
+
+
+        padding:16,
+
+
+        zIndex:999999,
+
+
+        fontFamily:"monospace",
+
+
+        boxShadow:
+          "0 10px 30px rgba(0,0,0,.35)"
+
       }}
-      minWidth={260}
-      minHeight={300}
-      bounds="window"
-      style={{ zIndex: 999999 }}
+
     >
+
+
+
       <div
+
+        onPointerDown={
+          handleDragStart
+        }
+
         style={{
-          width: "100%",
-          height: "100%",
-          background: "#111",
-          color: "#fff",
-          border: "1px solid #333",
-          borderRadius: 12,
-          padding: 12,
-          fontSize: 12,
-          display: "flex",
-          flexDirection: "column",
+
+          cursor:"move",
+
+          userSelect:"none",
+
+          fontWeight:"bold",
+
+          marginBottom:12
+
         }}
+
       >
-        <div style={{ fontWeight: "bold", marginBottom: 10 }}>
-          Runtime Test Panel
-        </div>
 
-        <input
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          style={{ width: "100%", marginBottom: 8 }}
-        />
+        Runtime Test Panel
 
-        <input
-          value={String(value)}
-          onChange={(e) => setValue(parseValue(e.target.value))}
-          style={{ width: "100%", marginBottom: 10 }}
-        />
-
-        <button onClick={handleSetState} style={{ marginBottom: 6 }}>
-          Set Runtime State
-        </button>
-
-        <button onClick={handleAction} style={{ marginBottom: 6 }}>
-          Run Action (toggleMic)
-        </button>
-
-        <button onClick={handleTriggerTest}>Trigger Test</button>
-
-        <button onClick={handleComputedTest} style={{ marginTop: 6 }}>
-          Test Computed Graph
-        </button>
-
-        <button onClick={handleToggleMicState} style={{ marginTop: 6 }}>
-          Toggle Mic Runtime State
-        </button>
-
-        <div
-          style={{
-            marginTop: 10,
-            flex: 1,
-            overflow: "auto",
-            background: "#0a0a0a",
-            padding: 6,
-            borderRadius: 6,
-          }}
-        >
-          {log.map((l, i) => (
-            <div key={i} style={{ opacity: 0.8, marginBottom: 4 }}>
-              {new Date(l.time).toLocaleTimeString()} → {l.msg}
-            </div>
-          ))}
-        </div>
       </div>
-    </Rnd>
+
+
+
+
+      <Status
+        label="Runtime Ready"
+        value={runtimeReady}
+      />
+
+
+      <Status
+        label="Call ID"
+        value={callId ?? "none"}
+      />
+
+
+      <Status
+        label="Channel"
+        value={callChannel ?? "none"}
+      />
+
+
+      <Status
+        label="State"
+        value={callState ?? "idle"}
+      />
+
+
+      <Status
+        label="Joined"
+        value={joined ?? false}
+      />
+
+
+      <Status
+        label="Mic Muted"
+        value={micMuted ?? false}
+      />
+
+
+      <Status
+        label="Video Enabled"
+        value={videoEnabled ?? false}
+      />
+
+
+
+      <hr />
+
+
+
+      <Status
+        label="Agora UID"
+        value={agora?.uid ?? null}
+      />
+
+
+      <Status
+        label="Audio Track"
+        value={!!agora?.localAudioTrack}
+      />
+
+
+      <Status
+        label="Video Track"
+        value={!!agora?.localVideoTrack}
+      />
+
+
+
+
+      <div
+
+        style={{
+
+          display:"grid",
+
+          gap:8,
+
+          marginTop:16
+
+        }}
+
+      >
+
+
+
+        <button
+          onClick={() =>
+            console.log(
+              "[FULL SNAPSHOT]",
+              snapshotRuntime()
+            )
+          }
+        >
+          Dump Runtime
+        </button>
+
+
+
+
+        <button
+          onClick={() =>
+            run(
+              "call.startCall",
+              {
+
+                appId:
+                  process.env.REACT_APP_AGORA_APP_ID,
+
+
+                channel:
+                  "test-room",
+
+
+                token:null,
+
+
+                uid:null
+
+              }
+            )
+          }
+        >
+          Start Call
+        </button>
+
+
+
+
+        <button
+          onClick={() =>
+            run(
+              "call.joinCall",
+              {
+
+                channel:
+                  "test-room",
+
+
+                token:null,
+
+
+                uid:
+                  "test-user"
+
+              }
+            )
+          }
+        >
+          Join Call
+        </button>
+
+
+
+
+        <button
+          onClick={() =>
+            run(
+              "call.toggleMic"
+            )
+          }
+        >
+          Toggle Mic
+        </button>
+
+
+
+
+        <button
+          onClick={() =>
+            run(
+              "call.toggleVideo"
+            )
+          }
+        >
+          Toggle Video
+        </button>
+
+
+
+
+        <button
+          onClick={() =>
+            run(
+              "call.leaveCall"
+            )
+          }
+        >
+          Leave Meeting
+        </button>
+
+
+
+
+        <button
+          onClick={() =>
+            run(
+              "call.endCall"
+            )
+          }
+        >
+          End Meeting
+        </button>
+
+
+
+
+        <button
+          onClick={
+            validateCleanup
+          }
+        >
+          Validate Cleanup
+        </button>
+
+
+
+      </div>
+
+
+
+    </div>
+
+
   );
+
+
+}
+
+
+
+
+// =====================================================
+// STATUS COMPONENT
+// =====================================================
+
+function Status({
+  label,
+  value
+}){
+
+
+  return (
+
+    <div
+      style={{
+        marginBottom:6
+      }}
+    >
+
+      {label}:
+
+
+      <strong
+
+        style={{
+
+          marginLeft:8,
+
+
+          color:
+
+            value
+
+              ? "#00d26a"
+
+              : "#ff6b6b"
+
+        }}
+
+      >
+
+        {String(value)}
+
+      </strong>
+
+
+    </div>
+
+  );
+
 }

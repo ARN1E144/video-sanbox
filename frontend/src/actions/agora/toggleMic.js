@@ -1,19 +1,45 @@
-export default {
-  label: "Toggle Mic",
+export default async function toggleMic(ctx) {
 
-  run: async (ctx) => {
+  console.log("[toggleMic.js] Running");
+
+  try {
     const agora = ctx?.agora;
 
     if (!agora?.toggleMic) {
       ctx?.notify?.("Audio controls unavailable");
-      return;
+
+      return {
+        ok: false,
+        error: "AGORA_NOT_READY",
+      };
     }
 
-    await agora.toggleMic();
+   const enabled = await agora.toggleMic();
 
-    const current = ctx.get?.("media.micEnabled");
-    ctx.set?.("media.micEnabled", !current);
+    if (enabled === false) {
+      return {
+        ok:false,
+        error:"MIC_UNAVAILABLE"
+      };
+    }
 
-    return { success: true };
-  },
-};
+
+    ctx.set?.(
+      "media.micEnabled",
+      enabled
+    );
+
+
+    return {
+      ok:true,
+      micEnabled: enabled
+    };
+  } catch (err) {
+    console.error("[toggleMic]", err);
+
+    return {
+      ok: false,
+      error: err.message,
+    };
+  }
+}

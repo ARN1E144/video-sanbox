@@ -1,4 +1,4 @@
-import { actionRegistry } from "../actions/actionsRegistry";
+import { actionRegistry } from "../actions/actionsRegistry"d;
 
 export const isValidAction = (name) => {
   const parts = name.split(".");

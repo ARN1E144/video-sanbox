@@ -23,6 +23,7 @@ export function ActionProvider({ children }) {
   const inFlightActions = useRef(new Set());
 
   const get = runtimeState.get;
+  const getAll = runtimeState.getAll;
   const set = runtimeState.set;
   const patch = runtimeState.patch;
 
@@ -81,12 +82,16 @@ export function ActionProvider({ children }) {
   /* ---------------- SAFE CTX BUILDER ---------------- */
 
   const buildRuntimeContext = useCallback(() => {
+    
     const agora = runtimeState?.agora;
+
+    console.log("[CTX AGORA]", runtimeState.agora);
 
     return {
       bindings,
 
       get,
+      getAll,
       set,
       patch,
 
@@ -104,6 +109,7 @@ export function ActionProvider({ children }) {
   }, [
     bindings,
     get,
+    getAll,
     set,
     patch,
     notify,
@@ -117,30 +123,58 @@ export function ActionProvider({ children }) {
 
   /* ---------------- ACTION EXECUTION (HARDENED) ---------------- */
 
-  const executeAction = async (actionName, params) => {
-  if (!runtimeState.runtimeReady) return;
+  const executeAction = useCallback(
+    async (actionName, params) => {
+      if (!runtimeState.runtimeReady) return;
 
-  runtimeState.beginTransaction();
+      runtimeState.beginTransaction();
 
-  const ctx = buildRuntimeContext();
+      const ctx = buildRuntimeContext();
 
-  try {
-    const result = await runRuntimeAction(actionName, ctx, params);
+      try {
+        const result = await runRuntimeAction(
+          actionName,
+          ctx,
+          params
+        );
 
-      runtimeState.commit();
+        console.log(
+          "%c[ACTION EXECUTED]%c %c" + actionName,
+          "color: #10B981; font-weight: bold;",
+          "",
+          "color: #3B82F6; font-weight: bold;",
+          {
+            params,
+            result,
+          }
+        );
 
-      console.log("[ACTION RAW RESULT]", {
-        actionName,
-        result,
-      });
+        runtimeState.commit();
 
-      return result; // 🔥 MUST RETURN
-  } catch (err) {
-    runtimeState.commit();
-    console.error("[Action Error]", actionName, err);
-    return null;
-  }
-};
+        console.log("[ACTION RAW RESULT]", {
+          actionName,
+          result,
+        });
+
+        return result;
+
+      } catch (err) {
+        runtimeState.commit();
+
+        console.error(
+          "[Action Error]",
+          actionName,
+          err
+        );
+
+        return null;
+      }
+    },
+    [
+      runtimeState,
+      buildRuntimeContext,
+    ]
+  );
 
   const executePipeline = useCallback(
     async (pipeline = [], payload = {}) => {

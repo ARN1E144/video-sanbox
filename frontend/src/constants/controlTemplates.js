@@ -5,7 +5,7 @@ export const CONTROL_TEMPLATES = {
     icon: "Mic",
     type: "system",
     systemType: "mic",
-    action: "agora.toggleMic",
+    action: "call.toggleMic",
     targetId: "",
     bindId: "",
     config: {},
@@ -17,7 +17,7 @@ export const CONTROL_TEMPLATES = {
     icon: "Video",
     type: "system",
     systemType: "camera",
-    action: "agora.toggleVideo",
+    action: "call.toggleVideo",
     targetId: "",
     bindId: "",
     config: {},
@@ -29,7 +29,7 @@ export const CONTROL_TEMPLATES = {
     icon: "PhoneOff",
     type: "system",
     systemType: "endcall",
-    action: "agora.leaveCall",
+    action: "call.leaveCall",
     targetId: "",
     bindId: "",
     config: {},
@@ -39,7 +39,7 @@ export const CONTROL_TEMPLATES = {
     id: "start",
     label: "Start Call",
     icon: "Phone",
-    action: "call.start",
+    action: "call.startCall",
     config: {}
   },
 
@@ -47,7 +47,7 @@ export const CONTROL_TEMPLATES = {
     id: "accept",
     label: "Accept Call",
     icon: "PhoneCall",
-    action: "call.accept",
+    action: "call.acceptCall",
     config: {}
   }
 };

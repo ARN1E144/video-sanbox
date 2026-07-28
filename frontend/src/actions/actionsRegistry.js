@@ -5,81 +5,77 @@ import stopStream from "./video/stopStream";
 import loadVideo from "./video/loadVideo";
 import loadRemote from "./video/loadRemote";
 import togglePlay from "./video/togglePlay";
+
 import startCall from "./call/startCall";
 import acceptCall from "./call/acceptCall";
+import leaveCall from "./call/leaveCall";
 import endCall from "./call/endCall";
 import fetchAvailableCalls from "./call/fetchAvailableCalls";
 import spotlightUser from "./call/spotlightUser";
+
+import toggleMic from "./call/toggleMic";
 
 import {
   setColor,
   applyThemeAction,
 } from "../runtime/actions/themeActions";
 
+
+
 /* =========================================================
-   🔥 ACTION CONSTANTS
+   ACTION CONSTANTS
 ========================================================= */
 
 export const ACTIONS = {
-  AGORA_JOIN: "agora.joinCall",
-  AGORA_LEAVE: "agora.leaveCall",
-  AGORA_TOGGLE_VIDEO: "agora.toggleVideo",
-  AGORA_TOGGLE_AUDIO: "agora.toggleMic",
 
-  CALL_FETCH: "call.fetchAvailableCalls",
+  // CALL LIFECYCLE
   CALL_START: "call.startCall",
   CALL_ACCEPT: "call.acceptCall",
+  CALL_JOIN: "call.joinCall",
+  CALL_LEAVE: "call.leaveCall",
   CALL_END: "call.endCall",
+  CALL_FETCH: "call.fetchAvailableCalls",
   CALL_SPOTLIGHT: "call.spotlightUser",
 
+  // CALL MEDIA
+  CALL_TOGGLE_MIC: "call.toggleMic",
+  CALL_TOGGLE_VIDEO: "call.toggleVideo",
+
+  // VIDEO
   VIDEO_START_STREAM: "video.startStream",
   VIDEO_STOP_STREAM: "video.stopStream",
   VIDEO_LOAD_VIDEO: "video.loadVideo",
   VIDEO_LOAD_REMOTE: "video.loadRemote",
   VIDEO_TOGGLE_PLAY: "video.togglePlay",
 
+  // THEME
   THEME_SET_COLOR: "theme.setColor",
   THEME_APPLY: "theme.apply",
+
+};
+
+export const actionAliases = {
+
+  "agora.toggleMic":
+    "call.toggleMic",
+
+  "agora.toggleVideo":
+    "call.toggleVideo",
+
 };
 
 /* =========================================================
-   🔥 CORE HELPERS (V1 SAFE GUARDS)
+   HELPERS
 ========================================================= */
 
-const missingAgora = (ctx, method, label) => {
-  console.warn(`⚠️ Agora ${method} not available in ctx`);
-  ctx?.notify?.(`${label} unavailable`);
-  return null;
-};
 
-const requireCallJoined = (ctx, label) => {
-  if (!ctx?.get?.("call.joined")) {
-    ctx?.notify?.(`${label} requires active call`);
-    return false;
-  }
-  return true;
-};
-
-const sync = (ctx, patches = {}) => {
-  if (!ctx?.set) return;
-  for (const [k, v] of Object.entries(patches)) {
-    ctx.set(k, v);
-  }
-};
-
-const safeAgora = (ctx) => {
-  if (!ctx?.agora?.isReady) {
-    ctx?.notify?.("Call not ready");
-    return null;
-  }
-  return ctx.agora;
-};
-
-/* =========================================================
-   🔥 FACTORY
-========================================================= */
-
-const createAction = ({ value, label, category, run, targets = [] }) => ({
+const createAction = ({
+  value,
+  label,
+  category,
+  run,
+  targets = [],
+}) => ({
   value,
   label,
   category,
@@ -87,286 +83,377 @@ const createAction = ({ value, label, category, run, targets = [] }) => ({
   targets,
 });
 
+
+
+const requireCallJoined = (ctx, label) => {
+
+  if (!ctx?.get?.("call.joined")) {
+
+    ctx?.notify?.(
+      `${label} requires active call`
+    );
+
+    return false;
+  }
+
+  return true;
+};
+
+
+
+const safeAgora = (ctx) => {
+
+  if (!ctx?.agora) {
+
+    ctx?.notify?.(
+      "Agora engine unavailable"
+    );
+
+    return null;
+  }
+
+  return ctx.agora;
+
+};
+
+
+
+
 /* =========================================================
-   🔥 REGISTRY
+   ACTION REGISTRY
 ========================================================= */
 
+
 export const actionRegistry = {
-  agora: {
-    /* =====================================================
-       JOIN CALL (BOOT STRAP STATE MACHINE START)
-      ===================================================== */
-      joinCall: createAction({
-        value: ACTIONS.AGORA_JOIN,
-        label: "Join Call",
-        category: "agora",
 
-        run: async (ctx, params) => {
-          const agora = ctx?.agora;
+  call: {
 
-          if (!agora?.joinCall) {
-            return {
-              ok: false,
-              error: "AGORA_NOT_READY",
-            };
-          }
-
-          // 🔥 HARD REQUIREMENT
-          if (!params?.channel) {
-            return {
-              ok: false,
-              error: "MISSING_CHANNEL",
-            };
-          }
-
-          console.log("[JOINCALL PARAMS]", params);
-          console.log("[CTX EXISTS]", !!ctx);
-          console.log("[CTX SET EXISTS]", !!ctx.set);
-
-          const res = await agora.joinCall({
-            appId: ctx.get("agora.appId"),
-            channel: params.channel,
-            token: params.token || null,
-            uid: ctx.get("user.id"),
-          });
-
-          // 🔥 SINGLE SOURCE OF TRUTH WRITE
-          ctx.set("call.channel", params.channel);
-          console.log("[AFTER SET]", ctx.get?.("call.channel"));
-
-          ctx.set("call.joined", true);
-          ctx.set("call.state", "connected");
-
-          return {
-            ok: true,
-            channel: params.channel,
-            uid: ctx.get("user.id"),
-            sdk: res,
-          };
-        },
-
-        targets: ["VideoFeed", "AgoraFeed"],
-      }),
-
-    /* =====================================================
-       LEAVE CALL (RESET STATE MACHINE)
-    ===================================================== */
-    leaveCall: createAction({
-      value: ACTIONS.AGORA_LEAVE,
-      label: "Leave Call",
-      category: "agora",
-
-        run: async (ctx) => {
-          const agora = ctx?.agora;
-
-          if (!agora?.leaveCall) {
-            ctx?.notify?.("Call engine unavailable");
-            return;
-          }
-          await agora.leaveCall();
-
-            ctx.set?.("call.joined", false);
-            ctx.set?.("call.state", "disconnected");
-
-            return {
-              ok: true,
-              action: ACTIONS.AGORA_LEAVE
-            };
-          
-        },
-
-      targets: ["CallPanel", "AgoraFeed", "VideoFeed"],
+    startCall: createAction({
+      value: ACTIONS.CALL_START,
+      label:"Start Call",
+      category:"call",
+      run:startCall,
+      targets:["CallPanel","AgoraFeed"],
     }),
 
-    /* =====================================================
-       TOGGLE MIC (SAFE GUARDED LIFECYCLE)
-    ===================================================== */
-    toggleMic: createAction({
-      value: ACTIONS.AGORA_TOGGLE_AUDIO,
-      label: "Toggle Mic",
-      category: "agora",
 
-      run: async (ctx) => {
-        const agora = safeAgora(ctx);
+    acceptCall:createAction({
+      value:ACTIONS.CALL_ACCEPT,
+      label:"Accept Call",
+      category:"call",
+      run:acceptCall,
+      targets:["CallPanel","AgoraFeed"],
+    }),
 
-        if (!agora?.toggleMic) {
-          ctx?.notify?.("Audio controls unavailable");
-          return;
+
+    joinCall:createAction({
+
+      value:ACTIONS.CALL_JOIN,
+      label:"Join Call",
+      category:"call",
+
+      run: async(ctx,params)=>{
+
+        const agora = ctx?.agora;
+
+
+        if(!agora?.joinCall){
+          return {
+            ok:false,
+            error:"AGORA_UNAVAILABLE"
+          };
         }
 
-        await agora.toggleMic();
 
-        const current = ctx.get?.("media.micEnabled");
-        ctx.set?.("media.micEnabled", !current);
+        const call = ctx.get("call");
+
+
+        if(!call?.channel){
+          return {
+            ok:false,
+            error:"MISSING_CHANNEL"
+          };
+        }
+
+
+        const joined = await agora.joinCall({
+          channel:call.channel,
+          token:params?.token || null,
+          uid:ctx.get("user.id") || null
+        });
+
+
+        if(!joined){
+          return {
+            ok:false,
+            error:"AGORA_JOIN_FAILED"
+          };
+        }
+
+
+        ctx.set("call",{
+          ...call,
+          joined:true,
+          state:"connected"
+        });
+
 
         return {
-          ok: true,
-          action: ACTIONS.AGORA_TOGGLE_AUDIO,
-          data: {
-            micEnabled: !current
-          }
+          ok:true,
+          channel:call.channel
         };
+
+        
       },
 
-      targets: ["VideoFeed", "AgoraFeed"],
+      targets:["AgoraFeed"]
+
     }),
 
-    /* =====================================================
-       TOGGLE VIDEO (SAFE GUARDED LIFECYCLE)
-    ===================================================== */
-    toggleVideo: createAction({
-      value: ACTIONS.AGORA_TOGGLE_VIDEO,
-      label: "Toggle Video",
-      category: "agora",
 
-      run: async (ctx) => {
-        const agora = safeAgora(ctx);
+    toggleMic:createAction({
+      value:ACTIONS.CALL_TOGGLE_MIC,
+      label:"Toggle Mic",
+      category:"call",
+      run:toggleMic,
+      targets:["AgoraFeed"]
+    }),
 
-        if (!agora?.toggleVideo) {
-          ctx?.notify?.("Video controls unavailable");
-          return;
+
+
+    toggleVideo:createAction({
+      value:ACTIONS.CALL_TOGGLE_VIDEO,
+      label:"Toggle Video",
+      category:"call",
+      run:async(ctx)=>{
+
+        const agora=ctx.agora;
+
+        if(!agora?.toggleVideo){
+          return {
+            ok:false,
+            error:"AGORA_UNAVAILABLE"
+          };
         }
+
 
         await agora.toggleVideo();
 
-        const current = ctx.get?.("media.videoEnabled");
-        ctx.set?.("media.videoEnabled", !current);
 
         return {
-          ok: true,
-          action: ACTIONS.AGORA_TOGGLE_VIDEO,
-          data: {
-            videoEnabled: !current
-          }
+          ok:true
         };
+
       },
-
-      targets: ["VideoFeed", "AgoraFeed"],
+      targets:["AgoraFeed"]
     }),
+
+
+
+    leaveCall:createAction({
+      value:ACTIONS.CALL_LEAVE,
+      label:"Leave Call",
+      category:"call",
+      run:leaveCall,
+      targets:["AgoraFeed"]
+    }),
+
+
+    endCall:createAction({
+      value:ACTIONS.CALL_END,
+      label:"End Call",
+      category:"call",
+      run:endCall,
+      targets:["CallPanel"]
+    }),
+
   },
 
-  /* =========================================================
-     CALL SYSTEM (UNCHANGED BUT SAFE)
-  ========================================================= */
-  call: {
-  startCall: createAction({
-    value: ACTIONS.CALL_START,
-    label: "Start Call",
-    category: "call",
-    run: startCall,
-    targets: ["CallPanel", "AgoraFeed"],
-  }),
-
-  acceptCall: createAction({
-    value: ACTIONS.CALL_ACCEPT,
-    label: "Accept Call",
-    category: "call",
-    run: acceptCall,
-    targets: ["CallPanel", "AgoraFeed"],
-  }),
-
-  endCall: createAction({
-    value: ACTIONS.CALL_END,
-    label: "End Call",
-    category: "call",
-    run: endCall,
-    targets: ["CallPanel", "AgoraFeed"],
-  }),
-
-  fetchAvailableCalls: createAction({
-    value: ACTIONS.CALL_FETCH,
-    label: "Fetch Calls",
-    category: "call",
-    run: fetchAvailableCalls,
-    targets: ["CallPanel"],
-  }),
-},
-
-  /* =========================================================
-     VIDEO SYSTEM (UNCHANGED)
-  ========================================================= */
-  video: {
-    startStream: createAction({
-      value: ACTIONS.VIDEO_START_STREAM,
-      label: "Start Stream",
-      category: "video",
-      run: startStream,
-      targets: ["VideoFeed"],
-    }),
-
-    stopStream: createAction({
-      value: ACTIONS.VIDEO_STOP_STREAM,
-      label: "Stop Stream",
-      category: "video",
-      run: stopStream,
-      targets: ["VideoFeed"],
-    }),
-
-    loadVideo: createAction({
-      value: ACTIONS.VIDEO_LOAD_VIDEO,
-      label: "Load Video",
-      category: "video",
-      run: loadVideo,
-      targets: ["VideoFeed"],
-    }),
-
-    loadRemote: createAction({
-      value: ACTIONS.VIDEO_LOAD_REMOTE,
-      label: "Load Remote Stream",
-      category: "video",
-      run: loadRemote,
-      targets: ["VideoFeed"],
-    }),
-
-    togglePlay: createAction({
-      value: ACTIONS.VIDEO_TOGGLE_PLAY,
-      label: "Toggle Play",
-      category: "video",
-      run: togglePlay,
-      targets: ["VideoFeed"],
-    }),
-  },
-
-  /* =========================================================
-     THEMES (NEW)
-  ========================================================= */
-
-  theme: {
-  setColor: createAction({
-    value: ACTIONS.THEME_SET_COLOR,
-    label: "Set Theme Color",
-    category: "theme",
-
-    run: setColor,
-
-    targets: [],
-  }),
-
-  apply: createAction({
-    value: ACTIONS.THEME_APPLY,
-    label: "Apply Theme",
-    category: "theme",
-
-    run: applyThemeAction,
-
-    targets: [],
-  }),
-},
-};
 
 
-  
 
 /* =========================================================
-   🔥 HELPERS
+   VIDEO SYSTEM
 ========================================================= */
 
-export const getAction = (value) => {
-  const [category, name] = value.split(".");
-  return actionRegistry?.[category]?.[name] || null;
+
+video:{
+
+
+  startStream:createAction({
+
+    value:ACTIONS.VIDEO_START_STREAM,
+
+    label:"Start Stream",
+
+    category:"video",
+
+    run:startStream,
+
+    targets:[
+      "VideoFeed",
+    ],
+
+  }),
+
+
+
+  stopStream:createAction({
+
+    value:ACTIONS.VIDEO_STOP_STREAM,
+
+    label:"Stop Stream",
+
+    category:"video",
+
+    run:stopStream,
+
+    targets:[
+      "VideoFeed",
+    ],
+
+  }),
+
+
+
+  loadVideo:createAction({
+
+    value:ACTIONS.VIDEO_LOAD_VIDEO,
+
+    label:"Load Video",
+
+    category:"video",
+
+    run:loadVideo,
+
+    targets:[
+      "VideoFeed",
+    ],
+
+  }),
+
+
+
+  loadRemote:createAction({
+
+    value:ACTIONS.VIDEO_LOAD_REMOTE,
+
+    label:"Load Remote",
+
+    category:"video",
+
+    run:loadRemote,
+
+    targets:[
+      "VideoFeed",
+    ],
+
+  }),
+
+
+
+  togglePlay:createAction({
+
+    value:ACTIONS.VIDEO_TOGGLE_PLAY,
+
+    label:"Toggle Play",
+
+    category:"video",
+
+    run:togglePlay,
+
+    targets:[
+      "VideoFeed",
+    ],
+
+  }),
+
+
+},
+
+
+
+
+/* =========================================================
+   THEME SYSTEM
+========================================================= */
+
+
+theme:{
+
+
+  setColor:createAction({
+
+    value:ACTIONS.THEME_SET_COLOR,
+
+    label:"Set Theme Color",
+
+    category:"theme",
+
+    run:setColor,
+
+  }),
+
+
+
+  apply:createAction({
+
+    value:ACTIONS.THEME_APPLY,
+
+    label:"Apply Theme",
+
+    category:"theme",
+
+    run:applyThemeAction,
+
+  }),
+
+
+},
+
+
+
 };
 
-export const getAllActions = () =>
-  Object.values(actionRegistry).flatMap((cat) =>
-    Object.values(cat)
+
+
+
+
+/* =========================================================
+   LOOKUP HELPERS
+========================================================= */
+
+
+export const getAction = (value)=>{
+
+  const resolved =
+    actionAliases[value] || value;
+
+
+  const [
+    category,
+    name
+  ] = resolved.split(".");
+
+
+  return (
+    actionRegistry?.[category]?.[name]
+    ||
+    null
   );
+
+};
+
+
+
+export const getAllActions = ()=>{
+
+  return Object.values(
+    actionRegistry
+  )
+  .flatMap(
+    category =>
+      Object.values(category)
+  );
+
+};

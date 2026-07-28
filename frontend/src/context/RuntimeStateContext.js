@@ -9,8 +9,6 @@ import React, {
   useMemo,
 } from "react";
 
-import agoraEngine from "../services/agoraEngine";
-
 import { useRuntimeDebugger } from "./RuntimeDebuggerContext";
 
 const RuntimeStateContext = createContext(null);
@@ -60,27 +58,35 @@ export function RuntimeStateProvider({ children }) {
   // =====================================================
 
   const get = useCallback((key) => {
-    const active = activeComputedRef.current;
+  const active = activeComputedRef.current;
 
-    if (active) {
-      if (!computedDepsRef.current[active]) {
-        computedDepsRef.current[active] = new Set();
-      }
-
-      computedDepsRef.current[active].add(key);
-
-      if (!dependencyMapRef.current[key]) {
-        dependencyMapRef.current[key] = new Set();
-      }
-
-      dependencyMapRef.current[key].add(active);
+  if (active) {
+    if (!computedDepsRef.current[active]) {
+      computedDepsRef.current[active] = new Set();
     }
 
-    return stateRef.current[key];
-  }, []);
+    computedDepsRef.current[active].add(key);
+
+    if (!dependencyMapRef.current[key]) {
+      dependencyMapRef.current[key] = new Set();
+    }
+
+    dependencyMapRef.current[key].add(active);
+  }
+
+
+  // 🔥 READ YOUR OWN TRANSACTION WRITES
+  const tx = transactionRef.current;
+
+  if (tx?.pendingWrites?.has(key)) {
+    return tx.pendingWrites.get(key);
+  }
+
+
+  return stateRef.current[key];
+}, []);
 
   const getAll = useCallback(() => stateRef.current, []);
-  const snapshot = useCallback(() => ({ ...stateRef.current }), []);
 
   // =====================================================
   // 🔥 TRANSACTION START
@@ -200,8 +206,6 @@ export function RuntimeStateProvider({ children }) {
     // 🔥 4. GLOBAL SUBSCRIBERS (SINGLE SOURCE OF TRUTH)
     // =====================================================
 
-    const snapshot = stateRef.current;
-
     globalSubscribersRef.current.forEach(cb =>
       cb(stateRef.current, changed, {
         commitId: "immediate",
@@ -232,39 +236,34 @@ export function RuntimeStateProvider({ children }) {
   // 🔥 SET (transaction aware)
   // =====================================================
 
-  const set = useCallback((key, value) => {
-    if (transactionRef.current) {
-      queueSet(key, value);
-      return;
-    }
+   const set = useCallback((key, value) => {
 
-    const prev = stateRef.current[key];
-    if (Object.is(prev, value)) return;
+    queueSet(key, value);
 
-    stateRef.current[key] = value;
-
-    subscribersRef.current[key]?.forEach(cb =>
-      cb(value, prev, key)
+     console.log(
+      "%c[PENDING]%c",
+      "background-color: #FEF3C7; color: #D97706; font-weight: bold; padding: 2px 6px; border-radius: 3px;",
+      "",
+      transactionRef.current?.pendingWrites
     );
 
-    debuggerRuntime?.logState?.({
-      key,
-      prev,
-      next: value,
-      transactionId: null,
-    });
-
     flush();
-  }, [queueSet, flush, debuggerRuntime]);
+
+  }, [queueSet, flush]);
 
   // =====================================================
   // 🔥 PATCH
   // =====================================================
 
   const patch = useCallback((ns, obj) => {
-    const prev = stateRef.current[ns] || {};
-    set(ns, { ...prev, ...obj });
-  }, [set]);
+  const prev = get(ns) || {};
+
+  set(ns, {
+    ...prev,
+    ...obj,
+  });
+
+  }, [get, set]);
 
   // =====================================================
   // 🔥 COMPUTE
@@ -323,7 +322,6 @@ export function RuntimeStateProvider({ children }) {
     patch,
 
     getAll,
-    snapshot,
 
     compute,
 
@@ -343,7 +341,6 @@ export function RuntimeStateProvider({ children }) {
     set,
     patch,
     getAll,
-    snapshot,
     compute,
     subscribe,
     subscribeAll,
@@ -351,6 +348,8 @@ export function RuntimeStateProvider({ children }) {
     commit,
     flush,
     queueSet,
+    agora,
+    setAgora,
     runtimeReady,
     setRuntimeReady,
   ]);

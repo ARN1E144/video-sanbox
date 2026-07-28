@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { useActionContext } from "../../context/ActionContext";
 import { bindActions } from "../../utils/actionBinder";
-import { runAction } from "../../utils/actionExecutor";
+
 
 export default function VideoFeed(props) {
   const {
@@ -220,14 +220,29 @@ export default function VideoFeed(props) {
     togglePlay: "video.togglePlay",
   };
 
-  const handleAction = (actionValue) => {
-    if (!actionValue) return;
+  const handleAction = async (actionValue) => {
+  if (!actionValue) return;
 
-    runAction(
-      VIDEO_ACTION_KEY_MAP[actionValue] || actionValue,
-      actionCtx,
-      { id, targetId: id, videoRef, streamRef }
+  const actionName =
+    VIDEO_ACTION_KEY_MAP[actionValue] || actionValue;
+
+  if (!actionCtx?.runRuntimeAction) {
+    console.warn(
+      "[VideoFeed] runtime action unavailable",
+      actionName
     );
+    return;
+  }
+
+  return actionCtx.runRuntimeAction(
+    actionName,
+    {
+      id,
+      targetId: id,
+      videoRef,
+      streamRef,
+    }
+  );
   };
 
   // =====================================================

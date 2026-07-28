@@ -19,10 +19,16 @@ export default {
       tokenEndpoint: params.tokenEndpoint,
     });
 
+
+    const existingCall = ctx.get?.("call") || {};
+
     // 🔥 CRITICAL: SYNC RUNTIME STATE
-    ctx.set?.("call.channel", params.channel);
-    ctx.set?.("call.joined", true);
-    ctx.set?.("call.status", "connected");
+    ctx.set?.("call", {
+      ...existingCall,
+      channel: params.channel,
+      joined: true,
+      status: "connected",
+    });
 
     return {
       ok: true,

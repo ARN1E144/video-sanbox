@@ -1,5 +1,4 @@
 import React, { useMemo } from "react";
-import * as Icons from "lucide-react";
 import { useRuntimeValue } from "../../hooks/useRuntimeValue";
 import { useAuth } from "../../context/AuthContext";
 import { runActionTrace } from "../../runtime/runActionTrace";
@@ -11,78 +10,110 @@ export default function ControlPanel({ layout = "vertical", controls = [] }) {
 
   const { role = "participant" } = useAuth() || {};
   const callState = useRuntimeValue("call.state");
+  const joined = useRuntimeValue("call.joined");
 
   const safeControls = Array.isArray(controls) ? controls : [];
 
   // =====================================================
   // VISIBILITY FILTER
   // =====================================================
-  const visibleControls = useMemo(() => {
-    return safeControls.filter((ctrl) => {
-      const rules = ctrl.visibleWhen;
+  const visibleControls = useMemo(()=>{
 
-      if (!rules) return true;
-      if (rules.role && !rules.role.includes(role)) return false;
-      if (rules.callState && callState && !rules.callState.includes(callState)) return false;
+    return safeControls.filter((ctrl)=>{
 
-      return true;
+        const rules = ctrl.visibleWhen;
+
+
+        if(!rules)
+            return true;
+
+
+        if(
+            rules.role &&
+            !rules.role.includes(role)
+        ){
+            return false;
+        }
+
+
+        if(
+            rules.callState &&
+            !rules.callState.includes(callState)
+        ){
+            return false;
+        }
+
+
+        if(
+            rules.joined !== undefined &&
+            rules.joined !== joined
+        ){
+            return false;
+        }
+
+
+        return true;
+
     });
-  }, [safeControls, role, callState]);
+
+
+},[
+    safeControls,
+    role,
+    callState,
+    joined
+]);
 
   // =====================================================
   // CLICK HANDLER (V1 SAFE RESOLUTION)
   // =====================================================
-  const handleClick = async (ctrl) => {
-    
+  const handleClick = async(ctrl)=>{
 
-    const params = {
-      ...ctrl.config,
+      const params={
 
-      channel:
-        ctrl.config?.channel ||
-        runtime.get("call.channel"),
+          ...ctrl.config,
 
-      appId:
-        runtime.get("agora.appId"),
+          channel:
+              ctrl.config?.channel ||
+              runtime.get("call.channel"),
 
-      uid:
-        runtime.get("user.id"),
+          uid:
+              runtime.get("user.id"),
 
-      targetId:
-        ctrl.targetId,
-    };
+          targetId:
+              ctrl.targetId
+      };
 
-    console.log("[CONTROL CLICK]", ctrl);
-    console.log("[PARAMS]", params);
-    console.log(
-      "%c[CONTROLPANEL][RUNTIME CHANNEL]%c", 
-      "background: #007acc; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;",
-      "", // Resets the style for the actual data
-      runtime.get("call.channel")
-    );
 
-    console.log(
-      "%c[CONTROLPANEL][ALL RUNTIME STATE]%c", 
-      "background: #e67e22; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;",
-      "", // Resets the style for the actual data
-      runtime.snapshot()
-    );
-    const result = await runActionTrace(ctrl.action, runtime, params);
+      console.log("[CONTROL CLICK]",ctrl);
 
-    console.log("[ACTION RESULT]", result);
 
-    // =====================================================
-    // SAFE PATCH (DO NOT OVERWRITE WHOLE OBJECT)
-    // =====================================================
-    const existingBindings = runtime.get?.("bindings") || {};
+          try {
 
-    runtime.set?.("bindings", {
-      ...existingBindings,
-      [ctrl.targetId]: {
-        ...existingBindings[ctrl.targetId],
-        channel: params.channel,
-      },
-    });
+              const result = await runActionTrace(
+                  ctrl.action,
+                  runtime,
+                  params
+              );
+
+
+              console.log(
+                  "[ACTION RESULT]",
+                  result
+              );
+
+
+          } catch(error){
+
+              console.error(
+                  "[CONTROL ACTION FAILED]",
+                  ctrl.action,
+                  error
+              );
+
+          }
+
+
   };
 
   // =====================================================
@@ -97,7 +128,6 @@ export default function ControlPanel({ layout = "vertical", controls = [] }) {
       }}
     >
       {visibleControls.map((ctrl) => {
-        const Icon = Icons?.[ctrl.icon] || Icons.Circle;
 
         return (
           <ControlButtonBase

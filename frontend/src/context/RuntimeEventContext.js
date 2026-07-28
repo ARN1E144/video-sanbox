@@ -21,8 +21,7 @@ export function RuntimeEventProvider({
   const listenersRef =
     useRef({});
 
-  const debuggerRuntime =
-    useRuntimeDebugger?.();
+  const debuggerRuntime = useRuntimeDebugger()
 
   // =====================================================
   // 🔥 EMIT

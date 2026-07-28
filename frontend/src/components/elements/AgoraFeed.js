@@ -37,9 +37,6 @@ export default function AgoraFeed(props) {
   const channel =
   useRuntimeValue("call.channel");
 
-  const appId =
-    useRuntimeValue("agora.appId");
-
   const uid =
     useRuntimeValue("user.id");
 
@@ -56,13 +53,12 @@ export default function AgoraFeed(props) {
     if (!autoJoin) return;
     if (!channel) return;
 
-    runRuntimeAction("agora.joinCall", {
-      channel,
+    runRuntimeAction("call.joinCall", {
       tokenEndpoint: meta.tokenEndpoint || tokenEndpoint,
     });
 
     return () => {
-      runRuntimeAction("agora.leaveCall");
+      runRuntimeAction("call.leaveCall");
     };
   }, [autoJoin, channel]);
 
@@ -84,7 +80,6 @@ export default function AgoraFeed(props) {
   const handleAction = (actionName) => {
     runRuntimeAction(actionName, {
       channel,
-      appId,
       uid,
       targetId: id,
     });
@@ -95,19 +90,19 @@ export default function AgoraFeed(props) {
   // =====================================================
   const videoActions = useMemo(
     () => [
-      "agora.joinCall",
-      "agora.leaveCall",
-      "agora.toggleVideo",
-      "agora.toggleMic",
+      "call.joinCall",
+      "call.leaveCall",
+      "call.toggleVideo",
+      "call.toggleMic",
     ],
     []
   );
 
   const iconMap = {
-    "agora.joinCall": Video,
-    "agora.leaveCall": Square,
-    "agora.toggleVideo": Play,
-    "agora.toggleMic": micEnabled ? Volume : VolumeX,
+    "call.joinCall": Video,
+    "call.leaveCall": Square,
+    "call.toggleVideo": Play,
+    "call.toggleMic": micEnabled ? Volume : VolumeX,
   };
 
   const hasRemote = Object.keys(remoteUsers).length > 0;

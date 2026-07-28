@@ -1,26 +1,83 @@
-// src/actions/call/leaveCall.js
-import api from "../../services/api";
 
-export default async function leaveCall(ctx, params = {}) {
-  const { id, targetId, callId } = params;
-  const bindId = targetId || id;
+export default async function leaveCall(ctx){
 
-  if (!callId) {
-    console.warn("[leaveCall] No callId provided");
-    return;
-  }
+    const agora = ctx.agora;
+    const currentCall = ctx.get("call");
 
-  try {
-    await api.post(`/calls/${callId}/end`); // Reuse your endCall API
 
-    ctx.updateBinding(bindId, { joined: false, callId: null });
-    ctx.notify(`Left call ${callId}`);
+    /*
+      Already clean
+      Makes leaveCall safe to call multiple times
+    */
+    if(
+        !currentCall?.joined &&
+        !currentCall?.channel
+    ){
 
-    console.log("[leaveCall] Left call", { callId, bindId });
-    return { success: true };
-  } catch (err) {
-    console.error("[leaveCall] Error leaving call", err);
-    ctx.notify(`Failed to leave call: ${err.message || err}`);
-    return null;
-  }
+        console.log(
+            "[CALL] No active call"
+        );
+
+        return {
+            ok:true,
+            alreadyClean:true
+        };
+
+    }
+
+
+    if(!agora){
+
+        return {
+            ok:false,
+            error:"AGORA_UNAVAILABLE"
+        };
+
+    }
+
+
+    try {
+
+
+        await agora.leaveCall();
+
+
+        ctx.set(
+            "call",
+            {
+                ...currentCall,
+
+                joined:false,
+
+                state:"idle",
+
+                micMuted:false,
+
+                videoEnabled:false,
+                
+            }
+        );
+
+
+        return {
+            ok:true
+        };
+
+
+    } catch(error){
+
+
+        console.error(
+            "[CALL] leave failed",
+            error
+        );
+
+
+        return {
+            ok:false,
+            error:error.message
+        };
+
+    }
+
 }
