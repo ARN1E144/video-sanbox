@@ -226,6 +226,22 @@ export const actionRegistry = {
 
     }),
 
+    spotlightUser: createAction({
+
+      value: ACTIONS.CALL_SPOTLIGHT,
+
+      label: "Spotlight User",
+
+      category: "call",
+
+      run: spotlightUser,
+
+      targets: [
+        "AgoraFeed"
+      ]
+
+    }),
+
   },
 
 

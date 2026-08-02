@@ -23,6 +23,7 @@ export function ActionProvider({ children }) {
   const runtimeEvents = useRuntimeEvents();
 
   const inFlightActions = useRef(new Set());
+  const executeActionRef = useRef(null);
 
   const get = runtimeState.get;
   const getAll = runtimeState.getAll;
@@ -86,44 +87,45 @@ export function ActionProvider({ children }) {
   /* ---------------- SAFE CTX BUILDER ---------------- */
 
   const buildRuntimeContext = useCallback(() => {
-    
-    const agora = runtimeState?.agora;
 
-    console.log("[CTX AGORA]", runtimeState.agora);
+  const agora = runtimeState?.agora;
 
-    return {
-      bindings,
-
-      get,
-      getAll,
-      set,
-      patch,
-
-      notify,
-
-      getBinding,
-      updateBinding,
-      removeBinding,
-      clearBindings,
-      appendFeedItem,
-
-      // safe optional service
-      agora: agora || null,
-    };
-  }, [
+  return {
     bindings,
+
     get,
     getAll,
     set,
     patch,
+
     notify,
+
     getBinding,
     updateBinding,
     removeBinding,
     clearBindings,
     appendFeedItem,
-    runtimeState,
-  ]);
+
+    agora: agora || null,
+
+    runAction: (...args) =>
+      executeActionRef.current?.(...args),
+  };
+
+}, [
+  bindings,
+  get,
+  getAll,
+  set,
+  patch,
+  notify,
+  getBinding,
+  updateBinding,
+  removeBinding,
+  clearBindings,
+  appendFeedItem,
+  runtimeState,
+]);
 
   /* ---------------- ACTION EXECUTION (HARDENED) ---------------- */
 
@@ -216,6 +218,9 @@ export function ActionProvider({ children }) {
     },
     [executeAction, get, set, notify]
   );
+
+  // Keep the ref pointing at the latest dispatcher
+  executeActionRef.current = executeAction;
 
   /* ---------------- CONTEXT VALUE ---------------- */
 

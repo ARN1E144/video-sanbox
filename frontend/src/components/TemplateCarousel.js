@@ -7,6 +7,16 @@ export default function TemplateCarousel() {
   const { setProjectSchema } = useContext(ProjectContext);
 
   const handleSelect = (tpl) => {
+
+        console.log(
+          "[FULL TEMPLATE TREE]",
+          JSON.stringify(
+            tpl.tree,
+            null,
+            2
+          )
+        );
+
     setProjectSchema({
       version: '1.0.0',
       name: tpl.name,

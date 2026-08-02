@@ -68,11 +68,18 @@ export default async function joinCall(ctx) {
 
     joined:true,
 
-    state:"joined",
+    state:"joined"
+
+});
+
+
+ctx.patch?.("agora", {
 
     uid:agora.uid,
 
-  });
+    connected:true
+
+});
 
 
 

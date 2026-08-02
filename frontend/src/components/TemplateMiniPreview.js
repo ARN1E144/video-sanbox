@@ -1,5 +1,6 @@
 import React from 'react';
 import * as UI from '../ui'; // This assumes your components (AppBar, VideoFeed, etc.) are exported here
+import ConfoNodeRenderer from "../components/confo/ConfoNodeRenderer";
 
 function renderNode(node, key) {
   if (!node) return null;
@@ -29,24 +30,30 @@ function renderNode(node, key) {
 }
 
 
-export default function TemplateMiniPreview({ tree }) {
-  if (!tree) return null;
 
-  return (
-    <div
-      style={{
-        width: '100%',
-        height: '100%',
-        background: '#0f0f0f',
-        borderRadius: 8,
-        overflow: 'hidden',
-        padding: 4,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-      }}
-    >
-      {renderNode(tree)}
-    </div>
-  );
+export default function TemplateMiniPreview({
+    tree
+}){
+
+    if(!tree) return null;
+
+
+    return (
+
+        <div
+          style={{
+            width:"100%",
+            height:"100%",
+            background:"#0f0f0f"
+          }}
+        >
+
+            <ConfoNodeRenderer
+                node={tree}
+            />
+
+        </div>
+
+    );
+
 }

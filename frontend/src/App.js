@@ -14,6 +14,7 @@ import RuntimeTestPanel from "./dev/RuntimeTestPanel";
 import RuntimeBootstrap from "./runtime/RuntimeBootstrap";
 import RuntimeDevWiring from "./dev/RuntimeDevWiring";
 import ConfoTest from "./dev/ConfoTest";
+import ConfoRenderer from "./runtime/confos/ConfoRenderer";
 
 import MainApp from "./MainApp";
 
@@ -44,12 +45,11 @@ function App() {
 
                       <MainApp />
 
+                      <ConfoRenderer />
+
                       <RuntimeTestPanel />
 
                       <ConfoTest />
-
-                      {/* 🔥 DEV WIRED TRIGGERS (ONLY IN DEV) */}
-                      <RuntimeDevWiring />
 
                     </PreviewProvider>
 

@@ -8,7 +8,17 @@ children: [
 type: 'Container',
 props: { layout: 'grid', align: 'center', justify: 'center' },
 children: [
-{ type: 'VideoFeed', props: { autoplay: true, muted: true, controls: true } },
+{
+ type:'VideoFeed',
+ props:{
+   mode:'local',
+   enabled:true,
+   playing:true,
+   muted:true,
+   mirror:true,
+   objectFit:'cover'
+ }
+},
 { type: 'ChatPanel', props: { room: 'default', showAvatars: true } },
 ],
 },

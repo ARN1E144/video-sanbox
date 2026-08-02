@@ -15,6 +15,7 @@ import { useAuth } from "./context/AuthContext";
 import SplitPreviewLayout from "./components/splitPreviewLayout";
 import { useCanvasState } from "./context/CanvasContext";
 import InspectorContent from "./components/inspectorPanel/InspectorContent";
+import ConfoRenderer from "./runtime/confos/ConfoRenderer";
 
 
 
@@ -100,10 +101,24 @@ function DraggablePanel({ title, onClose, children, initial = { x: 16, y: 16 }, 
 
 
 export default function MainApp() {
-  const { viewMode, backgroundConfigs, setBackgroundConfigs, collapsed } = useContext(ProjectContext);
+
+  const {
+  viewMode,
+  backgroundConfigs,
+  setBackgroundConfigs,
+  collapsed,
+  projectSchema
+} = useContext(ProjectContext);
+
+console.log(
+  "[MainApp projectSchema]",
+  projectSchema
+);
+
   const { previewView } = usePreviewMode();
   const { session, loading } = useAuth();
   const { elements, updateElement } = useCanvasState();
+ 
 
   const [currentView, setCurrentView] = useState("templates"); // templates | auth | build | settings
 
@@ -194,6 +209,9 @@ export default function MainApp() {
 
       <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <MainMenu currentView={currentView} setCurrentView={setCurrentView} />
+          <ConfoRenderer
+                      config={projectSchema?.tree}
+                  />
 
         {/* <div style={{ padding: 8, borderBottom: "1px solid #222" }}>
           <button onClick={() => setCurrentView("auth")}>Auth</button>

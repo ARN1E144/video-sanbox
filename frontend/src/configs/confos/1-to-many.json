@@ -17,7 +17,7 @@
       "type": "AgoraFeed",
       "id": "agora_client",
       "props": {
-        "channel": "{{runtime.call.channel}}",
+        "channel": "{{call.channel}}",
         "autoJoin": false,
         "publishLocal": true,
         "muted": false,

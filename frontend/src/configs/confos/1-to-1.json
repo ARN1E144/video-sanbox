@@ -36,10 +36,11 @@
   },
 
   "runtime": {
-    "channel": "{{runtime.call.channel}}",
-    "token": "{{runtime.call.token}}",
-    "uid": "{{runtime.user.uid}}",
-    "callId": "{{runtime.call.id}}"
+    "channel":"{{call.channel}}",
+    "uid":"{{call.uid}}",
+    "callId": "{{call.id}}",
+    "autoJoin":false,
+    "publishLocal":true
   },
 
   "elements": [
@@ -48,11 +49,12 @@
       "id": "agora_local",
 
       "props": {
-        "channel": "{{runtime.channel}}",
-        "token": "{{runtime.token}}",
-        "uid": "{{runtime.uid}}",
 
-        "autoJoin": true,
+        "channel": "{{call.channel}}",
+        "uid":"{{agora.uid}}",
+        "CallId": "{{call.id}}",
+
+        "autoJoin": false,
         "publishLocal": true,
 
         "muted": false,

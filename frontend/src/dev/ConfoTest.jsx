@@ -12,6 +12,11 @@ import ConfoRenderer from "../runtime/confos/ConfoRenderer";
 
 import ConfoValidator from "../runtime/confos/ConfoValidator";
 
+import {
+  getAction,
+  getAllActions,
+} from "../actions/actionsRegistry";
+
 
 const AVAILABLE_CONFOS = [
 
@@ -37,6 +42,9 @@ const AVAILABLE_CONFOS = [
 export default function ConfoTest(){
 
 
+
+
+
   const [selected,setSelected] =
     useState(
       "confo.one_to_one"
@@ -47,6 +55,19 @@ export default function ConfoTest(){
     useState(null);
 
 
+  console.log(
+  "%c[TEST]%c Spotlight action:",
+  "color: #F59E0B; font-weight: bold;", // Amber/yellow tag
+  "font-weight: bold;",
+  getAction("call.spotlightUser")
+);
+
+console.log(
+  "%c[TEST]%c All actions:",
+  "color: #F59E0B; font-weight: bold;",
+  "font-weight: bold;",
+  getAllActions().map(a => a.value)
+);
 
   useEffect(()=>{
 
@@ -61,9 +82,22 @@ export default function ConfoTest(){
             selected
           );
 
+          console.log("[AFTER LOAD]", config);
 
-        setConfo(config);
+          console.log(
+            "[AFTER LOAD ELEMENT PROPS]",
+            config.elements[0].props
+          );
 
+           console.log(
+        "[BEFORE SET STATE]",
+        config.elements[0].props
+        );
+
+
+        setConfo(
+          structuredClone(config)
+        );
 
       }
       catch(err){

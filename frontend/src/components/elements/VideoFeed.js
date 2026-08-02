@@ -280,7 +280,8 @@ export default function VideoFeed(props) {
       style={{
         ...style,
         width: "100%",
-        height: "100%",
+        flex:1,
+        minHeight:0,
         position: "relative",
         overflow: "hidden",
         borderRadius,

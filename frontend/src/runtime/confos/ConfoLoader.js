@@ -97,8 +97,18 @@ export async function loadConfo(
     );
 
   }
+  
+ console.log(
+    "%c[CONF0 RAW CONFIG]%c",
+    "background-color: #E0E7FF; color: #3730A3; font-weight: bold; padding: 2px 6px; border-radius: 3px;",
+    "",
+    confo
+);
 
-
+console.log(
+  "[ConfoLoader RETURNING]",
+  confo.elements[0].props
+);
 
   // -----------------------------------------------
   // Prepare runtime object

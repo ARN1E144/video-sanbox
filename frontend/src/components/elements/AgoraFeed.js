@@ -48,16 +48,6 @@ export default function AgoraFeed(props) {
 
 
 
-  const {
-    on
-  } = useRuntimeEvents();
-
-
-
-
-
-
-
   const remoteUsers =
     useRuntimeValue(
       "users.remoteUsers"
@@ -197,93 +187,6 @@ export default function AgoraFeed(props) {
 
     },[]);
 
-
-
-
-
-
-
-
-
-  /*
-  ============================================
-  CALL START EVENT
-  ============================================
-  */
-
-
-  useEffect(()=>{
-
-
-    const unsubscribe =
-      on(
-        "call.startCall",
-        async(event)=>{
-
-
-          console.log(
-            "[AGORAFEED EVENT]",
-            event
-          );
-
-
-
-          if(
-            event.targetId &&
-            event.targetId !== id
-          ){
-
-            return;
-
-          }
-
-
-
-
-          const channel =
-            event.params?.channel ||
-            event.result?.result?.channel;
-
-
-
-
-          if(!channel){
-
-            console.warn(
-              "[AGORAFEED] Missing channel",
-              event
-            );
-
-            return;
-
-          }
-
-
-
-
-          await runRuntimeAction(
-            "call.joinCall",
-            {
-              channel,
-              targetId:id
-            }
-          );
-
-
-        }
-      );
-
-
-
-    return unsubscribe;
-
-
-
-  },[
-    id,
-    on,
-    runRuntimeAction
-  ]);
 
 
 

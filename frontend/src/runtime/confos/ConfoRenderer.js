@@ -1,13 +1,15 @@
 // =====================================================
 // ConfoRenderer
 // -----------------------------------------------------
-// Converts a Confo JSON configuration into React UI.
+// Converts Confo JSON configuration into React UI.
 //
 // Flow:
 //
 // Confo Config
 //      ↓
 // elements[]
+//      ↓
+// ConfoElementRenderer
 //      ↓
 // ComponentRegistry
 //      ↓
@@ -16,17 +18,18 @@
 // =====================================================
 
 
-import React from "react";
+import {
+    use,
+  useEffect,
+  useState
+} from "react";
+
 
 import {
   componentRegistry
 }
 from "../../actions/componentRegistry";
 
-import {
-  useRuntimeState
-}
-from "../../context/RuntimeStateContext";
 
 import {
   useActionContext
@@ -34,132 +37,20 @@ import {
 from "../../context/ActionContext";
 
 
-
-// =====================================================
-// RUNTIME VALUE RESOLVER
-// =====================================================
-
-function resolveRuntimeValue(
-  value,
-  runtime
-){
-
-  if(
-    typeof value !== "string"
-  ){
-
-    return value;
-
-  }
-
-
-  const match =
-    value.match(
-      /^{{(.+)}}$/
-    );
-
-
-  if(!match){
-
-    return value;
-
-  }
-
-
-  const path =
-    match[1]
-      .trim()
-      .split(".");
-
-
-  let result =
-    runtime;
-
-
-  for(
-    const key of path
-  ){
-
-    if(
-      result == null
-    ){
-
-      return undefined;
-
-    }
-
-
-    result =
-      result[key];
-
-  }
-
-
-  return result;
-
+import {
+ useRuntimeProps
 }
+from "../../hooks/useRuntimeProps";
+
+import ConfoNodeRenderer from "../../components/confo/ConfoNodeRenderer";
 
 
-
-// =====================================================
-// RESOLVE PROPS
-// =====================================================
-
-function resolveProps(
-  props,
-  runtime
-){
-
-  if(!props)
-    return {};
-
-
-  const output = {};
-
-
-  Object.entries(props)
-    .forEach(
-      ([key,value])=>{
-
-
-        if(
-          typeof value === "object" &&
-          value !== null &&
-          !Array.isArray(value)
-        ){
-
-          output[key] =
-            resolveProps(
-              value,
-              runtime
-            );
-
-
-        }
-        else {
-
-          output[key] =
-            resolveRuntimeValue(
-              value,
-              runtime
-            );
-
-        }
-
-
-      }
-    );
-
-
-  return output;
-
-}
 
 
 
 
 // =====================================================
-// COMPONENT ACTION WRAPPER
+// ACTION BUILDER
 // =====================================================
 
 function buildActions(
@@ -167,8 +58,13 @@ function buildActions(
   runAction
 ){
 
-  if(!Array.isArray(actions))
+  if(
+    !Array.isArray(actions)
+  ){
+
     return {};
+
+  }
 
 
   const handlers = {};
@@ -178,20 +74,15 @@ function buildActions(
   actions.forEach(
     action=>{
 
+      handlers[action.name] =
+        (...args)=>{
 
-      handlers[
-        action.name
-      ] = (...args)=>{
+          runAction(
+            action.name,
+            ...args
+          );
 
-
-        runAction(
-          action.name,
-          ...args
-        );
-
-
-      };
-
+        };
 
     }
   );
@@ -203,29 +94,49 @@ function buildActions(
 
 
 
+
 // =====================================================
-// MAIN COMPONENT
+// SINGLE ELEMENT
 // =====================================================
 
-export default function ConfoRenderer({
+function ConfoElementRenderer({
 
-  config
+  element
 
 }){
-
-
-  const runtimeState =
-    useRuntimeState();
 
 
   const {
     runAction
   } =
-    useActionContext();
+  useActionContext();
 
 
 
-  if(!config){
+  const registryEntry =
+    componentRegistry[
+      element.type
+    ];
+
+
+
+  const Component =
+    registryEntry?.component;
+
+
+
+  const props =
+    useRuntimeProps(
+      element.props
+    );
+
+
+
+  if(!Component){
+
+    console.error(
+      `[ConfoRenderer] Missing component ${element.type}`
+    );
 
     return null;
 
@@ -233,93 +144,71 @@ export default function ConfoRenderer({
 
 
 
-  const runtime =
-    runtimeState.getState
-      ? runtimeState.getState()
-      : {};
+  const actions =
+    buildActions(
+      element.actions,
+      runAction
+    );
+
+
+
+  console.log(
+    "[ConfoElement PROPS]",
+    element.id,
+    props
+  );
 
 
 
   return (
 
-    <>
+    <Component
 
-      {
-        config.elements?.map(
-            element => {
-
-                const registryEntry =
-                componentRegistry[
-                    element.type
-                ];
-
-
-                const Component =
-                registryEntry?.component;
-
-
-                if(!Component){
-
-                console.error(
-                    `[ConfoRenderer] Missing component ${element.type}`
-                );
-
-                return null;
-
-                }
-
-
-                const props =
-                resolveProps(
-                    element.props,
-                    runtime
-                );
-
-
-                console.log(
-                "%c[ConfoRenderer PROPS]%c " + element.id,
-                "background-color:#DDD6FE;color:#5B21B6;font-weight:bold;",
-                "",
-                props
-                );
-
-
-                const actions =
-                buildActions(
-                    element.actions,
-                    runAction
-                );
-
-
-                return (
-
-                <Component
-
-                    key={
-                    element.id
-                    }
-
-                    id={
-                    element.id
-                    }
-
-                    {...props}
-
-                    actions={
-                    actions
-                    }
-
-                />
-
-                );
-
-            }
-            )
-
+      id={
+        element.id
       }
 
-    </>
+      {...props}
+
+      actions={
+        actions
+      }
+
+    />
 
   );
+
+}
+
+
+
+
+// =====================================================
+// MAIN COMPONENT
+// =====================================================
+
+
+export default function ConfoRenderer({
+    config
+}){
+
+    if(!config){
+        return null;
+    }
+
+
+    console.log(
+        "[ConfoRenderer]",
+        config
+    );
+
+
+    return (
+
+        <ConfoNodeRenderer
+            node={config}
+        />
+
+    );
 
 }

@@ -30,14 +30,30 @@ export default async function startCall(ctx, params = {}) {
 
     });
 
-
-
     console.log(
-      "%c[CALL AFTER PATCH]%c",
-      "background-color:#3B82F6;color:white;font-weight:bold;padding:2px 6px;border-radius:3px;",
-      "",
-      ctx.get("call")
-    );
+  "[startCall ctx]",
+    Object.keys(ctx)
+  );
+
+  console.log(
+    "[startCall runAction]",
+    ctx.runAction
+  );
+
+    const joinResult =
+      await ctx.runAction?.(
+        "call.joinCall"
+      );
+
+
+    if(!joinResult?.ok){
+
+      return {
+        ok:false,
+        error:"CALL_CREATED_BUT_JOIN_FAILED"
+      };
+
+    }
 
 
     return {
@@ -50,7 +66,7 @@ export default async function startCall(ctx, params = {}) {
 
         channel:call.channelName,
 
-        state:"ringing"
+        state:"joined"
 
       }
 
@@ -61,13 +77,9 @@ export default async function startCall(ctx, params = {}) {
 
     console.error("[startCall]",err);
 
-
     return {
-
       ok:false,
-
       error:err.message
-
     };
 
   }

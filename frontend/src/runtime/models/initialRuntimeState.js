@@ -1,71 +1,66 @@
 export const INITIAL_RUNTIME_STATE = {
 
-    runtime: {
-        ready: false,
-    },
-
-    call: {
-
-        id: null,
-
-        channel: null,
-
-        state: "idle",
-
-        joined: false,
-
-        remoteUsers: [],
-
-        participants: [],
-
-        owner: null,
-
-    },
-
-    media: {
-
-        // User intent
-        micEnabled: true,
-
-        videoEnabled: true,
+ runtime:{
+    ready:false
+ },
 
 
-        // Actual Agora state
-        audioPublished: false,
+ call:{
 
-        videoPublished: false,
+    id:null,
+
+    channel:null,
+
+    state:"idle",
+
+    joined:false,
+
+    remoteUsers:[],
+
+    participants:[],
+
+    owner:null
+
+ },
 
 
-        // Device availability
-        microphoneAvailable: false,
+ agora:{
 
-        cameraAvailable: false,
+    uid:null,
+
+    connected:false,
+
+    localAudioTrack:false,
+
+    localVideoTrack:false
+
+ },
 
 
-        screenSharing: false,
+ media:{
 
-    },
+    micEnabled:true,
 
-    calls: {
+    videoEnabled:true,
 
-        available: [],
+    audioPublished:false,
 
-        loading: false,
+    videoPublished:false
 
-        lastUpdated: null,
+ },
 
-    },
 
-    user: {},
+ calls:{
 
-    agora: {
-         uid: null,
+    available:[],
 
-        connected: false,
+    loading:false,
 
-        localAudioTrack: false,
+    lastUpdated:null
 
-        localVideoTrack: false,
-    },
+ },
+
+
+ user:{}
 
 };
