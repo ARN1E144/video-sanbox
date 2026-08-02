@@ -10,15 +10,66 @@ import React, {
 } from "react";
 
 import { useRuntimeDebugger } from "./RuntimeDebuggerContext";
+import { INITIAL_RUNTIME_STATE } from "../runtime/models/initialRuntimeState";
 
 const RuntimeStateContext = createContext(null);
+
+const resolvePath = (obj, path) => {
+
+  return path
+    .split(".")
+    .reduce(
+      (acc, key) => acc?.[key],
+      obj
+    );
+
+};
+
+const setPath = (obj, path, value) => {
+
+    const keys = path.split(".");
+
+    let target = obj;
+
+    keys.forEach((key,index)=>{
+
+        if(index === keys.length - 1){
+
+            target[key] = value;
+
+            return;
+
+        }
+
+
+        if(!target[key]){
+
+            target[key] = {};
+
+        }
+
+
+        target = target[key];
+
+    });
+
+};
 
 export function RuntimeStateProvider({ children }) {
   // =====================================================
   // 🔥 BASE STATE
   // =====================================================
 
-  const stateRef = useRef({});
+  const stateRef = useRef(
+      structuredClone(INITIAL_RUNTIME_STATE)
+  );
+
+  console.log(
+    "%c[INITIAL RUNTIME STATE]%c",
+    "background-color: #CCFBF1; color: #0F766E; font-weight: bold; padding: 2px 6px; border-radius: 3px;",
+    "",
+    stateRef.current
+  );
 
   const subscribersRef = useRef({});
   const globalSubscribersRef = useRef(new Set());
@@ -79,14 +130,20 @@ export function RuntimeStateProvider({ children }) {
   const tx = transactionRef.current;
 
   if (tx?.pendingWrites?.has(key)) {
-    return tx.pendingWrites.get(key);
-  }
+  return tx.pendingWrites.get(key);
+}
 
 
-  return stateRef.current[key];
-}, []);
+// 🔥 SUPPORT NESTED STATE PATHS
+return resolvePath(
+  stateRef.current,
+  key
+)}, []);
 
-  const getAll = useCallback(() => stateRef.current, []);
+  const getAll = useCallback(
+  () => structuredClone(stateRef.current),
+  []
+);
 
   // =====================================================
   // 🔥 TRANSACTION START
@@ -140,12 +197,20 @@ export function RuntimeStateProvider({ children }) {
 
   // APPLY STATE
   for (const [key, value] of writes.entries()) {
-    const prev = stateRef.current[key];
+    const prev =
+      resolvePath(
+        stateRef.current,
+        key
+      );
 
     if (Object.is(prev, value)) continue;
 
     prevValues.set(key, prev);
-    stateRef.current[key] = value;
+    setPath(
+        stateRef.current,
+        key,
+        value
+    );
 
     changed.push(key);
 
@@ -190,16 +255,79 @@ export function RuntimeStateProvider({ children }) {
     }
 
     // =====================================================
-    // 🔥 3. SUBSCRIBERS (USE SNAPSHOT CONSISTENCY)
+    // 🔥 3. SUBSCRIBERS (NESTED PATH SUPPORT)
     // =====================================================
 
     for (const [key] of writes.entries()) {
-      const prev = prevValues.get(key);
-      const next = stateRef.current[key];
 
+      const prev = prevValues.get(key);
+
+      const next =
+        resolvePath(
+          stateRef.current,
+          key
+        );
+
+
+      // notify exact namespace
       subscribersRef.current[key]?.forEach((cb) =>
         cb(next, prev, key)
       );
+
+
+      // notify child paths
+      const notifyChildren = (
+        obj,
+        path,
+        previous
+      ) => {
+
+        if (!obj || typeof obj !== "object") {
+          return;
+        }
+
+
+        Object.keys(obj).forEach(child => {
+
+          const childPath =
+            `${path}.${child}`;
+
+
+          const nextValue =
+            obj[child];
+
+
+          const prevValue =
+            previous?.[child];
+
+
+          subscribersRef.current[childPath]
+            ?.forEach((cb)=>
+              cb(
+                nextValue,
+                prevValue,
+                childPath
+              )
+            );
+
+
+          notifyChildren(
+            nextValue,
+            childPath,
+            prevValue
+          );
+
+        });
+
+      };
+
+
+      notifyChildren(
+        next,
+        key,
+        prev
+      );
+
     }
 
     // =====================================================
@@ -285,7 +413,12 @@ export function RuntimeStateProvider({ children }) {
 
     activeComputedRef.current = null;
 
-    stateRef.current[key] = value;
+    setPath(
+        stateRef.current,
+        key,
+        value
+    );
+
     computedRef.current[key] = fn;
 
     return value;

@@ -15,24 +15,54 @@ export function useRuntimeValue(key) {
   const get = runtime.get;
   const subscribe = runtime.subscribe;
 
-  const [value, setValue] = useState(() => get(key));
+  const initial = get(key);
+
+  console.log(
+    "🔥 useRuntimeValue READ",
+    key,
+    initial
+  );
+
+  const [value, setValue] = useState(initial);
 
   const keyRef = useRef(key);
 
-  // keep latest key
   keyRef.current = key;
 
   useEffect(() => {
-    // initial sync
-    setValue(get(key));
 
-    // subscribe to runtime changes
-    const unsubscribe = subscribe(key, (nextValue) => {
-      setValue(nextValue);
-    });
+    const current = get(key);
+
+    console.log(
+      "🔥 useRuntimeValue EFFECT",
+      key,
+      current
+    );
+
+    setValue(current);
+
+    const unsubscribe = subscribe(
+      key,
+      (nextValue) => {
+
+        console.log(
+          "🔥 useRuntimeValue UPDATE",
+          key,
+          nextValue
+        );
+
+        setValue(nextValue);
+
+      }
+    );
 
     return () => unsubscribe?.();
-  }, [key, get, subscribe]);
+
+  }, [
+    key,
+    get,
+    subscribe
+  ]);
 
   return value;
 }

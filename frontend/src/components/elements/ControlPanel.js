@@ -4,9 +4,11 @@ import { useAuth } from "../../context/AuthContext";
 import { runActionTrace } from "../../runtime/runActionTrace";
 import { useRuntimeState } from "../../context/RuntimeStateContext";
 import ControlButtonBase from "../../ui/ControlButtonBase";
+import { useActionContext } from "../../context/ActionContext";
 
 export default function ControlPanel({ layout = "vertical", controls = [] }) {
   const runtime = useRuntimeState();
+  const { runRuntimeAction } = useActionContext();
 
   const { role = "participant" } = useAuth() || {};
   const callState = useRuntimeValue("call.state");
@@ -69,7 +71,7 @@ export default function ControlPanel({ layout = "vertical", controls = [] }) {
   // =====================================================
   const handleClick = async(ctrl)=>{
 
-      const params={
+      const params = {
 
           ...ctrl.config,
 
@@ -85,34 +87,23 @@ export default function ControlPanel({ layout = "vertical", controls = [] }) {
       };
 
 
-      console.log("[CONTROL CLICK]",ctrl);
+      console.log(
+          "[CONTROL CLICK]",
+          ctrl
+      );
 
 
-          try {
-
-              const result = await runActionTrace(
-                  ctrl.action,
-                  runtime,
-                  params
-              );
+      const result =
+          await runRuntimeAction(
+              ctrl.action,
+              params
+          );
 
 
-              console.log(
-                  "[ACTION RESULT]",
-                  result
-              );
-
-
-          } catch(error){
-
-              console.error(
-                  "[CONTROL ACTION FAILED]",
-                  ctrl.action,
-                  error
-              );
-
-          }
-
+      console.log(
+          "[ACTION RESULT]",
+          result
+      );
 
   };
 

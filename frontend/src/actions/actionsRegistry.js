@@ -10,10 +10,12 @@ import startCall from "./call/startCall";
 import acceptCall from "./call/acceptCall";
 import leaveCall from "./call/leaveCall";
 import endCall from "./call/endCall";
+import joinCall from "./call/joinCall";
 import fetchAvailableCalls from "./call/fetchAvailableCalls";
 import spotlightUser from "./call/spotlightUser";
 
 import toggleMic from "./call/toggleMic";
+import toggleVideo from "./call/toggleVideo";
 
 import {
   setColor,
@@ -149,64 +151,16 @@ export const actionRegistry = {
     joinCall:createAction({
 
       value:ACTIONS.CALL_JOIN,
+
       label:"Join Call",
+
       category:"call",
 
-      run: async(ctx,params)=>{
+      run:joinCall,
 
-        const agora = ctx?.agora;
-
-
-        if(!agora?.joinCall){
-          return {
-            ok:false,
-            error:"AGORA_UNAVAILABLE"
-          };
-        }
-
-
-        const call = ctx.get("call");
-
-
-        if(!call?.channel){
-          return {
-            ok:false,
-            error:"MISSING_CHANNEL"
-          };
-        }
-
-
-        const joined = await agora.joinCall({
-          channel:call.channel,
-          token:params?.token || null,
-          uid:ctx.get("user.id") || null
-        });
-
-
-        if(!joined){
-          return {
-            ok:false,
-            error:"AGORA_JOIN_FAILED"
-          };
-        }
-
-
-        ctx.set("call",{
-          ...call,
-          joined:true,
-          state:"connected"
-        });
-
-
-        return {
-          ok:true,
-          channel:call.channel
-        };
-
-        
-      },
-
-      targets:["AgoraFeed"]
+      targets:[
+        "AgoraFeed"
+      ]
 
     }),
 
@@ -221,32 +175,21 @@ export const actionRegistry = {
 
 
 
-    toggleVideo:createAction({
-      value:ACTIONS.CALL_TOGGLE_VIDEO,
-      label:"Toggle Video",
-      category:"call",
-      run:async(ctx)=>{
+      toggleVideo:createAction({
 
-        const agora=ctx.agora;
+        value:ACTIONS.CALL_TOGGLE_VIDEO,
 
-        if(!agora?.toggleVideo){
-          return {
-            ok:false,
-            error:"AGORA_UNAVAILABLE"
-          };
-        }
+        label:"Toggle Video",
 
+        category:"call",
 
-        await agora.toggleVideo();
+        run:toggleVideo,
 
+        targets:[
+          "AgoraFeed"
+        ]
 
-        return {
-          ok:true
-        };
-
-      },
-      targets:["AgoraFeed"]
-    }),
+  }),
 
 
 
@@ -265,6 +208,22 @@ export const actionRegistry = {
       category:"call",
       run:endCall,
       targets:["CallPanel"]
+    }),
+
+    fetchAvailableCalls: createAction({
+
+      value: ACTIONS.CALL_FETCH,
+
+      label: "Fetch Available Calls",
+
+      category: "call",
+
+      run: fetchAvailableCalls,
+
+      targets: [
+        "CallPanel"
+      ]
+
     }),
 
   },

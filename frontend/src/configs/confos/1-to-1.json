@@ -1,0 +1,94 @@
+{
+  "id": "confo.one_to_one",
+  "name": "1-to-1 Video Call",
+  "version": 1,
+  "type": "confo",
+  "description": "Standard one-to-one video calling experience using Agora.",
+
+  "metadata": {
+    "author": "AppSprint",
+    "category": "communication",
+    "icon": "video",
+    "tags": [
+      "video",
+      "calling",
+      "agora",
+      "1-to-1"
+    ]
+  },
+
+  "capabilities": {
+    "maxParticipants": 2,
+    "roles": [
+      "host",
+      "participant"
+    ],
+    "features": {
+      "video": true,
+      "audio": true,
+      "screenShare": false,
+      "recording": false,
+      "chat": false,
+      "whiteboard": false,
+      "reactions": false,
+      "spotlight": false
+    }
+  },
+
+  "runtime": {
+    "channel": "{{runtime.call.channel}}",
+    "token": "{{runtime.call.token}}",
+    "uid": "{{runtime.user.uid}}",
+    "callId": "{{runtime.call.id}}"
+  },
+
+  "elements": [
+    {
+      "type": "AgoraFeed",
+      "id": "agora_local",
+
+      "props": {
+        "channel": "{{runtime.channel}}",
+        "token": "{{runtime.token}}",
+        "uid": "{{runtime.uid}}",
+
+        "autoJoin": true,
+        "publishLocal": true,
+
+        "muted": false,
+        "cameraOff": false,
+
+        "mirror": true,
+        "objectFit": "cover",
+        "borderRadius": 12,
+
+        "style": {
+          "backgroundColor": "#000000"
+        }
+      },
+
+      "actions": [
+          {
+            "name": "call.fetchAvailableCalls",
+            "trigger": "click"
+          },
+          {
+            "name": "call.acceptCall",
+            "trigger": "click"
+          },
+          {
+            "name": "call.endCall",
+            "trigger": "click"
+          },
+          {
+            "name": "call.toggleMic",
+            "trigger": "click"
+          },
+          {
+            "name": "call.toggleVideo",
+            "trigger": "click"
+          }
+        ]
+    }
+  ]
+}

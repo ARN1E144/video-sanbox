@@ -12,6 +12,7 @@ import React, {
 import { runRuntimeAction } from "../runtime/runRuntimeAction";
 import { runActionPipeline } from "../utils/actionPipeline";
 import { useRuntimeState } from "./RuntimeStateContext";
+import { useRuntimeEvents } from "./RuntimeEventContext";
 
 const ActionContext = createContext(null);
 
@@ -19,6 +20,7 @@ export function ActionProvider({ children }) {
   const [bindings, setBindings] = useState({});
 
   const runtimeState = useRuntimeState();
+  const runtimeEvents = useRuntimeEvents();
 
   const inFlightActions = useRef(new Set());
 
@@ -26,6 +28,8 @@ export function ActionProvider({ children }) {
   const getAll = runtimeState.getAll;
   const set = runtimeState.set;
   const patch = runtimeState.patch;
+
+  
 
   /* ---------------- BINDINGS ---------------- */
 
@@ -131,48 +135,73 @@ export function ActionProvider({ children }) {
 
       const ctx = buildRuntimeContext();
 
-      try {
-        const result = await runRuntimeAction(
-          actionName,
-          ctx,
-          params
-        );
+       try {
 
-        console.log(
-          "%c[ACTION EXECUTED]%c %c" + actionName,
-          "color: #10B981; font-weight: bold;",
-          "",
-          "color: #3B82F6; font-weight: bold;",
-          {
-            params,
-            result,
+          const result = await runRuntimeAction(
+            actionName,
+            ctx,
+            params
+          );
+
+          if (result?.ok) {
+
+            runtimeEvents.emit(actionName, {
+
+              action: actionName,
+
+              targetId:
+                params?.targetId ?? null,
+
+              params: {
+                ...params,
+
+                channel:
+                  result?.result?.channel ||
+                  runtimeState.get("call.channel"),
+
+                uid:
+                  result?.result?.uid ||
+                  runtimeState.get("user.id"),
+              },
+
+              state: getAll(),
+
+              result,
+
+              timestamp: Date.now(),
+
+            });
+
+            await runtimeState.flush();
+
+              console.log(
+                "[AFTER COMMIT]",
+                runtimeState.getAll()
+              );
+
           }
-        );
 
-        runtimeState.commit();
+          return result;
 
-        console.log("[ACTION RAW RESULT]", {
-          actionName,
-          result,
-        });
+        } catch (err) {
 
-        return result;
+          runtimeState.commit();
 
-      } catch (err) {
-        runtimeState.commit();
+          console.error(
+            "[Action Error]",
+            actionName,
+            err
+          );
 
-        console.error(
-          "[Action Error]",
-          actionName,
-          err
-        );
-
-        return null;
-      }
+          return null;
+        }     
+      
     },
+
     [
       runtimeState,
       buildRuntimeContext,
+      getAll
     ]
   );
 
@@ -206,6 +235,7 @@ export function ActionProvider({ children }) {
 
       runRuntimeAction: executeAction,
       runActionPipeline: executePipeline,
+      runAction: executeAction,
 
       notify,
     }),

@@ -302,7 +302,7 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
                 }
               >
                 <div className="w-full h-full">
-                  <Comp id={el.id} {...el.props} {...binding} />
+                  <Comp id={el.id} {...el.props} binding={binding} />
                 </div>
               </Rnd>
             );

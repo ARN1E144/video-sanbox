@@ -13,6 +13,7 @@ import { RuntimeDebuggerProvider } from "./context/RuntimeDebuggerContext";
 import RuntimeTestPanel from "./dev/RuntimeTestPanel";
 import RuntimeBootstrap from "./runtime/RuntimeBootstrap";
 import RuntimeDevWiring from "./dev/RuntimeDevWiring";
+import ConfoTest from "./dev/ConfoTest";
 
 import MainApp from "./MainApp";
 
@@ -44,6 +45,8 @@ function App() {
                       <MainApp />
 
                       <RuntimeTestPanel />
+
+                      <ConfoTest />
 
                       {/* 🔥 DEV WIRED TRIGGERS (ONLY IN DEV) */}
                       <RuntimeDevWiring />

@@ -3,34 +3,55 @@
 import api from "../../services/api";
 
 export default async function acceptCall(ctx, params = {}) {
+
   try {
+
     const { callId } = params;
 
+
     if (!callId) {
+
       return {
-        ok: false,
-        error: "MISSING_CALL_ID",
+        ok:false,
+        error:"MISSING_CALL_ID",
       };
+
     }
 
-    const { data } = await api.post(`/calls/${callId}/accept`);
+
+    const { data } =
+      await api.post(
+        `/calls/${callId}/accept`
+      );
+
 
     const call = data.call;
 
-    const channel = call.channelName;
 
-    const existingCall = ctx.get?.("call") || {};
+    const channel =
+      call.channelName;
 
-    // 🔥 SINGLE SOURCE OF TRUTH
-    ctx.set?.("call", {
-      ...existingCall,
+
+
+    ctx.patch?.("call", {
+
       id: callId,
+
       channel,
-      state: "accepted",
-      joined: false,
-      remoteUsers: existingCall.remoteUsers || [],
-      createdAt: existingCall.createdAt || Date.now(),
+
+      state:"accepted",
+
+      joined:false,
+
+      remoteUsers:[],
+
+      participants:[],
+
+      acceptedAt:Date.now(),
+
     });
+
+
 
     console.log(
       "%c[CALL ACCEPTED]%c",
@@ -39,20 +60,40 @@ export default async function acceptCall(ctx, params = {}) {
       ctx.get?.("call")
     );
 
+
     return {
-      ok: true,
-      result: {
-        id: callId,
+
+      ok:true,
+
+      result:{
+
+        id:callId,
+
         channel,
-      },
+
+        state:"accepted"
+
+      }
+
     };
 
-  } catch (err) {
-    console.error("[acceptCall]", err);
+
+  } catch(err) {
+
+    console.error(
+      "[acceptCall]",
+      err
+    );
+
 
     return {
-      ok: false,
-      error: err.message,
+
+      ok:false,
+
+      error:err.message
+
     };
+
   }
+
 }

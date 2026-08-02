@@ -13,31 +13,35 @@ export default async function toggleMic(ctx) {
     }
 
 
-    const currentState = agora.localAudioTrack.muted;
+    const enabled =
+        !agora.localAudioTrack.enabled;
 
-    const nextState = !currentState;
+
+    await agora.localAudioTrack.setEnabled(
+        enabled
+    );
 
 
-    await agora.localAudioTrack.setMuted(nextState);
+    ctx.patch(
+        "media",
+        {
+            ...ctx.get("media"),
+            micEnabled: enabled
+        }
+    );
 
 
     console.log(
         "[toggleMic]",
-        currentState,
-        "=>",
-        nextState
+        {
+            micEnabled: enabled
+        }
     );
-
-
-    ctx.set("call",{
-        ...ctx.get("call"),
-        micMuted: nextState
-    });
 
 
     return {
         ok:true,
-        muted:nextState
+        micEnabled: enabled
     };
 
 }

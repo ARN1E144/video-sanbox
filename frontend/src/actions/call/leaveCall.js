@@ -1,8 +1,13 @@
+// src/actions/call/leaveCall.js
+
+import { CALL_IDLE_STATE } from "../../runtime/models/callIdleState";
 
 export default async function leaveCall(ctx){
 
     const agora = ctx.agora;
-    const currentCall = ctx.get("call");
+
+    const currentCall =
+        ctx.get("call");
 
 
     /*
@@ -42,25 +47,26 @@ export default async function leaveCall(ctx){
         await agora.leaveCall();
 
 
-        ctx.set(
+        ctx.patch?.(
             "call",
             {
-                ...currentCall,
 
-                joined:false,
+               ...CALL_IDLE_STATE,
 
-                state:"idle",
+               endedAt:Date.now(),
 
-                micMuted:false,
-
-                videoEnabled:false,
-                
             }
         );
 
 
         return {
-            ok:true
+
+            ok:true,
+
+            result:{
+                state:"idle"
+            }
+
         };
 
 
@@ -74,8 +80,11 @@ export default async function leaveCall(ctx){
 
 
         return {
+
             ok:false,
+
             error:error.message
+
         };
 
     }

@@ -17,6 +17,7 @@ class AgoraEngine {
 
     this.localAudioTrack = null;
     this.localVideoTrack = null;
+    this.onLocalTrackReady = null;
 
 
     this.isReady = false;
@@ -111,7 +112,7 @@ class AgoraEngine {
 
 
 
-  if (this.isJoining || this.isReady) {
+  if (this.isJoining || this.isLeaving || this.isReady) {
 
     console.warn(
       "[Agora] join ignored - already active"
@@ -159,7 +160,11 @@ class AgoraEngine {
     this.localVideoTrack =
       await AgoraRTC.createCameraVideoTrack();
 
-
+    if (this.onLocalTrackReady) {
+      this.onLocalTrackReady(
+        this.localVideoTrack
+      );
+    }
 
     await this.client.publish([
       this.localAudioTrack,
@@ -205,7 +210,19 @@ class AgoraEngine {
 
 
 
-  async leaveCall(){
+ async leaveCall() {
+
+  if (this.isLeaving) {
+
+    console.warn(
+      "[Agora] leave ignored - already leaving"
+    );
+
+    return false;
+
+  }
+
+  this.isLeaving = true;
 
   try {
 
@@ -213,45 +230,42 @@ class AgoraEngine {
 
 
     // Stop microphone
-    if(this.localAudioTrack){
+    if (this.localAudioTrack) {
 
       this.localAudioTrack.stop();
       this.localAudioTrack.close();
+      this.localAudioTrack = null;
 
-      this.localAudioTrack=null;
     }
 
 
     // Stop camera
-    if(this.localVideoTrack){
+    if (this.localVideoTrack) {
 
       this.localVideoTrack.stop();
       this.localVideoTrack.close();
+      this.localVideoTrack = null;
 
-      this.localVideoTrack=null;
     }
 
 
     // Leave channel
-    if(this.client){
+    if (this.client) {
 
       await this.client.leave();
-
-      this.uid = null;
 
     }
 
 
-    this.uid=null;
+    this.uid = null;
 
+    this.isReady = false;
 
     console.log("[Agora] cleaned");
 
-
     return true;
 
-
-  } catch(error){
+  } catch (error) {
 
     console.error(
       "[Agora] leave failed",
@@ -259,6 +273,11 @@ class AgoraEngine {
     );
 
     return false;
+
+  } finally {
+
+    this.isLeaving = false;
+
   }
 
 }
@@ -276,7 +295,9 @@ class AgoraEngine {
 
       if (this.localAudioTrack) {
 
+        this.localAudioTrack.stop();
         this.localAudioTrack.close();
+        this.localAudioTrack = null;
 
       }
 
@@ -284,7 +305,9 @@ class AgoraEngine {
 
       if (this.localVideoTrack) {
 
+        this.localVideoTrack.stop();
         this.localVideoTrack.close();
+        this.localVideoTrack = null;
 
       }
 
@@ -368,8 +391,12 @@ class AgoraEngine {
     }
   }
 
-  async toggleVideo() {
 
+  getLocalVideoTrack() {
+  return this.localVideoTrack;
+}
+
+   async toggleVideo() {
 
     if (
       !this.isReady ||
@@ -380,10 +407,8 @@ class AgoraEngine {
         "[Agora] video ignored - unavailable"
       );
 
-      return;
-
+      return false;
     }
-
 
 
     if (this.videoLock) {
@@ -392,26 +417,38 @@ class AgoraEngine {
         "[Agora] video toggle locked"
       );
 
-      return;
-
+      return false;
     }
-
 
 
     this.videoLock = true;
 
 
-
     try {
+
+      const enabled =
+        !this.localVideoTrack.enabled;
 
 
       await this.localVideoTrack.setEnabled(
-        !this.localVideoTrack.enabled
+        enabled
       );
 
 
-    } catch(err) {
+      console.log(
+        "[AgoraEngine toggleVideo]",
+        {
+          enabled,
+          trackState:
+            this.localVideoTrack.enabled
+        }
+      );
 
+
+      return enabled;
+
+
+    } catch(err) {
 
       console.error(
         "[Agora] video toggle failed",
@@ -419,16 +456,17 @@ class AgoraEngine {
       );
 
 
-    } finally {
+      return false;
 
+
+    } finally {
 
       this.videoLock = false;
 
-
     }
 
-
   }
+
 
 
 

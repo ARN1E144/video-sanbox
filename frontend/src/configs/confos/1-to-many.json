@@ -1,13 +1,23 @@
 {
+
+  "id": "confo.one_to_many",
   "name": "1-to-Many Video Call",
+  "version": 1,
   "type": "confo",
   "description": "One client connects, multiple users alerted, first to accept joins",
+
+    "capabilities": [
+      "video",
+      "audio",
+      "remoteUsers",
+      "multiParticipant"
+    ],
   "elements": [
     {
       "type": "AgoraFeed",
       "id": "agora_client",
       "props": {
-        "channel": "1tomany_channel",
+        "channel": "{{runtime.call.channel}}",
         "autoJoin": false,
         "publishLocal": true,
         "muted": false,
@@ -22,7 +32,7 @@
         { "name": "call.acceptCall", "trigger": "click" },
         { "name": "call.endCall", "trigger": "click" },
         { "name": "call.toggleMic", "trigger": "click" },
-        { "name": "call.toggleCamera", "trigger": "click" }
+        { "name": "call.toggleVideo", "trigger": "click" }
       ]
     }
   ]

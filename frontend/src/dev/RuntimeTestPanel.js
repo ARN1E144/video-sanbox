@@ -5,19 +5,20 @@ import React, {
   useRef,
 } from "react";
 
-import { useActionContext } from "../context/ActionContext";
-import { useRuntimeValue } from "../hooks/useRuntimeValue";
-import { useRuntimeState } from "../context/RuntimeStateContext";
+import {
+  useRuntimeState
+} from "../context/RuntimeStateContext";
+
+import RuntimeStatusPanel from "./panels/RuntimeStatusPanel";
+import CallControlsPanel from "./panels/CallControlsPanel";
+import CallsPanel from "../components/call/CallsPanel";
 
 
-export default function RuntimeTestPanel() {
 
+export default function RuntimeTestPanel(){
 
-  const runtime = useRuntimeState();
-
-  const {
-    runRuntimeAction
-  } = useActionContext();
+  const runtime =
+    useRuntimeState();
 
 
 
@@ -25,27 +26,29 @@ export default function RuntimeTestPanel() {
   // DRAGGING
   // =====================================================
 
-  const [position,setPosition] = useState({
+  const [position,setPosition] =
+    useState({
 
-    x:
-      window.innerWidth - 390,
+      x:
+        window.innerWidth - 420,
 
-    y:
-      window.innerHeight - 620
+      y:
+        80
 
-  });
+    });
 
 
 
-  const dragRef = useRef({
+  const dragRef =
+    useRef({
 
-    dragging:false,
+      dragging:false,
 
-    offsetX:0,
+      offsetX:0,
 
-    offsetY:0
+      offsetY:0
 
-  });
+    });
 
 
 
@@ -89,7 +92,6 @@ export default function RuntimeTestPanel() {
     }
 
 
-
     setPosition({
 
       x:
@@ -126,280 +128,31 @@ export default function RuntimeTestPanel() {
       handleDragEnd
     );
 
-
   };
 
 
 
 
-
   // =====================================================
-  // RUNTIME
-  // =====================================================
-
-  const runtimeReady =
-    useRuntimeValue(
-      "runtime.ready"
-    );
-
-
-
-  const agora =
-    runtime.agora;
-
-
-
-  // =====================================================
-  // CALL STATE
+  // DEBUG SNAPSHOT
   // =====================================================
 
-  const callId =
-    useRuntimeValue(
-      "call.id"
-    );
-
-
-  const callChannel =
-    useRuntimeValue(
-      "call.channel"
-    );
-
-
-  const callState =
-    useRuntimeValue(
-      "call.state"
-    );
-
-
-  const joined =
-    useRuntimeValue(
-      "call.joined"
-    );
-
-
-  const micMuted =
-    useRuntimeValue(
-      "call.micMuted"
-    );
-
-
-  const videoEnabled =
-    useRuntimeValue(
-      "call.videoEnabled"
-    );
-
-
-
-
-
-  // =====================================================
-  // ACTION RUNNER
-  // =====================================================
-
-  const run = async(
-    action,
-    params={}
-  )=>{
+  const dumpRuntime = ()=>{
 
 
     console.group(
-      `▶ ${action}`
-    );
-
-
-    try{
-
-
-      const result =
-        await runRuntimeAction(
-          action,
-          params
-        );
-
-
-      console.log(
-        "Result:",
-        result
-      );
-
-
-      return result;
-
-
-    }
-    catch(err){
-
-
-      console.error(
-        err
-      );
-
-
-    }
-    finally{
-
-
-      console.groupEnd();
-
-
-    }
-
-  };
-
-
-
-
-
-
-  // =====================================================
-  // SNAPSHOT
-  // =====================================================
-
-  const snapshotRuntime = ()=>{
-
-
-    return {
-
-
-      runtimeReady,
-
-
-      call:{
-
-
-        id:
-          callId ?? null,
-
-
-        channel:
-          callChannel ?? null,
-
-
-        state:
-          callState ?? "idle",
-
-
-        joined:
-          joined ?? false,
-
-
-        micMuted:
-          micMuted ?? false,
-
-
-        videoEnabled:
-          videoEnabled ?? false,
-
-
-      },
-
-
-
-      agora:{
-
-
-        uid:
-          agora?.uid ?? null,
-
-
-        localAudioTrack:
-          !!agora?.localAudioTrack,
-
-
-        localVideoTrack:
-          !!agora?.localVideoTrack
-
-
-      }
-
-
-    };
-
-
-  };
-
-
-
-
-
-
-  // =====================================================
-  // CLEANUP VALIDATION
-  // =====================================================
-
-  const validateCleanup = ()=>{
-
-
-    const snapshot =
-      snapshotRuntime();
-
-
-
-    const runtimePassed =
-
-      snapshot.call.id === null &&
-
-      snapshot.call.channel === null &&
-
-      snapshot.call.state === "idle" &&
-
-      snapshot.call.joined === false &&
-
-      snapshot.call.micMuted === false &&
-
-      snapshot.call.videoEnabled === false;
-
-
-
-    const agoraPassed =
-
-
-      snapshot.agora.uid === null &&
-
-      snapshot.agora.localAudioTrack === false &&
-
-      snapshot.agora.localVideoTrack === false;
-
-
-
-    const passed =
-      runtimePassed &&
-      agoraPassed;
-
-
-
-    console.group(
-
-      passed
-
-        ? "✅ RUNTIME CLEANUP PASSED"
-
-        : "❌ RUNTIME CLEANUP FAILED"
-
-    );
-
-
-
-    console.log(
-      snapshot
+      "FULL RUNTIME SNAPSHOT"
     );
 
 
     console.log(
-      {
-        runtimePassed,
-        agoraPassed
-      }
+      runtime.getAll()
     );
 
 
     console.groupEnd();
 
-
   };
-
-
-
 
 
 
@@ -407,8 +160,8 @@ export default function RuntimeTestPanel() {
   // UI
   // =====================================================
 
-  return (
 
+  return (
 
     <div
 
@@ -416,42 +169,40 @@ export default function RuntimeTestPanel() {
 
         position:"fixed",
 
-
         left:position.x,
-
 
         top:position.y,
 
+        width:420,
 
-        width:360,
-
+        maxHeight:"90vh",
 
         background:"#1d1d1d",
 
-
         color:"#fff",
-
 
         borderRadius:12,
 
-
         padding:16,
-
 
         zIndex:999999,
 
-
         fontFamily:"monospace",
 
-
         boxShadow:
-          "0 10px 30px rgba(0,0,0,.35)"
+          "0 10px 30px rgba(0,0,0,.35)",
+
+
+        display:"flex",
+
+        flexDirection:"column"
 
       }}
 
     >
 
 
+      {/* HEADER */}
 
       <div
 
@@ -479,83 +230,15 @@ export default function RuntimeTestPanel() {
 
 
 
-
-      <Status
-        label="Runtime Ready"
-        value={runtimeReady}
-      />
-
-
-      <Status
-        label="Call ID"
-        value={callId ?? "none"}
-      />
-
-
-      <Status
-        label="Channel"
-        value={callChannel ?? "none"}
-      />
-
-
-      <Status
-        label="State"
-        value={callState ?? "idle"}
-      />
-
-
-      <Status
-        label="Joined"
-        value={joined ?? false}
-      />
-
-
-      <Status
-        label="Mic Muted"
-        value={micMuted ?? false}
-      />
-
-
-      <Status
-        label="Video Enabled"
-        value={videoEnabled ?? false}
-      />
-
-
-
-      <hr />
-
-
-
-      <Status
-        label="Agora UID"
-        value={agora?.uid ?? null}
-      />
-
-
-      <Status
-        label="Audio Track"
-        value={!!agora?.localAudioTrack}
-      />
-
-
-      <Status
-        label="Video Track"
-        value={!!agora?.localVideoTrack}
-      />
-
-
-
+      {/* SCROLL CONTENT */}
 
       <div
 
         style={{
 
-          display:"grid",
+          overflowY:"auto",
 
-          gap:8,
-
-          marginTop:16
+          paddingRight:8
 
         }}
 
@@ -563,195 +246,53 @@ export default function RuntimeTestPanel() {
 
 
 
-        <button
-          onClick={() =>
-            console.log(
-              "[FULL SNAPSHOT]",
-              snapshotRuntime()
-            )
-          }
-        >
-          Dump Runtime
-        </button>
+        <RuntimeStatusPanel />
 
 
 
-
-        <button
-          onClick={() =>
-            run(
-              "call.startCall",
-              {
-
-                appId:
-                  process.env.REACT_APP_AGORA_APP_ID,
+        <hr />
 
 
-                channel:
-                  "test-room",
+
+        <CallControlsPanel />
 
 
-                token:null,
+
+        <hr />
 
 
-                uid:null
 
-              }
-            )
-          }
-        >
-          Start Call
-        </button>
+        <CallsPanel />
 
+
+
+        <hr />
 
 
 
         <button
-          onClick={() =>
-            run(
-              "call.joinCall",
-              {
 
-                channel:
-                  "test-room",
-
-
-                token:null,
-
-
-                uid:
-                  "test-user"
-
-              }
-            )
-          }
-        >
-          Join Call
-        </button>
-
-
-
-
-        <button
-          onClick={() =>
-            run(
-              "call.toggleMic"
-            )
-          }
-        >
-          Toggle Mic
-        </button>
-
-
-
-
-        <button
-          onClick={() =>
-            run(
-              "call.toggleVideo"
-            )
-          }
-        >
-          Toggle Video
-        </button>
-
-
-
-
-        <button
-          onClick={() =>
-            run(
-              "call.leaveCall"
-            )
-          }
-        >
-          Leave Meeting
-        </button>
-
-
-
-
-        <button
-          onClick={() =>
-            run(
-              "call.endCall"
-            )
-          }
-        >
-          End Meeting
-        </button>
-
-
-
-
-        <button
           onClick={
-            validateCleanup
+            dumpRuntime
           }
+
+          style={{
+
+            width:"100%",
+
+            marginTop:12
+
+          }}
+
         >
-          Validate Cleanup
+
+          Dump Runtime
+
         </button>
 
 
 
       </div>
-
-
-
-    </div>
-
-
-  );
-
-
-}
-
-
-
-
-// =====================================================
-// STATUS COMPONENT
-// =====================================================
-
-function Status({
-  label,
-  value
-}){
-
-
-  return (
-
-    <div
-      style={{
-        marginBottom:6
-      }}
-    >
-
-      {label}:
-
-
-      <strong
-
-        style={{
-
-          marginLeft:8,
-
-
-          color:
-
-            value
-
-              ? "#00d26a"
-
-              : "#ff6b6b"
-
-        }}
-
-      >
-
-        {String(value)}
-
-      </strong>
 
 
     </div>

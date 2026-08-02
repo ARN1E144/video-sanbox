@@ -2,18 +2,55 @@ export default {
   label: "Toggle Video",
 
   run: async (ctx) => {
+
     const agora = ctx?.agora;
 
+
     if (!agora?.toggleVideo) {
-      ctx?.notify?.("Video controls unavailable");
-      return;
+
+      ctx?.notify?.(
+        "Video controls unavailable"
+      );
+
+      return {
+        ok:false,
+        error:"AGORA_UNAVAILABLE"
+      };
+
     }
 
-    await agora.toggleVideo();
 
-    const current = ctx.get?.("media.videoEnabled");
-    ctx.set?.("media.videoEnabled", !current);
+    const enabled =
+      await agora.toggleVideo();
 
-    return { success: true };
+
+
+    ctx.set?.(
+      "call",
+      {
+        ...ctx.get("call"),
+        videoEnabled: enabled
+      }
+    );
+
+
+
+    console.log(
+      "[AGORA] toggleVideo",
+      {
+        videoEnabled: enabled
+      }
+    );
+
+
+
+    return {
+
+      ok:true,
+
+      videoEnabled: enabled
+
+    };
+
   },
 };
