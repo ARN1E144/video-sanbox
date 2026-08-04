@@ -1,50 +1,16 @@
-// =====================================================
-// ConfoRenderer
-// -----------------------------------------------------
-// Converts Confo JSON configuration into React UI.
-//
-// Flow:
-//
-// Confo Config
-//      ↓
-// elements[]
-//      ↓
-// ConfoElementRenderer
-//      ↓
-// ComponentRegistry
-//      ↓
-// React Components
-//
-// =====================================================
-
-
-import {
-    use,
-  useEffect,
-  useState
-} from "react";
-
+import React from "react";
 
 import {
   componentRegistry
-}
-from "../../actions/componentRegistry";
-
+} from "../../actions/componentRegistry";
 
 import {
   useActionContext
-}
-from "../../context/ActionContext";
-
+} from "../../context/ActionContext";
 
 import {
- useRuntimeProps
-}
-from "../../hooks/useRuntimeProps";
-
-import ConfoNodeRenderer from "../../components/confo/ConfoNodeRenderer";
-
-
+  useRuntimeProps
+} from "../../hooks/useRuntimeProps";
 
 
 
@@ -58,34 +24,27 @@ function buildActions(
   runAction
 ){
 
-  if(
-    !Array.isArray(actions)
-  ){
-
+  if(!Array.isArray(actions)){
     return {};
-
   }
 
 
-  const handlers = {};
+  const handlers={};
 
 
+  actions.forEach(action=>{
 
-  actions.forEach(
-    action=>{
+    handlers[action.name] =
+      (...args)=>{
 
-      handlers[action.name] =
-        (...args)=>{
+        runAction(
+          action.name,
+          ...args
+        );
 
-          runAction(
-            action.name,
-            ...args
-          );
+      };
 
-        };
-
-    }
-  );
+  });
 
 
   return handlers;
@@ -96,13 +55,11 @@ function buildActions(
 
 
 // =====================================================
-// SINGLE ELEMENT
+// ELEMENT RENDERER
 // =====================================================
 
 function ConfoElementRenderer({
-
   element
-
 }){
 
 
@@ -110,6 +67,13 @@ function ConfoElementRenderer({
     runAction
   } =
   useActionContext();
+
+
+
+  const props =
+    useRuntimeProps(
+      element.props || {}
+    );
 
 
 
@@ -125,17 +89,11 @@ function ConfoElementRenderer({
 
 
 
-  const props =
-    useRuntimeProps(
-      element.props
-    );
-
-
-
   if(!Component){
 
     console.error(
-      `[ConfoRenderer] Missing component ${element.type}`
+      "[ConfoElementRenderer] Missing component:",
+      element.type
     );
 
     return null;
@@ -153,8 +111,8 @@ function ConfoElementRenderer({
 
 
   console.log(
-    "[ConfoElement PROPS]",
-    element.id,
+    "[ConfoElementRenderer]",
+    element.type,
     props
   );
 
@@ -164,15 +122,11 @@ function ConfoElementRenderer({
 
     <Component
 
-      id={
-        element.id
-      }
+      id={element.id}
 
       {...props}
 
-      actions={
-        actions
-      }
+      actions={actions}
 
     />
 
@@ -183,32 +137,64 @@ function ConfoElementRenderer({
 
 
 
-// =====================================================
-// MAIN COMPONENT
-// =====================================================
 
+// =====================================================
+// MAIN CONFO RENDERER
+// =====================================================
 
 export default function ConfoRenderer({
-    config
+ config
 }){
 
-    if(!config){
-        return null;
-    }
+
+ if(!config){
+   return null;
+ }
 
 
-    console.log(
-        "[ConfoRenderer]",
-        config
-    );
+
+ console.log(
+   "[ConfoRenderer]",
+   config
+ );
 
 
-    return (
 
-        <ConfoNodeRenderer
-            node={config}
+ if(!Array.isArray(config.elements)){
+
+   console.warn(
+     "[ConfoRenderer] No elements found",
+     config
+   );
+
+   return null;
+
+ }
+
+
+
+ return (
+
+   <>
+
+   {
+    config.elements.map(
+      element=>(
+
+        <ConfoElementRenderer
+
+          key={element.id}
+
+          element={element}
+
         />
 
-    );
+      )
+    )
+   }
+
+   </>
+
+ );
 
 }

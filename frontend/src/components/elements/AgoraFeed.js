@@ -9,7 +9,6 @@ import React, {
 import { useActionContext } from "../../context/ActionContext";
 import { useRuntimeValue } from "../../hooks/useRuntimeValue";
 import { bindActions } from "../../utils/actionBinder";
-import { useRuntimeEvents } from "../../context/RuntimeEventContext";
 import { useRuntimeState } from "../../context/RuntimeStateContext";
 
 import {
@@ -50,7 +49,7 @@ export default function AgoraFeed(props) {
 
   const remoteUsers =
     useRuntimeValue(
-      "users.remoteUsers"
+      "call.remoteUsers"
     ) || {};
 
 
@@ -73,14 +72,6 @@ export default function AgoraFeed(props) {
     useRuntimeValue(
       "call.channel"
     );
-
-
-
-  const uid =
-    useRuntimeValue(
-      "user.id"
-    );
-
 
 
 
@@ -257,7 +248,6 @@ export default function AgoraFeed(props) {
         actionName,
         {
           channel,
-          uid,
           targetId:id
         }
       );

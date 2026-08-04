@@ -97,7 +97,7 @@ export default function useAgoraRuntime() {
           // -------------------------
 
           runtimeState.set(
-            "users.remoteUsers",
+            "call.remoteUsers",
             remoteUsersRef.current
           );
 
@@ -175,7 +175,7 @@ export default function useAgoraRuntime() {
           // -------------------------
 
           runtimeState.set(
-            "users.remoteUsers",
+            "call.remoteUsers",
             next
           );
 
@@ -368,7 +368,7 @@ export default function useAgoraRuntime() {
         );
 
         runtimeState.set(
-          "users.remoteUsers",
+          "call.remoteUsers",
           {}
         );
 
