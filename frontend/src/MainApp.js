@@ -15,7 +15,7 @@ import { useAuth } from "./context/AuthContext";
 import SplitPreviewLayout from "./components/splitPreviewLayout";
 import { useCanvasState } from "./context/CanvasContext";
 import InspectorContent from "./components/inspectorPanel/InspectorContent";
-import ConfoRenderer from "./runtime/confos/ConfoRenderer";
+
 
 
 
@@ -209,9 +209,6 @@ console.log(
 
       <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <MainMenu currentView={currentView} setCurrentView={setCurrentView} />
-          <ConfoRenderer
-                      config={projectSchema?.tree}
-                  />
 
         {/* <div style={{ padding: 8, borderBottom: "1px solid #222" }}>
           <button onClick={() => setCurrentView("auth")}>Auth</button>

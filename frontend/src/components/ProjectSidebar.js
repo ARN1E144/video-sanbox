@@ -82,7 +82,7 @@ export default function ProjectSidebar() {
           <h4 style={{ marginBottom: 8, color: "#aaa" }}>Saved Projects</h4>
           {projects.length === 0 && <div style={{ color: "#555" }}>No projects saved</div>}
 
-          {projects.map((proj) => (
+          {Object.values(projects).map((proj) => (
             <div
               key={proj.id}
               style={{

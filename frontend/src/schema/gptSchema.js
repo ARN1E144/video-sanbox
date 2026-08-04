@@ -13,8 +13,8 @@ MicButton: { props: { state: 'on|off', onClick: 'ToggleMic' } },
 ControlButton: { props: { label: 'string', action: 'string', target: 'componentId' } },
 AppBar: { props: { title: 'string', actions: ['EndCall', 'ToggleSettings'] } },
 Container: {
-props: { layout: 'flex|grid', align: 'string', justify: 'string' },
-canContain: ['VideoFeed', 'ChatPanel', 'TextBox', 'ControlButton', 'Text', 'Container'],
+props: { layout: 'flex|grid', direction: 'row|column',align: 'string', justify: 'string' },
+canContain: ['AgoraFeed', 'VideoFeed', 'ChatPanel', 'TextBox', 'ControlButton', 'Text', 'Container'],
 },
 Text: { props: { content: 'string', style: 'object' } },
 };

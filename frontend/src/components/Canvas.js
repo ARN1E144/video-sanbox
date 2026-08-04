@@ -13,6 +13,7 @@ import { useProjectContext, ProjectContext } from "../context/ProjectContext";
 import { useActionContext } from "../context/ActionContext";
 import { useAuth } from "../context/AuthContext";
 import { CONTROL_TEMPLATES } from "../constants/controlTemplates";
+import CanvasElementRenderer from "./CanvasElementRenderer";
 
 
 
@@ -39,9 +40,11 @@ const SYSTEM_LOCKED_KEYS = new Set([
 
 export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
   const { isPreviewMode, previewView } = usePreviewMode();
-  const previewActive = forcePreview ?? isPreviewMode;
   const { elements, addElement, updateElement } = useCanvasState();
-  const { projectType, backgroundConfigs } = useProjectContext();
+  const {
+  projectType,
+  backgroundConfigs,
+} = useProjectContext();
   const { collapsed: sidebarCollapsed } = useContext(ProjectContext);
   const { bindings, cameraOn } = useActionContext();
   const { canBuild } = useAuth();
@@ -93,6 +96,20 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
   const canvasRef = useRef(null);
 
 
+  /*
+------------------------------------------------------------
+Project Tree → Canvas Elements
+
+Confo generated projects enter here.
+
+tree
+ ↓
+ProjectTreeLoader
+ ↓
+Canvas elements
+
+------------------------------------------------------------
+*/
   
 
   // Load element meta
@@ -259,17 +276,16 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
         {/* CANVAS */}
         <div
           ref={canvasRef}
-          onDrop={handleDrop}
-          onDragOver={(e) => isBuilderEditable && e.preventDefault()}
-          className="relative border border-border rounded-xl overflow-hidden"
           style={{
-            width: "100%",
-            height: DEVICE_SIZES[device].height * scale,
-            transform: `scale(${scale})`,
-            transformOrigin: "top left",
-            ...canvasBackgroundStyle,
+            width: DEVICE_SIZES[device].width,
+            height: DEVICE_SIZES[device].height,
+            transform:`scale(${scale})`,
+            transformOrigin:"top left",
+            position:"relative",
+            overflow:"hidden",
+            background:"#020617"
           }}
-        >
+          >
           {visibleElements.map((el) => {
             const entry = registry[el.type];
             if (!entry?.component) return null;
@@ -277,13 +293,24 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
             const Comp = entry.component;
             const binding = bindings[el.id] || {};
 
+            console.log(
+              "[Canvas Render Component]",
+              {
+                type: el.type,
+                props: el.props,
+              }
+            );
+
             return (
               <Rnd
+                style={{
+                  zIndex: selectedId === el.id ? 100 : 1
+                }}
                 key={el.id}
                 bounds="parent"
                 size={{ width: el.width, height: el.height }}
                 position={{ x: el.x, y: el.y }}
-                scale={scale}
+                scale={1}
                 onClick={() => {
                   setSelectedId(el.id);
                   onSelectedIdChange?.(el.id);
@@ -291,18 +318,37 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
                     setInspectorOpen((p) => ({ ...p, [currentRoleKey]: true }));
                   }
                 }}
-                onDragStop={(e, d) => updateElement(el.id, { x: d.x, y: d.y })}
+                onDragStop={(e, d) => {
+
+                  updateElement(el.id,{
+
+                    x: Math.round(Math.max(0,d.x)),
+
+                    y: Math.round(Math.max(0,d.y))
+
+                  });
+
+}}
                 onResizeStop={(e, dir, ref, delta, position) =>
                   updateElement(el.id, {
-                    width: parseInt(ref.style.width),
-                    height: parseInt(ref.style.height),
+                    width: Math.round(
+                    parseFloat(ref.style.width)
+                  ),
+
+                  height: Math.round(
+                    parseFloat(ref.style.height)
+                  ),
                     x: position.x,
                     y: position.y,
                   })
                 }
               >
                 <div className="w-full h-full">
-                  <Comp id={el.id} {...el.props} binding={binding} />
+                  <CanvasElementRenderer
+                    Component={Comp}
+                    element={el}
+                    binding={binding}
+                  />
                 </div>
               </Rnd>
             );

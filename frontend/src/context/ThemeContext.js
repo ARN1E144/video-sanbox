@@ -1,18 +1,57 @@
-import { useEffect, createContext } from "react";
-import { theme, applyTheme } from "../theme/theme";
+// src/context/ThemeContext.js
 
-const ThemeContext = createContext(theme);
+import {
+  useEffect,
+  createContext,
+  useContext,
+} from "react";
 
-export const ThemeProvider = ({ children }) => {
+import {
+  theme,
+  applyTheme
+} from "../theme/theme";
+
+
+
+const ThemeContext =
+  createContext(theme);
+
+
+
+export const ThemeProvider = ({
+  children
+}) => {
+
+
   useEffect(() => {
+
     applyTheme(theme);
+
   }, []);
 
+
+
   return (
-    <ThemeContext.Provider value={theme}>
+
+    <ThemeContext.Provider
+      value={theme}
+    >
+
       {children}
+
     </ThemeContext.Provider>
+
   );
+
 };
 
-export const useTheme = () => ThemeContext;
+
+
+
+export const useTheme = () => {
+
+  return useContext(
+    ThemeContext
+  );
+
+};

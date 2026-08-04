@@ -1,142 +1,526 @@
 // src/context/CanvasContext.js
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef
+} from "react";
+
 import { useProjectContext } from "./ProjectContext";
-import COMPONENTS from "../components/elements/registry"; // ✅ registry keys = valid types
+
+import COMPONENTS from "../components/elements/registry";
+
+import {
+  projectTreeToElements,
+} from "../runtime/project/ProjectTreeLoader";
+
+import {
+  elementsToProjectTree,
+} from "../runtime/project/ProjectTreeWriter";
+
 
 const CanvasContext = createContext();
 
-function normalizeElement(el) {
-  if (!el || typeof el !== "object") return null;
 
-  // Ensure props object always exists
-  const props = el.props && typeof el.props === "object" ? el.props : {};
 
-  // (Optional) migrate any legacy props -> new props
-  // Example: apiUrl -> endpoint, apiMethod -> method
-  const migratedProps = { ...props };
-  if (migratedProps.apiUrl && !migratedProps.endpoint) migratedProps.endpoint = migratedProps.apiUrl;
-  if (migratedProps.apiMethod && !migratedProps.method) migratedProps.method = migratedProps.apiMethod;
+function extractDefaults(editableProps = {}) {
 
-  // Validate type against registry
-  const type = el.type;
-  const isKnownType = !!COMPONENTS[type];
+  const result = {};
+
+  Object.entries(editableProps)
+    .forEach(([key,value])=>{
+
+      if(
+        value &&
+        typeof value === "object" &&
+        value.default !== undefined
+      ){
+        result[key] = value.default;
+      }
+      else{
+        result[key] = value;
+      }
+
+    });
+
+
+  return result;
+
+}
+
+
+
+
+function normalizeElement(el){
+
+  if(!el || typeof el !== "object"){
+    return null;
+  }
+
+
+
+  const registryEntry =
+    COMPONENTS[el.type];
+
+
+
+  const metaDefaults =
+    registryEntry?.meta?.editableProps || {};
+
+
+
+  const props = {
+
+    ...extractDefaults(metaDefaults),
+
+    ...(el.props || {})
+
+  };
+
+
+
 
   return {
+
+
     ...el,
-    type: isKnownType ? type : "Text", // safe fallback (or keep original)
-    props: migratedProps,
+
+
+    type:
+      COMPONENTS[el.type]
+        ? el.type
+        : "Text",
+
+
+
+    props,
+
   };
+
 }
 
-function normalizeElements(list) {
-  if (!Array.isArray(list)) return [];
-  return list.map(normalizeElement).filter(Boolean);
+
+
+
+function normalizeElements(list){
+
+  if(!Array.isArray(list)){
+    return [];
+  }
+
+
+  return list
+    .map(normalizeElement)
+    .filter(Boolean);
+
 }
 
-export function CanvasProvider({ children }) {
-  const { activeProject, projects, saveProjectElements } = useProjectContext();
 
-  const [elements, setElements] = useState([]);
-  const [isLoaded, setIsLoaded] = useState(false);
 
-  /* ------------------------------------------------------------
-   🧠 Load elements when a project becomes active
-  ------------------------------------------------------------ */
-  useEffect(() => {
-    if (!activeProject) {
-      setElements([]);
-      setIsLoaded(true);
-      return;
-    }
 
-    const project = projects[activeProject];
-    
-    if (project && Array.isArray(project.elements)) {
-      const normalized = normalizeElements(project.elements);
-      setElements(normalized);
-      console.log(`📂 Loaded project: ${project.name}`, {
-        count: normalized.length,
-        types: normalized.map((e) => e.type),
-      });
-    } else {
-      console.log("🆕 Starting fresh project...");
-      setElements([]);
-    }
 
-    setIsLoaded(true);
-  }, [activeProject, projects]);
+export function CanvasProvider({
+ children
+}){
 
-  /* ------------------------------------------------------------
-   💾 Auto-save whenever elements change
-  ------------------------------------------------------------ */
-  useEffect(() => {
-    if (!isLoaded || !activeProject) return;
-    saveProjectElements(elements);
-  }, [elements, isLoaded, activeProject, saveProjectElements]);
 
-  /* ------------------------------------------------------------
-   ✨ Canvas manipulation helpers (normalized)
-  ------------------------------------------------------------ */
-  const addElement = useCallback((newEl) => {
-    const normalized = normalizeElement(newEl);
-    if (!normalized) return;
+ const {
+   projectSchema,
+   setProjectSchema,
+ } =
+ useProjectContext();
 
-    setElements((prev) => [...prev, normalized]);
-  }, []);
 
-  const updateElement = useCallback((id, updates) => {
-    setElements((prev) =>
-      prev.map((el) => {
-        if (el.id !== id) return el;
 
-        const next = {
-          ...el,
-          ...updates,
-          props: {
-            ...(el.props || {}),
-            ...(updates?.props || {}),
-          },
-          // optional debug stamp
-          updatedAt: new Date().toISOString(),
-        };
 
-        return normalizeElement(next);
-      })
+ const [
+   elements,
+   setElements
+ ] =
+ useState([]);
+
+ const isSyncingRef = useRef(false);
+
+
+
+
+ /*
+ ----------------------------------------------------
+ TREE → CANVAS
+ ----------------------------------------------------
+ */
+
+useEffect(()=>{
+
+
+  if(isSyncingRef.current){
+
+    isSyncingRef.current = false;
+
+    return;
+
+  }
+
+
+
+  if(!projectSchema?.tree){
+
+    setElements([]);
+
+    return;
+
+  }
+
+
+
+  const generated =
+    projectTreeToElements(
+      projectSchema.tree
     );
-  }, []);
 
-  const removeElement = useCallback((id) => {
-    setElements((prev) => prev.filter((el) => el.id !== id));
-  }, []);
 
-  const clearCanvas = useCallback(() => setElements([]), []);
 
-  const loadElements = useCallback((savedElements) => {
-    if (!Array.isArray(savedElements)) {
-      console.warn("⚠️ Tried to load invalid elements:", savedElements);
+  const normalized =
+    normalizeElements(
+      generated
+    );
+
+
+
+  console.log(
+    "[Canvas] Hydrating from tree",
+    normalized
+  );
+
+  console.log(
+  "🟢 TREE → CANVAS",
+  projectSchema?.tree
+  );
+
+
+
+  setElements(
+    normalized
+  );
+
+
+},[
+ projectSchema?.tree
+]);
+
+
+
+
+
+
+
+ /*
+ ----------------------------------------------------
+ CANVAS → TREE
+ ----------------------------------------------------
+ */
+
+
+ const syncTree = useCallback(
+(nextElements)=>{
+
+
+    const tree =
+      elementsToProjectTree(
+        nextElements
+      );
+
+
+    console.log(
+      "🔵 CANVAS → TREE",
+      tree
+    );
+
+
+    isSyncingRef.current = true;
+
+
+    setProjectSchema(prev=>({
+
+      ...prev,
+
+      tree,
+
+    }));
+
+
+},
+[
+ setProjectSchema
+]);
+
+
+
+
+
+
+
+
+ /*
+ ----------------------------------------------------
+ CANVAS ACTIONS
+ ----------------------------------------------------
+ */
+
+
+ const addElement =
+ useCallback(
+ (newEl)=>{
+
+
+    const normalized =
+      normalizeElement(
+        newEl
+      );
+
+
+
+    if(!normalized){
       return;
     }
-    setElements(normalizeElements(savedElements));
-  }, []);
 
-  return (
-    <CanvasContext.Provider
-      value={{
-        elements,
-        addElement,
-        updateElement,
-        removeElement,
-        clearCanvas,
-        loadElements,
-      }}
-    >
-      {children}
-    </CanvasContext.Provider>
-  );
+
+
+    setElements(prev=>{
+
+
+      const next=[
+        ...prev,
+        normalized
+      ];
+
+
+
+      syncTree(next);
+
+
+      return next;
+
+    });
+
+
+
+ },
+ [
+   syncTree
+ ]);
+
+
+
+
+
+
+
+ const updateElement =
+ useCallback(
+ (
+   id,
+   updates
+ )=>{
+
+
+ setElements(prev=>{
+
+
+   const next =
+     prev.map(el=>{
+
+
+       if(el.id !== id){
+         return el;
+       }
+
+
+
+       return normalizeElement({
+
+          ...el,
+
+          ...updates,
+
+          props:{
+            ...(el.props || {}),
+            ...(updates?.props || {})
+          }
+
+       });
+
+
+     });
+
+
+
+   syncTree(next);
+
+
+   return next;
+
+
+ });
+
+
+ },
+ [
+   syncTree
+ ]);
+
+
+
+
+
+
+
+
+ const removeElement =
+ useCallback(
+ (id)=>{
+
+
+   setElements(prev=>{
+
+
+     const next =
+       prev.filter(
+         el=>el.id !== id
+       );
+
+
+
+     syncTree(next);
+
+
+
+     return next;
+
+
+   });
+
+
+ },
+ [
+   syncTree
+ ]);
+
+
+
+
+
+
+
+ const clearCanvas =
+ useCallback(()=>{
+
+
+   setElements([]);
+
+
+   syncTree([]);
+
+
+ },
+ [
+   syncTree
+ ]);
+
+
+
+
+
+
+
+ const loadElements =
+ useCallback(
+ (saved)=>{
+
+
+   const normalized =
+     normalizeElements(
+       saved
+     );
+
+
+   setElements(
+     normalized
+   );
+
+
+   syncTree(
+     normalized
+   );
+
+
+ },
+ [
+   syncTree
+ ]);
+
+
+
+
+
+
+
+ return (
+
+ <CanvasContext.Provider
+
+ value={{
+
+    elements,
+
+    addElement,
+
+    updateElement,
+
+    removeElement,
+
+    clearCanvas,
+
+    loadElements,
+
+ }}
+
+ >
+
+ {children}
+
+ </CanvasContext.Provider>
+
+ );
+
+
 }
 
-export function useCanvasState() {
-  const ctx = useContext(CanvasContext);
-  if (!ctx) throw new Error("useCanvasState must be used inside a CanvasProvider");
-  return ctx;
+
+
+
+
+
+export function useCanvasState(){
+
+ const ctx =
+   useContext(
+     CanvasContext
+   );
+
+
+ if(!ctx){
+
+   throw new Error(
+    "useCanvasState must be used inside CanvasProvider"
+   );
+
+ }
+
+
+ return ctx;
+
 }

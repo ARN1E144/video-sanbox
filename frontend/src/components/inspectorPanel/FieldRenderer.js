@@ -14,6 +14,24 @@ export default function FieldRenderer({
     case "boolean":
       return (
         <select
+          value={
+            typeof value === "boolean"
+              ? String(value)
+              : String(schema.default ?? false)
+          }
+          onChange={(e) =>
+            onChange(
+              propKey,
+              e.target.value === "true"
+            )
+          }
+        >
+          <option value="true">True</option>
+          <option value="false">False</option>
+        </select>
+      );
+      return (
+        <select
           value={String(value ?? schema.default ?? false)}
           onChange={(e) =>
             onChange(propKey, e.target.value === "true")
@@ -34,16 +52,23 @@ export default function FieldRenderer({
         />
       );
 
-    case "number":
-      return (
-        <input
-          type="number"
-          value={value ?? schema.default ?? 0}
-          onChange={(e) =>
-            onChange(propKey, Number(e.target.value))
-          }
-        />
-      );
+  case "number":
+  return (
+    <input
+      type="number"
+      value={
+        typeof value === "number"
+          ? value
+          : schema.default ?? 0
+      }
+      onChange={(e) =>
+        onChange(
+          propKey,
+          Number(e.target.value)
+        )
+      }
+    />
+  );
 
     case "select":
       return (
