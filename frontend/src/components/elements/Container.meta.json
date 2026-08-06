@@ -1,12 +1,40 @@
 {
-  "name": "Container",
-  "type": "container",
-  "category": "layout",
-  "icon": "⬛",
-  "editableProps": {
-    "style": {
-      "backgroundColor": "#1A1A1D",
-      "borderRadius": "12px"
-    }
-  }
+"name":"Container",
+"type":"container",
+"category":"layout",
+"editableProps":{
+
+ "backgroundColor":{
+   "type":"string",
+   "default":"#181818",
+   "group":"style"
+ },
+
+ "borderRadius":{
+   "type":"number",
+   "default":12,
+   "group":"style"
+ },
+
+ "layout":{
+   "type":"select",
+   "default":"free",
+   "options":[
+     {
+       "label":"Free",
+       "value":"free"
+     },
+     {
+       "label":"Vertical",
+       "value":"vertical"
+     },
+     {
+       "label":"Horizontal",
+       "value":"horizontal"
+     }
+   ],
+   "group":"layout"
+ }
+
+}
 }

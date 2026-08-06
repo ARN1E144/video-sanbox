@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import * as Icons from "lucide-react";
 
 import InspectorSection from "./InspectorSection";
+import { useRuntimeAuth } from "../../context/RuntimeAuthContext";
 import { getActionOptions } from "../../actions/getActionsOptions";
 import { getActionByValue } from "../../actions/getActionByValue";
 import  ControlButtonBase from "../../ui/ControlButtonBase";
@@ -11,13 +12,23 @@ export default function InspectorControlPanelEditor({
   updateElement,
   elements = [],
 }) {
+
+  
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const controls = selectedElement?.props?.controls || [];
   const selectedControl = controls[selectedIndex] || null;
 
+  const {
+  allowedActions
+  } = useRuntimeAuth();
+
   const actionOptions = useMemo(() => {
-    const raw = getActionOptions() || [];
+    const raw =
+    (getActionOptions() || [])
+      .filter(action =>
+        allowedActions.includes(action.value)
+      );
     const grouped = {};
 
     raw.forEach((a) => {
@@ -31,6 +42,8 @@ export default function InspectorControlPanelEditor({
       options,
     }));
   }, []);
+
+  
 
   if (!selectedElement) {
     return <div className="p-3 text-xs text-gray-400">No Control Panel selected</div>;

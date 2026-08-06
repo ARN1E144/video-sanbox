@@ -143,7 +143,7 @@ export function CanvasProvider({
  useState([]);
 
  const isSyncingRef = useRef(false);
-
+ const syncingTree = useRef(false);
 
 
 
@@ -276,10 +276,17 @@ useEffect(()=>{
  (newEl)=>{
 
 
-    const normalized =
-      normalizeElement(
-        newEl
-      );
+   const normalized =
+  normalizeElement(newEl);
+
+
+console.log(
+  "[NORMALIZED ELEMENT]",
+  {
+    input:newEl,
+    output:normalized
+  }
+);
 
 
 
@@ -291,20 +298,29 @@ useEffect(()=>{
 
     setElements(prev=>{
 
-
-      const next=[
-        ...prev,
-        normalized
-      ];
-
+  const next=[
+    ...prev,
+    normalized
+  ];
 
 
-      syncTree(next);
+  console.log(
+    "[CANVAS ELEMENTS AFTER ADD]",
+    next.map(e => ({
+      id:e.id,
+      type:e.type,
+      role:e.role
+    }))
+  );
 
 
-      return next;
+  syncTree(next);
+console.log("[SYNC TREE DISABLED]");
 
-    });
+
+  return next;
+
+});
 
 
 

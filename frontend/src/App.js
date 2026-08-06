@@ -15,55 +15,81 @@ import RuntimeBootstrap from "./runtime/RuntimeBootstrap";
 import RuntimeDevWiring from "./dev/RuntimeDevWiring";
 import ConfoTest from "./dev/ConfoTest";
 import ConfoRenderer from "./runtime/confos/ConfoRenderer";
-
 import MainApp from "./MainApp";
+
+import { 
+  RuntimeAuthProvider,
+  useRuntimeAuth
+} from "./context/RuntimeAuthContext";
+
+
+
+function RuntimeAuthDebug(){
+
+  const runtimeAuth = useRuntimeAuth();
+
+  console.log(
+    "%c 🔒 [RUNTIME AUTH]",
+    "background-color:#DC2626;color:white;font-weight:bold;padding:3px 8px;border-radius:4px;",
+    runtimeAuth
+  );
+
+  return null;
+}
+
 
 function App() {
 
   return (
-      <RuntimeDebuggerProvider>
+    <RuntimeDebuggerProvider>
 
       <AuthProvider>
 
-        <RuntimeEventProvider>
+        <RuntimeAuthProvider>
 
-          <RuntimeStateProvider>
+          <RuntimeAuthDebug />
 
-            <RuntimeBootstrap />
+          <RuntimeEventProvider>
 
-            <ActionProvider>
+            <RuntimeStateProvider>
 
-              <RuntimeTriggersProvider>
+              <RuntimeBootstrap />
 
-                <RuntimeDevWiring /> {/* DEV WIRED TRIGGERS (ONLY IN DEV) */}
+              <ActionProvider>
 
-                <ProjectProvider>
+                <RuntimeTriggersProvider>
 
-                  <CanvasProvider>
+                  <RuntimeDevWiring />
 
-                    <PreviewProvider>
+                  <ProjectProvider>
 
-                      <MainApp />
+                    <CanvasProvider>
 
-                      <ConfoRenderer />
+                      <PreviewProvider>
 
-                      <RuntimeTestPanel />
+                        <MainApp />
 
-                      <ConfoTest />
+                        <ConfoRenderer />
 
-                    </PreviewProvider>
+                        <RuntimeTestPanel />
 
-                  </CanvasProvider>
+                        <ConfoTest />
 
-                </ProjectProvider>
+                      </PreviewProvider>
 
-              </RuntimeTriggersProvider>
+                    </CanvasProvider>
 
-            </ActionProvider>
+                  </ProjectProvider>
 
-          </RuntimeStateProvider>
+                </RuntimeTriggersProvider>
 
-        </RuntimeEventProvider>
+              </ActionProvider>
+
+            </RuntimeStateProvider>
+
+          </RuntimeEventProvider>
+
+        </RuntimeAuthProvider>
 
       </AuthProvider>
 

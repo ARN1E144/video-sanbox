@@ -13,6 +13,7 @@ import { useProjectContext, ProjectContext } from "../context/ProjectContext";
 import { useActionContext } from "../context/ActionContext";
 import { useAuth } from "../context/AuthContext";
 import { CONTROL_TEMPLATES } from "../constants/controlTemplates";
+import { useRuntimeAuth } from "../context/RuntimeAuthContext";
 import CanvasElementRenderer from "./CanvasElementRenderer";
 
 
@@ -48,6 +49,12 @@ export default function Canvas({ role, onSelectedIdChange, forcePreview }) {
   const { collapsed: sidebarCollapsed } = useContext(ProjectContext);
   const { bindings, cameraOn } = useActionContext();
   const { canBuild } = useAuth();
+
+  const {
+    allowedElements,
+    runtimeRole
+  } = useRuntimeAuth();
+  
 
   const isBuilderEditable = !isPreviewMode && !!canBuild;
   const [device] = useState("desktop");
@@ -114,13 +121,44 @@ Canvas elements
 
   // Load element meta
   useEffect(() => {
-    const ctx = require.context(
-      "../components/elements",
-      false,
-      /\.meta\.json$/
+
+  const ctx = require.context(
+    "../components/elements",
+    false,
+    /\.meta\.json$/
+  );
+
+
+  const all =
+    ctx.keys().map(
+      (k)=>ctx(k).default || ctx(k)
     );
-    setAvailableElements(ctx.keys().map((k) => ctx(k).default || ctx(k)));
-  }, []);
+
+
+  const permitted =
+    all.filter(el =>
+      allowedElements.includes(el.name)
+    );
+
+
+  console.log(
+    "[CANVAS ELEMENT PERMISSIONS]",
+    {
+      runtimeRole,
+      allowedElements,
+      available: all.map(e=>e.name),
+      permitted: permitted.map(e=>e.name)
+    }
+  );
+
+
+  setAvailableElements(permitted);
+
+
+},[
+  allowedElements,
+  runtimeRole
+]);
 
   const bg = backgroundConfigs?.[device] || { kind: "color", color: "#020617" };
   const canvasBackgroundStyle =
@@ -133,13 +171,58 @@ Canvas elements
         }
       : { backgroundColor: bg.color };
 
+
+  console.log(
+  "[CANVAS ROLE CHECK]",
+  {
+    propRole: role,
+    projectType,
+    elements: elements.map(e=>({
+      type:e.type,
+      role:e.role,
+      visible:e.role === role
+    }))
+  }
+);
+
   const visibleElements = elements.filter((el) => {
-    if (projectType === "single") return el.role === "client" || el.role == null;
-    if (!role) return true;
-    return el.role === role;
-  });
+
+  // Global elements
+  if (!el.role) {
+    return true;
+  }
+
+
+  // Role specific elements
+  return el.role === role;
+
+});
+
+  console.log(
+  "[CANVAS FILTER DEBUG]",
+  {
+    currentRole: role,
+    allElements: elements.map(e => ({
+      type:e.type,
+      role:e.role
+    })),
+    visibleElements: visibleElements.map(e => ({
+      type:e.type,
+      role:e.role
+    }))
+  }
+);
 
   console.log("[CANVAS] visibleElements", visibleElements);
+
+  console.log(
+  "[CANVAS]: PERMISSIONS",
+  {
+    canBuild,
+    isPreviewMode,
+    isBuilderEditable
+  }
+);
 
   const selectedElement =
   visibleElements.find((el) => el.id === selectedId) || null;
@@ -204,7 +287,7 @@ Canvas elements
     addElement({
       id: newId,
       type: meta.name,
-      role: projectType === "single" ? "client" : role,
+      role: role || null,
       x: x - 150,
       y: y - 75,
       width: 300,
@@ -215,6 +298,25 @@ Canvas elements
         ...sanitizeProps(system, metaDefaults)
       }
     });
+
+    console.log(
+    "[ADDING ELEMENT]",
+    {
+      id:newId,
+      type:meta.name,
+      role:role || null
+    }
+  );
+
+    console.log(
+      "[DROP CREATED]",
+      {
+        role,
+        projectType,
+        role: role || null,
+        type: meta.name
+      }
+    );
 
     if (meta.name === "VideoFeed" && cameraOn) {
       cameraOn(newId);
@@ -232,6 +334,7 @@ Canvas elements
   };
   const togglePin = () =>
     setPinInspector((p) => ({ ...p, [currentRoleKey]: !p[currentRoleKey] }));
+  
 
   return (
     <div className="flex w-full h-full relative overflow-hidden gap-4">
@@ -244,9 +347,19 @@ Canvas elements
             <div
               key={meta.name}
               draggable={isBuilderEditable}
-              onDragStart={(e) =>
-                e.dataTransfer.setData("application/json", JSON.stringify(meta))
-              }
+              onDragStart={(e) => {
+
+                console.log(
+                  "[DRAG START]",
+                  meta
+                );
+
+                e.dataTransfer.setData(
+                  "application/json",
+                  JSON.stringify(meta)
+                );
+
+              }}
               className="px-3 py-2 text-sm rounded hover:bg-accent/10 cursor-grab"
             >
               {meta.icon} {meta.name}
@@ -255,6 +368,7 @@ Canvas elements
 
         {activeTab === "Layers" &&
           visibleElements.map((el) => (
+
             <div
               key={el.id}
               onClick={() => {
@@ -274,18 +388,29 @@ Canvas elements
       {/* CANVAS + INSPECTOR */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* CANVAS */}
-        <div
-          ref={canvasRef}
-          style={{
-            width: DEVICE_SIZES[device].width,
-            height: DEVICE_SIZES[device].height,
-            transform:`scale(${scale})`,
-            transformOrigin:"top left",
-            position:"relative",
-            overflow:"hidden",
-            background:"#020617"
-          }}
+         <div
+            ref={canvasRef}
+
+            onDrop={(e)=>{
+              console.log("[DROP EVENT FIRED");
+              handleDrop(e);
+            }}
+
+            onDragOver={(e)=>{
+              if(isBuilderEditable){
+                e.preventDefault();
+              }
+            }}
+
+            style={{
+              width: DEVICE_SIZES[device].width,
+              height: DEVICE_SIZES[device].height,
+              transform:`scale(${scale})`,
+              transformOrigin:"top left",
+              position:"relative",
+            }}
           >
+          
           {visibleElements.map((el) => {
             const entry = registry[el.type];
             if (!entry?.component) return null;
