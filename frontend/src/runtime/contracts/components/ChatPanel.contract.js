@@ -1,146 +1,41 @@
 export default {
-
   name: "ChatPanel",
-
   version: "1.0",
-
   category: "communication",
 
-  icon: "💬",
-
-
   builder: {
-
-    roles: [
-      "owner",
-      "admin"
-    ],
-
+    roles: ["owner", "admin"],
     visible: true
-
   },
-
 
   runtime: {
-
-    roles: [
-      "owner",
-      "host",
-      "participant",
-      "viewer"
-    ]
-
+    roles: ["owner", "host", "participant", "viewer"]
   },
 
-
-
-  editableProps: {
-
-    style: {
-
-      type: "object",
-
-      ui: "advanced",
-
-      label: "Style",
-
-      default: {
-
-        backgroundColor: "#1A1A1D",
-
-        color: "#FFFFFF",
-
-        borderRadius: 8
-
-      }
-
-    }
-
-  },
-
-
+  editableProps: {},
 
   bindings: {
-
-    messages: {
-
-      source: "chat.messages",
-
-      type: "array"
-
-    },
-
-    users: {
-
-      source: "chat.users",
-
-      type: "array"
-
-    }
-
+    inputs: [],
+    outputs: []
   },
-
-
 
   actions: {
-
-    inputs: [
-
-      "chat.sendMessage",
-
-      "chat.clearMessages"
-
-    ],
-
+    inputs: [],
     outputs: []
-
   },
-
-
 
   events: {
-
     inputs: [],
-
-    outputs: [
-
-      "chat.messageSent",
-
-      "chat.messageReceived"
-
-    ]
-
+    outputs: []
   },
-
-
 
   targets: {
-
-    accepts: [
-
-      "ControlButton"
-
-    ],
-
-    rejects: [
-
-      "AgoraFeed",
-
-      "VideoFeed",
-
-      "Text"
-
-    ]
-
+    accepts: [],
+    runtime: []
   },
 
-
-
   validation: {
-
-    requires: []
-
+    required: [],
+    optional: []
   }
-
-
-};
+}

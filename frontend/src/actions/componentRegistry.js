@@ -8,17 +8,41 @@ import AppBar from "../components/elements/AppBar";
 import Container from "../components/elements/Container";
 import Text from "../components/elements/Text";
 import ControlPanel from "../components/elements/ControlPanel";
+import TextLabel from "../components/elements/TextLabel.js";
 
-import videoContract from "../runtime/contracts/components/VideoFeed.contract.js";
-import agoraContract from "../runtime/contracts/components/AgoraFeed.contract.js";
-import chatContract from "../runtime/contracts/components/ChatPanel.contract.js";
-import textBoxContract from "../runtime/contracts/components/TextBox.contract.js";
-import micContract from "../runtime/contracts/components/MicButton.contract.js";
-import controlButtonContract from "../runtime/contracts/components/ControlButton.contract.js";
-import appBarContract from "../runtime/contracts/components/AppBar.contract.js";
-import containerContract from "../runtime/contracts/components/Container.contract.js";
-import textContract from "../runtime/contracts/components/Text.contract.js";
-import controlPanelContract from "../runtime/contracts/components/ControlPanel.contract.js";
+
+import videoContract
+  from "../runtime/contracts/components/VideoFeed.contract.js";
+
+import agoraContract
+  from "../runtime/contracts/components/AgoraFeed.contract.js";
+
+import chatContract
+  from "../runtime/contracts/components/ChatPanel.contract.js";
+
+import textBoxContract
+  from "../runtime/contracts/components/TextBox.contract.js";
+
+import micContract
+  from "../runtime/contracts/components/MicButton.contract.js";
+
+import controlButtonContract
+  from "../runtime/contracts/components/ControlButton.contract.js";
+
+import appBarContract
+  from "../runtime/contracts/components/AppBar.contract.js";
+
+import containerContract
+  from "../runtime/contracts/components/Container.contract.js";
+
+import textContract
+  from "../runtime/contracts/components/Text.contract.js";
+
+import controlPanelContract
+  from "../runtime/contracts/components/ControlPanel.contract.js";
+
+import textLabelContract
+  from "../runtime/contracts/components/TextLabel.contract.js";
 
 
 export const componentRegistry = {
@@ -71,6 +95,11 @@ export const componentRegistry = {
   Text: {
     component: Text,
     contract: textContract
+  },
+
+  TextLabel: {
+    component: TextLabel,
+    contract: textLabelContract
   }
 
 };

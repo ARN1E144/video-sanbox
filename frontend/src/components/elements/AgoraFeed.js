@@ -3,7 +3,6 @@
 import React, {
   useEffect,
   useRef,
-  useMemo,
 } from "react";
 
 import { useActionContext } from "../../context/ActionContext";
@@ -11,17 +10,8 @@ import { useRuntimeValue } from "../../hooks/useRuntimeValue";
 import { bindActions } from "../../utils/actionBinder";
 import { useRuntimeState } from "../../context/RuntimeStateContext";
 
-import {
-  Video,
-  Square,
-  Play,
-  Volume,
-  VolumeX,
-} from "lucide-react";
-
 
 export default function AgoraFeed(props) {
-
 
   const {
     id,
@@ -36,29 +26,23 @@ export default function AgoraFeed(props) {
   } = props;
 
 
-
-
   const {
     runRuntimeAction
   } = useActionContext();
+
 
   const runtimeState =
     useRuntimeState();
 
 
+  // =====================================================
+  // RUNTIME STATE
+  // =====================================================
 
   const remoteUsers =
     useRuntimeValue(
       "call.remoteUsers"
     ) || {};
-
-
-
-  const micEnabled =
-    useRuntimeValue(
-      "media.micEnabled"
-    );
-
 
 
   const videoEnabled =
@@ -67,37 +51,29 @@ export default function AgoraFeed(props) {
     );
 
 
-
   const channel =
     useRuntimeValue(
       "call.channel"
     );
 
 
+  // =====================================================
+  // DOM REFS
+  // =====================================================
 
   const localRef =
     useRef(null);
-
 
 
   const remoteRef =
     useRef(null);
 
 
+  // =====================================================
+  // REMOTE VIDEO
+  // =====================================================
 
-
-
-
-
-  /*
-  ============================================
-  REMOTE VIDEO
-  ============================================
-  */
-
-
-  useEffect(()=>{
-
+  useEffect(() => {
 
     const users =
       Object.values(remoteUsers);
@@ -107,197 +83,112 @@ export default function AgoraFeed(props) {
       users[0];
 
 
-
-    if(
+    if (
       !first?.videoTrack ||
       !remoteRef.current
-    ){
-
+    ) {
       return;
-
     }
-
 
 
     first.videoTrack.play(
       remoteRef.current
     );
 
-
-
-  },[
+  }, [
     remoteUsers
   ]);
 
 
+  // =====================================================
+  // LOCAL VIDEO
+  // =====================================================
 
+  useEffect(() => {
 
-
-
-
-  /*
-  ============================================
-  LOCAL VIDEO EVENT
-  ============================================
-  */
-
-
-  useEffect(()=>{
-
-    if(!localRef.current) return;
+    if (!localRef.current) {
+      return;
+    }
 
 
     const agora =
-    runtimeState.agora;
+      runtimeState.agora;
 
 
-    if(!agora) return;
-
-
-    agora.onLocalTrackReady = (track)=>{
-
-    console.log(
-      "[AGORAFEED] local track ready",
-      track
-    );
-
-
-    track.play(
-      localRef.current
-    );
-
-    };
-
-
-    return ()=>{
-
-    agora.onLocalTrackReady=null;
-
-    };
-
-
-    },[]);
-
-
-
-
-
-
-
-
-  /*
-  ============================================
-  AUTO JOIN
-  ============================================
-  */
-
-
-  useEffect(()=>{
-
-
-    if(
-      !autoJoin ||
-      !channel
-    ){
-
+    if (!agora) {
       return;
-
     }
 
+
+    agora.onLocalTrackReady =
+      (track) => {
+
+        console.log(
+          "[AGORAFEED] local track ready",
+          track
+        );
+
+
+        if (!localRef.current) {
+          return;
+        }
+
+
+        track.play(
+          localRef.current
+        );
+
+      };
+
+
+    return () => {
+
+      agora.onLocalTrackReady = null;
+
+    };
+
+  }, [
+    runtimeState.agora
+  ]);
+
+
+  // =====================================================
+  // AUTO JOIN
+  // =====================================================
+
+  useEffect(() => {
+
+    if (
+      !autoJoin ||
+      !channel
+    ) {
+      return;
+    }
 
 
     runRuntimeAction(
       "call.joinCall",
       {
         channel,
+
         tokenEndpoint:
           meta.tokenEndpoint ||
           tokenEndpoint
       }
     );
 
-
-
-    return ()=>{
-
-      runRuntimeAction(
-        "call.leaveCall"
-      );
-
-    };
-
-
-  },[
+  }, [
     autoJoin,
-    channel
+    channel,
+    meta.tokenEndpoint,
+    tokenEndpoint,
+    runRuntimeAction
   ]);
 
 
-
-
-
-
-
-
-
-  const handleAction =
-    (actionName)=>{
-
-
-      runRuntimeAction(
-        actionName,
-        {
-          channel,
-          targetId:id
-        }
-      );
-
-
-    };
-
-
-
-
-
-
-
-  const videoActions =
-    useMemo(
-      ()=>[
-        "call.joinCall",
-        "call.leaveCall",
-        "call.toggleVideo",
-        "call.toggleMic",
-      ],
-      []
-    );
-
-
-
-
-  const iconMap = {
-
-    "call.joinCall":
-      Video,
-
-
-    "call.leaveCall":
-      Square,
-
-
-    "call.toggleVideo":
-      Play,
-
-
-    "call.toggleMic":
-      micEnabled
-        ? Volume
-        : VolumeX,
-
-  };
-
-
-
+  // =====================================================
+  // REMOTE USER STATE
+  // =====================================================
 
   const hasRemote =
     Object.keys(
@@ -305,10 +196,9 @@ export default function AgoraFeed(props) {
     ).length > 0;
 
 
-
-
-
-
+  // =====================================================
+  // DEBUG
+  // =====================================================
 
   console.log(
     "[AGORAFEED DOM PROPS]",
@@ -316,167 +206,150 @@ export default function AgoraFeed(props) {
   );
 
 
-
-
-
-
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
 
     <div
-      {...bindActions(meta,null,id)}
+      {...bindActions(
+        meta,
+        null,
+        id
+      )}
+
       {...domProps}
+
       style={{
         ...style,
-        width:"100%",
-        height:"100%",
-        position:"relative",
-        background:"#000",
-        overflow:"hidden",
-        borderRadius,
+
+        width: "100%",
+        height: "100%",
+
+        position: "relative",
+
+        background: "#000",
+
+        overflow: "hidden",
+
+        borderRadius
       }}
     >
 
 
+      {/* ================================================
+          REMOTE VIDEO
+      ================================================ */}
 
       <div
         ref={remoteRef}
+
         style={{
-          width:"100%",
-          height:"100%",
+          width: "100%",
+          height: "100%",
           objectFit
         }}
       />
 
 
-
-
+      {/* ================================================
+          LOCAL VIDEO
+      ================================================ */}
 
       <div
         style={{
-          position:"absolute",
-          bottom:"4%",
-          right:"4%",
-          width:"25%",
-          height:"25%",
-          background:"#000",
-          border:"1px solid #333",
-          borderRadius:8,
-          overflow:"hidden",
+          position: "absolute",
+
+          bottom: "4%",
+          right: "4%",
+
+          width: "25%",
+          height: "25%",
+
+          background: "#000",
+
+          border: "1px solid #333",
+
+          borderRadius: 8,
+
+          overflow: "hidden"
         }}
       >
 
-
         <div
           ref={localRef}
+
           style={{
-            width:"100%",
-            height:"100%",
+            width: "100%",
+            height: "100%",
+
             transform:
               mirror
-              ? "scaleX(-1)"
-              : "none",
+                ? "scaleX(-1)"
+                : "none"
           }}
         />
 
 
+        {!videoEnabled && (
 
-        {!videoEnabled &&
           <div
             style={{
-              position:"absolute",
-              inset:0,
-              color:"#fff"
+              position: "absolute",
+
+              inset: 0,
+
+              display: "flex",
+
+              alignItems: "center",
+
+              justifyContent: "center",
+
+              color: "#fff",
+
+              background:
+                "rgba(0,0,0,.65)"
             }}
           >
             Camera off
           </div>
-        }
 
+        )}
 
       </div>
 
 
+      {/* ================================================
+          WAITING FOR PARTICIPANT
+      ================================================ */}
 
+      {!hasRemote && (
 
-
-
-      {!hasRemote &&
         <div
           style={{
-            position:"absolute",
-            inset:0,
-            color:"#fff"
+            position: "absolute",
+
+            inset: 0,
+
+            display: "flex",
+
+            alignItems: "center",
+
+            justifyContent: "center",
+
+            color: "#fff",
+
+            pointerEvents: "none"
           }}
         >
           Waiting for participant
         </div>
-      }
 
-
-
-
-
-
-
-      <div
-        style={{
-          position:"absolute",
-          bottom:8,
-          left:8,
-          display:"flex",
-          gap:8,
-          background:"rgba(0,0,0,.6)",
-          padding:6,
-          borderRadius:8,
-        }}
-      >
-
-
-      {
-        videoActions.map(action=>{
-
-
-          const Icon =
-            iconMap[action];
-
-
-          if(!Icon)
-            return null;
-
-
-
-          return (
-
-            <button
-              key={`${id}-${action}`}
-              onClick={()=>
-                handleAction(action)
-              }
-              style={{
-                color:"white"
-              }}
-            >
-
-              <Icon size={14}/>
-
-            </button>
-
-          );
-
-
-        })
-      }
-
-
-      </div>
-
-
-
+      )}
 
     </div>
 
   );
-
 
 }

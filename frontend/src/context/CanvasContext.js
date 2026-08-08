@@ -25,66 +25,74 @@ import {
 const CanvasContext = createContext();
 
 
+// =====================================================
+// DEFAULT EXTRACTION
+// =====================================================
 
 function extractDefaults(editableProps = {}) {
 
   const result = {};
 
   Object.entries(editableProps)
-    .forEach(([key,value])=>{
+    .forEach(([key, value]) => {
 
-      if(
+      if (
         value &&
         typeof value === "object" &&
         value.default !== undefined
-      ){
+      ) {
+
         result[key] = value.default;
+
       }
-      else{
+      else {
+
         result[key] = value;
+
       }
 
     });
 
-
   return result;
-
 }
 
 
+// =====================================================
+// NORMALIZE ELEMENT
+// =====================================================
 
+function normalizeElement(el) {
 
-function normalizeElement(el){
+  if (
+    !el ||
+    typeof el !== "object"
+  ) {
 
-  if(!el || typeof el !== "object"){
     return null;
-  }
 
+  }
 
 
   const registryEntry =
     COMPONENTS[el.type];
 
 
-
   const metaDefaults =
     registryEntry?.meta?.editableProps || {};
 
 
-
   const props = {
 
-    ...extractDefaults(metaDefaults),
+    ...extractDefaults(
+      metaDefaults
+    ),
 
     ...(el.props || {})
 
   };
 
 
-
-
   return {
-
 
     ...el,
 
@@ -95,20 +103,38 @@ function normalizeElement(el){
         : "Text",
 
 
+    /*
+    =====================================================
+    HIERARCHY
 
-    props,
+    null = top-level canvas element
+
+    parentId = child of another canvas element
+    =====================================================
+    */
+
+    parentId:
+      el.parentId ??
+      null,
+
+
+    props
 
   };
 
 }
 
 
+// =====================================================
+// NORMALIZE ELEMENTS
+// =====================================================
 
+function normalizeElements(list) {
 
-function normalizeElements(list){
+  if (!Array.isArray(list)) {
 
-  if(!Array.isArray(list)){
     return [];
+
   }
 
 
@@ -119,424 +145,454 @@ function normalizeElements(list){
 }
 
 
-
-
+// =====================================================
+// PROVIDER
+// =====================================================
 
 export function CanvasProvider({
- children
-}){
+  children
+}) {
+
+  const {
+    projectSchema,
+    setProjectSchema,
+  } =
+    useProjectContext();
 
 
- const {
-   projectSchema,
-   setProjectSchema,
- } =
- useProjectContext();
+  const [
+    elements,
+    setElements
+  ] =
+    useState([]);
 
 
+  const isSyncingRef =
+    useRef(false);
+
+  const syncingTree =
+    useRef(false);
 
 
- const [
-   elements,
-   setElements
- ] =
- useState([]);
+  // =====================================================
+  // TREE → CANVAS
+  // =====================================================
 
- const isSyncingRef = useRef(false);
- const syncingTree = useRef(false);
+  useEffect(() => {
 
+    if (
+      isSyncingRef.current
+    ) {
 
+      isSyncingRef.current =
+        false;
 
- /*
- ----------------------------------------------------
- TREE → CANVAS
- ----------------------------------------------------
- */
+      return;
 
-useEffect(()=>{
+    }
 
 
-  if(isSyncingRef.current){
+    if (
+      !projectSchema?.tree
+    ) {
 
-    isSyncingRef.current = false;
+      setElements([]);
 
-    return;
+      return;
 
-  }
-
-
-
-  if(!projectSchema?.tree){
-
-    setElements([]);
-
-    return;
-
-  }
+    }
 
 
-
-  const generated =
-    projectTreeToElements(
-      projectSchema.tree
-    );
-
+    const generated =
+      projectTreeToElements(
+        projectSchema.tree
+      );
 
 
-  const normalized =
-    normalizeElements(
-      generated
-    );
-
-
-
-  console.log(
-    "[Canvas] Hydrating from tree",
-    normalized
-  );
-
-  console.log(
-  "🟢 TREE → CANVAS",
-  projectSchema?.tree
-  );
-
-
-
-  setElements(
-    normalized
-  );
-
-
-},[
- projectSchema?.tree
-]);
-
-
-
-
-
-
-
- /*
- ----------------------------------------------------
- CANVAS → TREE
- ----------------------------------------------------
- */
-
-
- const syncTree = useCallback(
-(nextElements)=>{
-
-
-    const tree =
-      elementsToProjectTree(
-        nextElements
+    const normalized =
+      normalizeElements(
+        generated
       );
 
 
     console.log(
-      "🔵 CANVAS → TREE",
-      tree
+      "[Canvas] Hydrating from tree",
+      normalized
     );
 
 
-    isSyncingRef.current = true;
+    console.log(
+      "🟢 TREE → CANVAS",
+      projectSchema?.tree
+    );
 
 
-    setProjectSchema(prev=>({
+    setElements(
+      normalized
+    );
 
-      ...prev,
-
-      tree,
-
-    }));
-
-
-},
-[
- setProjectSchema
-]);
+  }, [
+    projectSchema?.tree
+  ]);
 
 
+  // =====================================================
+  // CANVAS → TREE
+  // =====================================================
+
+  const syncTree =
+    useCallback(
+      (nextElements) => {
+
+        const tree =
+          elementsToProjectTree(
+            nextElements
+          );
 
 
+        console.log(
+          "🔵 CANVAS → TREE",
+          tree
+        );
 
 
+        isSyncingRef.current =
+          true;
 
 
- /*
- ----------------------------------------------------
- CANVAS ACTIONS
- ----------------------------------------------------
- */
+        setProjectSchema(
+          prev => ({
+
+            ...prev,
+
+            tree,
+
+          })
+        );
+
+      },
+      [
+        setProjectSchema
+      ]
+    );
 
 
- const addElement =
- useCallback(
- (newEl)=>{
+  // =====================================================
+  // ADD ELEMENT
+  // =====================================================
+
+  const addElement =
+    useCallback(
+      (newEl) => {
+
+        const normalized =
+          normalizeElement(
+            newEl
+          );
 
 
-   const normalized =
-  normalizeElement(newEl);
+        console.log(
+          "[NORMALIZED ELEMENT]",
+          {
+            input: newEl,
+            output: normalized
+          }
+        );
 
 
-console.log(
-  "[NORMALIZED ELEMENT]",
-  {
-    input:newEl,
-    output:normalized
-  }
-);
+        if (!normalized) {
+
+          return;
+
+        }
 
 
+        setElements(prev => {
 
-    if(!normalized){
-      return;
-    }
+          const next = [
 
+            ...prev,
 
+            normalized
 
-    setElements(prev=>{
-
-  const next=[
-    ...prev,
-    normalized
-  ];
+          ];
 
 
-  console.log(
-    "[CANVAS ELEMENTS AFTER ADD]",
-    next.map(e => ({
-      id:e.id,
-      type:e.type,
-      role:e.role
-    }))
-  );
+          console.log(
+            "[CANVAS ELEMENTS AFTER ADD]",
+            next.map(e => ({
+
+              id: e.id,
+
+              type: e.type,
+
+              role: e.role,
+
+              parentId:
+                e.parentId
+
+            }))
+          );
 
 
-  syncTree(next);
-console.log("[SYNC TREE DISABLED]");
+          syncTree(next);
 
 
-  return next;
+          return next;
 
-});
+        });
 
-
-
- },
- [
-   syncTree
- ]);
-
+      },
+      [
+        syncTree
+      ]
+    );
 
 
+  // =====================================================
+  // UPDATE ELEMENT
+  // =====================================================
+
+  const updateElement =
+    useCallback(
+      (
+        id,
+        updates
+      ) => {
+
+        setElements(prev => {
+
+          const next =
+            prev.map(el => {
+
+              if (
+                el.id !== id
+              ) {
+
+                return el;
+
+              }
 
 
+              return normalizeElement({
+
+                ...el,
+
+                ...updates,
 
 
- const updateElement =
- useCallback(
- (
-   id,
-   updates
- )=>{
+                props: {
+
+                  ...(el.props || {}),
+
+                  ...(updates?.props || {})
+
+                }
+
+              });
+
+            });
 
 
- setElements(prev=>{
+          syncTree(next);
 
 
-   const next =
-     prev.map(el=>{
+          return next;
+
+        });
+
+      },
+      [
+        syncTree
+      ]
+    );
 
 
-       if(el.id !== id){
-         return el;
-       }
+  // =====================================================
+  // REMOVE ELEMENT
+  // =====================================================
+
+  const removeElement =
+    useCallback(
+      (id) => {
+
+        setElements(prev => {
+
+          /*
+          =================================================
+          REMOVE THE ELEMENT AND ITS CHILDREN
+          =================================================
+
+          If a ControlPanel is deleted, its buttons
+          should not remain orphaned on the canvas.
+          =================================================
+          */
+
+          const idsToRemove =
+            new Set([id]);
 
 
+          let changed = true;
 
-       return normalizeElement({
 
-          ...el,
+          while (changed) {
 
-          ...updates,
+            changed = false;
 
-          props:{
-            ...(el.props || {}),
-            ...(updates?.props || {})
+
+            prev.forEach(el => {
+
+              if (
+                el.parentId &&
+                idsToRemove.has(
+                  el.parentId
+                ) &&
+                !idsToRemove.has(
+                  el.id
+                )
+              ) {
+
+                idsToRemove.add(
+                  el.id
+                );
+
+                changed = true;
+
+              }
+
+            });
+
           }
 
-       });
 
+          const next =
+            prev.filter(
+              el =>
+                !idsToRemove.has(
+                  el.id
+                )
+            );
 
-     });
 
+          syncTree(next);
 
 
-   syncTree(next);
+          return next;
 
+        });
 
-   return next;
+      },
+      [
+        syncTree
+      ]
+    );
 
 
- });
+  // =====================================================
+  // CLEAR CANVAS
+  // =====================================================
 
+  const clearCanvas =
+    useCallback(
+      () => {
 
- },
- [
-   syncTree
- ]);
+        setElements([]);
 
+        syncTree([]);
 
+      },
+      [
+        syncTree
+      ]
+    );
 
 
+  // =====================================================
+  // LOAD ELEMENTS
+  // =====================================================
 
+  const loadElements =
+    useCallback(
+      (saved) => {
 
+        const normalized =
+          normalizeElements(
+            saved
+          );
 
 
- const removeElement =
- useCallback(
- (id)=>{
+        setElements(
+          normalized
+        );
 
 
-   setElements(prev=>{
+        syncTree(
+          normalized
+        );
 
+      },
+      [
+        syncTree
+      ]
+    );
 
-     const next =
-       prev.filter(
-         el=>el.id !== id
-       );
 
+  // =====================================================
+  // CONTEXT
+  // =====================================================
 
+  return (
 
-     syncTree(next);
+    <CanvasContext.Provider
 
+      value={{
 
+        elements,
 
-     return next;
+        addElement,
 
+        updateElement,
 
-   });
+        removeElement,
 
+        clearCanvas,
 
- },
- [
-   syncTree
- ]);
+        loadElements,
 
+      }}
 
+    >
 
+      {children}
 
+    </CanvasContext.Provider>
 
-
-
- const clearCanvas =
- useCallback(()=>{
-
-
-   setElements([]);
-
-
-   syncTree([]);
-
-
- },
- [
-   syncTree
- ]);
-
-
-
-
-
-
-
- const loadElements =
- useCallback(
- (saved)=>{
-
-
-   const normalized =
-     normalizeElements(
-       saved
-     );
-
-
-   setElements(
-     normalized
-   );
-
-
-   syncTree(
-     normalized
-   );
-
-
- },
- [
-   syncTree
- ]);
-
-
-
-
-
-
-
- return (
-
- <CanvasContext.Provider
-
- value={{
-
-    elements,
-
-    addElement,
-
-    updateElement,
-
-    removeElement,
-
-    clearCanvas,
-
-    loadElements,
-
- }}
-
- >
-
- {children}
-
- </CanvasContext.Provider>
-
- );
-
+  );
 
 }
 
 
+// =====================================================
+// HOOK
+// =====================================================
+
+export function useCanvasState() {
+
+  const ctx =
+    useContext(
+      CanvasContext
+    );
 
 
+  if (!ctx) {
+
+    throw new Error(
+      "useCanvasState must be used inside CanvasProvider"
+    );
+
+  }
 
 
-export function useCanvasState(){
-
- const ctx =
-   useContext(
-     CanvasContext
-   );
-
-
- if(!ctx){
-
-   throw new Error(
-    "useCanvasState must be used inside CanvasProvider"
-   );
-
- }
-
-
- return ctx;
+  return ctx;
 
 }

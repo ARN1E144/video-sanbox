@@ -8,7 +8,6 @@ export default {
 
   icon: "🎛️",
 
-
   builder: {
 
     roles: [
@@ -19,7 +18,6 @@ export default {
     visible: true
 
   },
-
 
   runtime: {
 
@@ -32,10 +30,7 @@ export default {
 
   },
 
-
-
   editableProps: {
-
 
     layout: {
 
@@ -43,73 +38,77 @@ export default {
 
       ui: "build",
 
-      default: "vertical",
+      label: "Layout",
+
+      default: "horizontal",
 
       options: [
 
         {
-          label:"Vertical",
-          value:"vertical"
+          label: "Horizontal",
+          value: "horizontal"
         },
 
         {
-          label:"Horizontal",
-          value:"horizontal"
+          label: "Vertical",
+          value: "vertical"
         }
 
       ]
 
     },
 
-
     position: {
 
-      type:"select",
+      type: "select",
 
-      ui:"build",
+      ui: "build",
 
-      default:"left",
+      label: "Position",
 
-      options:[
+      default: "bottom",
+
+      options: [
 
         {
-          label:"Left",
-          value:"left"
+          label: "Top",
+          value: "top"
         },
 
         {
-          label:"Right",
-          value:"right"
+          label: "Bottom",
+          value: "bottom"
         },
 
         {
-          label:"Bottom",
-          value:"bottom"
+          label: "Left",
+          value: "left"
+        },
+
+        {
+          label: "Right",
+          value: "right"
         }
 
       ]
 
+    },
+
+    style: {
+
+      type: "style",
+
+      ui: "advanced",
+
+      label: "Style",
+
+      default: {}
+
     }
 
   },
 
-
-
-  bindings: {
-
-
-    controls: {
-
-      type:"array",
-
-      items:"ControlButton"
-
-    }
-
-
-  },
-
-
+  bindings: {},
 
   actions: {
 
@@ -119,8 +118,6 @@ export default {
 
   },
 
-
-
   events: {
 
     inputs: [],
@@ -129,42 +126,28 @@ export default {
 
   },
 
-
-
   targets: {
 
-
     accepts: [
-
       "ControlButton"
-
     ],
 
-
     rejects: [
-
       "AgoraFeed",
-
       "VideoFeed",
-
-      "ChatPanel"
-
+      "ChatPanel",
+      "Text",
+      "TextBox"
     ]
 
   },
 
-
-
   validation: {
 
+    required: [],
 
-    required: [
-
-      "controls"
-
-    ]
+    optional: []
 
   }
-
 
 };
