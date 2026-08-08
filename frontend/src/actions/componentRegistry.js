@@ -9,73 +9,68 @@ import Container from "../components/elements/Container";
 import Text from "../components/elements/Text";
 import ControlPanel from "../components/elements/ControlPanel";
 
-
-// META
-
-import videoMeta from "../components/elements/VideoFeed.meta.json";
-import agoraMeta from "../components/elements/AgoraFeed.meta.json";
-import chatMeta from "../components/elements/ChatPanel.meta.json";
-import textBoxMeta from "../components/elements/TextBox.meta.json";
-import micMeta from "../components/elements/MicButton.meta.json";
-import controlPanelMeta from "../components/elements/ControlPanel.meta.json"; 
-
+import videoContract from "../runtime/contracts/components/VideoFeed.contract.js";
+import agoraContract from "../runtime/contracts/components/AgoraFeed.contract.js";
+import chatContract from "../runtime/contracts/components/ChatPanel.contract.js";
+import textBoxContract from "../runtime/contracts/components/TextBox.contract.js";
+import micContract from "../runtime/contracts/components/MicButton.contract.js";
+import controlButtonContract from "../runtime/contracts/components/ControlButton.contract.js";
+import appBarContract from "../runtime/contracts/components/AppBar.contract.js";
+import containerContract from "../runtime/contracts/components/Container.contract.js";
+import textContract from "../runtime/contracts/components/Text.contract.js";
+import controlPanelContract from "../runtime/contracts/components/ControlPanel.contract.js";
 
 
 export const componentRegistry = {
 
-  VideoFeed:{
-    component:VideoFeed,
-    meta:videoMeta
+  VideoFeed: {
+    component: VideoFeed,
+    contract: videoContract
   },
 
-
-  AgoraFeed:{
-    component:AgoraFeed,
-    meta:agoraMeta
+  AgoraFeed: {
+    component: AgoraFeed,
+    contract: agoraContract
   },
 
-
-  ChatPanel:{
-    component:ChatPanel,
-    meta:chatMeta
+  ChatPanel: {
+    component: ChatPanel,
+    contract: chatContract
   },
 
-
-  TextBox:{
-    component:TextBox,
-    meta:textBoxMeta
+  TextBox: {
+    component: TextBox,
+    contract: textBoxContract
   },
 
-
-  MicButton:{
-    component:MicButton,
-    meta:micMeta
+  MicButton: {
+    component: MicButton,
+    contract: micContract
   },
 
-
-  ControlPanel:{
-    component:ControlPanel,
-    meta:controlPanelMeta
+  ControlButton: {
+    component: ControlButton,
+    contract: controlButtonContract
   },
 
-
-  ControlButton:{
-    component:ControlButton
+  ControlPanel: {
+    component: ControlPanel,
+    contract: controlPanelContract
   },
 
-
-  AppBar:{
-    component:AppBar
+  AppBar: {
+    component: AppBar,
+    contract: appBarContract
   },
 
-
-  Container:{
-    component:Container
+  Container: {
+    component: Container,
+    contract: containerContract
   },
 
-
-  Text:{
-    component:Text
+  Text: {
+    component: Text,
+    contract: textContract
   }
 
 };

@@ -15,6 +15,7 @@ import { useAuth } from "../context/AuthContext";
 import { CONTROL_TEMPLATES } from "../constants/controlTemplates";
 import { useRuntimeAuth } from "../context/RuntimeAuthContext";
 import CanvasElementRenderer from "./CanvasElementRenderer";
+import componentRegistry from "../actions/componentRegistry";
 
 
 
@@ -122,40 +123,29 @@ Canvas elements
   // Load element meta
   useEffect(() => {
 
-  const ctx = require.context(
-    "../components/elements",
-    false,
-    /\.meta\.json$/
-  );
-
-
   const all =
-    ctx.keys().map(
-      (k)=>ctx(k).default || ctx(k)
-    );
-
+    Object.values(componentRegistry)
+      .map(entry => entry.contract)
+      .filter(Boolean);
 
   const permitted =
-    all.filter(el =>
-      allowedElements.includes(el.name)
+    all.filter(contract =>
+      allowedElements.includes(contract.name)
     );
-
 
   console.log(
     "[CANVAS ELEMENT PERMISSIONS]",
     {
       runtimeRole,
       allowedElements,
-      available: all.map(e=>e.name),
-      permitted: permitted.map(e=>e.name)
+      available: all.map(c => c.name),
+      permitted: permitted.map(c => c.name)
     }
   );
 
-
   setAvailableElements(permitted);
 
-
-},[
+}, [
   allowedElements,
   runtimeRole
 ]);
@@ -228,8 +218,8 @@ Canvas elements
   visibleElements.find((el) => el.id === selectedId) || null;
 
     const selectedMeta = selectedElement
-      ? registry[selectedElement.type]?.meta
-      : null;
+  ? componentRegistry[selectedElement.type]?.contract
+  : null;
 
   // Drop handler
   const handleDrop = (e) => {
@@ -317,6 +307,11 @@ Canvas elements
         type: meta.name
       }
     );
+
+    console.log(
+    "[CANVAS COMPONENT REGISTRY]",
+    Object.keys(componentRegistry)
+  );
 
     if (meta.name === "VideoFeed" && cameraOn) {
       cameraOn(newId);
@@ -412,7 +407,9 @@ Canvas elements
           >
           
           {visibleElements.map((el) => {
-            const entry = registry[el.type];
+
+            const entry = componentRegistry[el.type];
+
             if (!entry?.component) return null;
 
             const Comp = entry.component;
@@ -487,6 +484,7 @@ Canvas elements
             selectedId={selectedId}
             elements={visibleElements}
             updateElement={updateElement}
+            selectedMeta={selectedMeta}
             toggleDock={toggleDock}
             toggleOpen={toggleInspector}
             pinInspector={pinInspector[currentRoleKey]}
@@ -497,11 +495,12 @@ Canvas elements
 
       {/* RIGHT DOCKED INSPECTOR for non-split view */}
       {!isSplitView && isInspectorVisible && effectiveLayout === "right" && (
-        <InspectorContent
+       <InspectorContent
           layout="right"
           selectedId={selectedId}
           elements={visibleElements}
           updateElement={updateElement}
+          selectedMeta={selectedMeta}
           toggleDock={toggleDock}
           toggleOpen={toggleInspector}
           pinInspector={pinInspector[currentRoleKey]}
@@ -518,6 +517,7 @@ Canvas elements
           selectedId={selectedId}
           elements={selectedElement ? [selectedElement] : []}
           updateElement={updateElement}
+          selectedMeta={selectedMeta}
           toggleDock={toggleDock}
           toggleOpen={toggleInspector}
           pinInspector={pinInspector[currentRoleKey]}

@@ -6,7 +6,9 @@ export default function InspectorSchemaPanel({
   schema = {},
   props = {},
   onChange,
-  filterMode = "build", // 👈 NEW
+  filterMode = "build",
+  elements = [],
+  selectedElement = null,
 }) {
   const grouped = useMemo(() => {
     const g = {};
@@ -40,9 +42,24 @@ export default function InspectorSchemaPanel({
 
         if (!visible) return null;
 
+        
+
         return (
-          <div key={field.key} className="space-y-1">
-            <label className="text-xs opacity-70">
+
+          console.log(
+            "[INSPECTOR FIELD DEBUG]",
+            {
+              selectedElement,
+              elements,
+              fieldKey: field.key,
+              fieldType: field.type
+            }
+          ),
+          <div
+            key={field.key}
+            className="inspector-field-row"
+          >
+            <label className="inspector-field-label">
               {field.label || field.key}
             </label>
 
@@ -51,6 +68,8 @@ export default function InspectorSchemaPanel({
               value={value}
               propKey={field.key}
               onChange={onChange}
+              elements={elements}
+              selectedElement={selectedElement}
             />
           </div>
         );

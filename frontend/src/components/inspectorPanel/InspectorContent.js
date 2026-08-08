@@ -2,13 +2,14 @@ import React, { useMemo, forwardRef } from "react";
 import InspectorSection from "./InspectorSection";
 import { X } from "lucide-react";
 import { useActionContext } from "../../context/ActionContext";
-import registry from "../elements/registry";
+import componentRegistry from "../../actions/componentRegistry";
 import { getActionOptions } from "../../actions/getActionsOptions";
 import { getActionByValue } from "../../actions/getActionByValue";
 import FieldRenderer from "./FieldRenderer";
 import InspectorSchemaPanel from "./InspectorSchemaPanel";
 import InspectorActionPanel from "./InspectorActionPanel";
 import InspectorControlPanelEditor from "./InspectorControlPanelEditor";
+import "../../css/InspectorContent.css"
 
 
 const InspectorContent = forwardRef(function InspectorContent(
@@ -34,14 +35,18 @@ const InspectorContent = forwardRef(function InspectorContent(
   );
 
   const meta = useMemo(() => {
-    if (!selectedElement) return null;
 
-    return (
-      registry?.[selectedElement.type]?.meta ||
-      selectedElement.meta ||
-      null
-    );
-  }, [selectedElement]);
+  if (!selectedElement) {
+    return null;
+  }
+
+  return (
+    componentRegistry?.[selectedElement.type]?.contract ||
+    selectedElement.contract ||
+    null
+  );
+
+}, [selectedElement]);
 
   const schema = meta?.editableProps || {};
   const props = selectedElement?.props || {};
@@ -124,6 +129,16 @@ const InspectorContent = forwardRef(function InspectorContent(
   // --------------------------
   // UI
   // --------------------------
+
+  console.log(
+  "[INSPECTOR TARGET DEBUG]",
+  {
+    selectedElement,
+    elements,
+    targetId: selectedElement?.props?.targetId
+  }
+);
+
   return (
   <div
     ref={ref}
@@ -149,21 +164,17 @@ const InspectorContent = forwardRef(function InspectorContent(
     <div className="p-3 space-y-3 overflow-y-auto">
 
       {/* 1. SCHEMA */}
-      <InspectorSchemaPanel
+     <InspectorSchemaPanel
         schema={schema}
         props={props}
         onChange={updateProp}
+        elements={elements}
+        selectedElement={selectedElement}
       />
 
       {/* 2. ACTIONS (NOW PROPER MODULE) */}
-      {selectedElement.type === "ControlPanel" ? (
+      {selectedElement.type === "ControlPanel" && (
         <InspectorControlPanelEditor
-          selectedElement={selectedElement}
-          elements={elements}
-          updateElement={updateElement}
-        />
-      ) : (
-        <InspectorActionPanel
           selectedElement={selectedElement}
           elements={elements}
           updateElement={updateElement}

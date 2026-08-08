@@ -13,8 +13,6 @@ import {
 } from "../../hooks/useRuntimeProps";
 
 
-
-
 // =====================================================
 // ACTION BUILDER
 // =====================================================
@@ -28,16 +26,18 @@ function buildActions(
     return {};
   }
 
+  const handlers = {};
 
-  const handlers={};
+  actions.forEach(action => {
 
-
-  actions.forEach(action=>{
+    if(!action?.name){
+      return;
+    }
 
     handlers[action.name] =
-      (...args)=>{
+      (...args) => {
 
-        runAction(
+        return runAction(
           action.name,
           ...args
         );
@@ -46,28 +46,23 @@ function buildActions(
 
   });
 
-
   return handlers;
 
 }
 
 
-
-
 // =====================================================
-// ELEMENT RENDERER
+// TREE ELEMENT RENDERER
 // =====================================================
 
 function ConfoElementRenderer({
   element
 }){
 
-
   const {
     runAction
   } =
   useActionContext();
-
 
 
   const props =
@@ -76,17 +71,14 @@ function ConfoElementRenderer({
     );
 
 
-
   const registryEntry =
     componentRegistry[
       element.type
     ];
 
 
-
   const Component =
     registryEntry?.component;
-
 
 
   if(!Component){
@@ -101,7 +93,6 @@ function ConfoElementRenderer({
   }
 
 
-
   const actions =
     buildActions(
       element.actions,
@@ -109,13 +100,20 @@ function ConfoElementRenderer({
     );
 
 
+  const children =
+    Array.isArray(
+      element.children
+    )
+      ? element.children
+      : [];
+
 
   console.log(
     "[ConfoElementRenderer]",
     element.type,
+    element.id,
     props
   );
-
 
 
   return (
@@ -128,14 +126,29 @@ function ConfoElementRenderer({
 
       actions={actions}
 
-    />
+    >
+
+      {
+        children.map(
+          child => (
+
+            <ConfoElementRenderer
+
+              key={child.id}
+
+              element={child}
+
+            />
+
+          )
+        )
+      }
+
+    </Component>
 
   );
 
 }
-
-
-
 
 
 // =====================================================
@@ -143,58 +156,50 @@ function ConfoElementRenderer({
 // =====================================================
 
 export default function ConfoRenderer({
- config
+  config
 }){
 
+  if(!config){
 
- if(!config){
-   return null;
- }
+    return null;
 
-
-
- console.log(
-   "[ConfoRenderer]",
-   config
- );
+  }
 
 
-
- if(!Array.isArray(config.elements)){
-
-   console.warn(
-     "[ConfoRenderer] No elements found",
-     config
-   );
-
-   return null;
-
- }
+  console.log(
+    "[ConfoRenderer]",
+    config
+  );
 
 
+  /*
+  =====================================================
+  CONFO TREE
+  =====================================================
+  */
 
- return (
+  if(!config.tree){
 
-   <>
+    console.warn(
+      "[ConfoRenderer] No tree found",
+      config
+    );
 
-   {
-    config.elements.map(
-      element=>(
+    return null;
 
-        <ConfoElementRenderer
+  }
 
-          key={element.id}
 
-          element={element}
+  return (
 
-        />
+    <ConfoElementRenderer
 
-      )
-    )
-   }
+      element={
+        config.tree
+      }
 
-   </>
+    />
 
- );
+  );
 
 }

@@ -15,6 +15,7 @@ import RuntimeBootstrap from "./runtime/RuntimeBootstrap";
 import RuntimeDevWiring from "./dev/RuntimeDevWiring";
 import ConfoTest from "./dev/ConfoTest";
 import ConfoRenderer from "./runtime/confos/ConfoRenderer";
+import ContractTest from "./dev/ContractTest";
 import MainApp from "./MainApp";
 
 import { 
@@ -60,6 +61,8 @@ function App() {
                 <RuntimeTriggersProvider>
 
                   <RuntimeDevWiring />
+
+                   <ContractTest />
 
                   <ProjectProvider>
 

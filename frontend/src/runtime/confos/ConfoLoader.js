@@ -1,129 +1,190 @@
-// =====================================================
-// ConfoLoader
-// -----------------------------------------------------
-// Loads a Confo configuration,
-// validates it,
-// and returns a runtime-ready definition.
-//
-// Flow:
-//
-// ID
-// ↓
-// Registry
-// ↓
-// Validator
-// ↓
-// Confo Config
-//
-// =====================================================
+import ContractValidator from "../contracts/ContractValidator.js";
+import RuntimeGraphValidator from "../contracts/RuntimeGraphValidator.js";
 
+export default class ConfoLoader {
 
-import ConfoRegistry
-from "../../configs/confos";
+  constructor() {}
 
-import {
-  validateConfo
-}
-from "./ConfoValidator";
+  load(confo) {
 
-
-
-// =====================================================
-// LOAD CONFO
-// =====================================================
-
-export async function loadConfo(
-  confoId
-){
-
-  console.log(
-    `[ConfoLoader] Loading ${confoId}`
-  );
-
-
-  // -----------------------------------------------
-  // Find configuration
-  // -----------------------------------------------
-
-  const confo =
-    ConfoRegistry[
-      confoId
-    ];
-
-
-
-  if(!confo){
-
-    throw new Error(
-      `[ConfoLoader] Confo not found: ${confoId}`
+    console.log(
+      "[ConfoLoader] Loading",
+      confo?.name
     );
 
-  }
+    /*
+    =====================================================
+    1. BASIC CONFO VALIDATION
+    =====================================================
+    */
+
+    if (!confo) {
+
+      return {
+        valid: false,
+        errors: ["Confo is undefined."]
+      };
+
+    }
+
+    if (!confo.name) {
+
+      return {
+        valid: false,
+        errors: ["Missing confo.name"]
+      };
+
+    }
+
+    if (!confo.tree) {
+
+      return {
+        valid: false,
+        errors: ["Missing confo.tree"]
+      };
+
+    }
 
 
+    /*
+    =====================================================
+    2. EXTRACT COMPONENTS
+    =====================================================
+    */
 
-  // -----------------------------------------------
-  // Validate
-  // -----------------------------------------------
+    const components =
+      this.flattenTree(confo.tree);
 
-  const validation =
-    validateConfo(
+
+    /*
+    =====================================================
+    3. COMPONENT CONTRACT VALIDATION
+    =====================================================
+    */
+
+    const componentErrors = [];
+
+
+    components.forEach(component => {
+
+      const result =
+        ContractValidator.validateComponent(
+          component.type
+        );
+
+
+      if (!result.valid) {
+
+        componentErrors.push(
+          ...result.errors.map(
+            error =>
+              `${component.id || component.type}: ${error}`
+          )
+        );
+
+      }
+
+    });
+
+
+    if (componentErrors.length) {
+
+      return {
+
+        valid: false,
+
+        errors: componentErrors
+
+      };
+
+    }
+
+
+    /*
+    =====================================================
+    4. RUNTIME GRAPH VALIDATION
+    =====================================================
+    */
+
+    const graphResult =
+      RuntimeGraphValidator.validate(
+        confo
+      );
+
+
+    if (!graphResult.valid) {
+
+      return graphResult;
+
+    }
+
+
+    /*
+    =====================================================
+    5. SUCCESS
+    =====================================================
+    */
+
+    return {
+
+      valid: true,
+
+      errors: [],
+
       confo
-    );
 
-
-
-  if(!validation.valid){
-
-    console.error(
-      "[ConfoLoader] Validation failed",
-      validation.errors
-    );
-
-
-    throw new Error(
-      `Invalid Confo: ${confoId}`
-    );
+    };
 
   }
 
 
+  /*
+  =====================================================
+  FLATTEN TREE
+  =====================================================
+  */
 
-  if(validation.warnings.length){
+  flattenTree(node, result = []) {
 
-    console.warn(
-      "[ConfoLoader] Warnings",
-      validation.warnings
-    );
+    if (!node)
+      return result;
+
+
+    /*
+    -----------------------------------------
+    Add current component
+    -----------------------------------------
+    */
+
+    if (node.type) {
+
+      result.push(node);
+
+    }
+
+
+    /*
+    -----------------------------------------
+    Process children
+    -----------------------------------------
+    */
+
+    if (Array.isArray(node.children)) {
+
+      node.children.forEach(child => {
+
+        this.flattenTree(
+          child,
+          result
+        );
+
+      });
+
+    }
+
+
+    return result;
 
   }
-  
- console.log(
-    "%c[CONF0 RAW CONFIG]%c",
-    "background-color: #E0E7FF; color: #3730A3; font-weight: bold; padding: 2px 6px; border-radius: 3px;",
-    "",
-    confo
-);
-
-console.log(
-  "[ConfoLoader RETURNING]",
-  confo.elements[0].props
-);
-
-  // -----------------------------------------------
-  // Prepare runtime object
-  // -----------------------------------------------
-
-  return {
-
-    ...confo,
-
-    loadedAt:
-      Date.now(),
-
-    status:
-      "ready"
-
-  };
 
 }

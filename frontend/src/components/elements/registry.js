@@ -1,73 +1,59 @@
-import VideoFeed from "./VideoFeed";
-import AgoraFeed from "./AgoraFeed";
+import VideoFeed from "./VideoFeed.js";
+import AgoraFeed from "./AgoraFeed.js";
 import ChatPanel from "./ChatPanel";
-import TextBox from "./TextBox";
-import MicButton from "./MicButton";
-import ControlButton from "./ControlButton";
-import AppBar from "./AppBar";
-import Container from "./Container";
-import Text from "./Text";
-import ControlPanel from "./ControlPanel";
-
-
-// META
-import videoMeta from "./VideoFeed.meta.json";
-import agoraMeta from "./AgoraFeed.meta.json";
-import chatMeta from "./ChatPanel.meta.json";
-import textBoxMeta from "./TextBox.meta.json";
-import micMeta from "./MicButton.meta.json";
-import controlPanelMeta from "./ControlPanel.meta.json";
+import TextBox from "./TextBox.js";
+import MicButton from "./MicButton.js";
+import ControlButton from "./ControlButton.js";
+import AppBar from "./AppBar.js";
+import Container from "./Container.js";
+import Text from "./Text.js";
+import ControlPanel from "./ControlPanel.js";
 
 
 
 
 const registry = {
-  VideoFeed: {
-    component: VideoFeed,
-    meta: videoMeta,
-  },
 
-  AgoraFeed: {
-    component: AgoraFeed,
-    meta: agoraMeta,
-  },
+VideoFeed:{
+ component:VideoFeed
+},
 
-  ChatPanel: {
-    component: ChatPanel,
-    meta: chatMeta,
-  },
+AgoraFeed:{
+ component:AgoraFeed
+},
 
-  TextBox: {
-    component: TextBox,
-    meta: textBoxMeta,
-  },
+ChatPanel:{
+ component:ChatPanel
+},
 
-  MicButton: {
-    component: MicButton,
-    meta: micMeta,
-  },
+TextBox:{
+ component:TextBox
+},
 
-  ControlPanel: {
-    component: ControlPanel,
-    meta: controlPanelMeta,
-  },
+MicButton:{
+ component:MicButton
+},
 
-  ControlButton: {
-    component: ControlButton,
-  },
+ControlPanel:{
+ component:ControlPanel
+},
 
-  AppBar: {
-    component: AppBar,
-  },
+ControlButton:{
+ component:ControlButton
+},
 
-  Container: {
-    component: Container,
-  },
+AppBar:{
+ component:AppBar
+},
 
-  Text: {
-    component: Text,
-  },
+Container:{
+ component:Container
+},
+
+Text:{
+ component:Text
+}
+
 };
-
 
 export default registry;
