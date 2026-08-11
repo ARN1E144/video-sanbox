@@ -1,4 +1,3 @@
-
 // src/components/CanvasElementRenderer.js
 
 import React, { useCallback } from "react";
@@ -6,44 +5,51 @@ import React, { useCallback } from "react";
 import { useRuntimeProps } from "../hooks/useRuntimeProps";
 import { useActionContext } from "../context/ActionContext";
 
-
 export default function CanvasElementRenderer({
   Component,
   element,
-  binding
+  binding,
+  children,
 }) {
 
   const props = useRuntimeProps(
-    element.props || {}
+    element?.props || {}
   );
 
   const {
-    runAction
+    runAction,
   } = useActionContext();
-
 
   // =====================================================
   // EVENT → ACTION BRIDGE
   // =====================================================
 
   const emit = useCallback(
-    async (eventName, payload = {}) => {
+    async (
+      eventName,
+      payload = {}
+    ) => {
 
       console.log(
         "[CANVAS EVENT]",
         {
-          elementId: element.id,
-          elementType: element.type,
+          elementId:
+            element.id,
+
+          elementType:
+            element.type,
+
           eventName,
+
           props,
-          payload
+
+          payload,
         }
       );
 
-
-      // -----------------------------------------------
-      // Only handle configured action events
-      // -----------------------------------------------
+      // -------------------------------------------------
+      // ACTION EVENT
+      // -------------------------------------------------
 
       if (
         eventName === "onClick" &&
@@ -53,11 +59,14 @@ export default function CanvasElementRenderer({
         console.log(
           "[CANVAS EVENT → ACTION]",
           {
-            action: props.action,
-            targetId: props.targetId || null
+            action:
+              props.action,
+
+            targetId:
+              props.targetId ||
+              null,
           }
         );
-
 
         try {
 
@@ -66,7 +75,8 @@ export default function CanvasElementRenderer({
               props.action,
               {
                 targetId:
-                  props.targetId || null,
+                  props.targetId ||
+                  null,
 
                 sourceId:
                   element.id,
@@ -74,19 +84,19 @@ export default function CanvasElementRenderer({
                 sourceType:
                   element.type,
 
-                payload
+                payload,
               }
             );
-
 
           console.log(
             "[CANVAS ACTION RESULT]",
             {
-              action: props.action,
-              result
+              action:
+                props.action,
+
+              result,
             }
           );
-
 
           return result;
 
@@ -96,8 +106,10 @@ export default function CanvasElementRenderer({
           console.error(
             "[CANVAS ACTION ERROR]",
             {
-              action: props.action,
-              error
+              action:
+                props.action,
+
+              error,
             }
           );
 
@@ -105,16 +117,18 @@ export default function CanvasElementRenderer({
 
       }
 
-      // -----------------------------------------------
-      // No action configured
-      // -----------------------------------------------
+      // -------------------------------------------------
+      // NO ACTION
+      // -------------------------------------------------
 
       console.log(
         "[CANVAS EVENT]",
         "No action configured for event",
         {
           eventName,
-          elementId: element.id
+
+          elementId:
+            element.id,
         }
       );
 
@@ -123,18 +137,25 @@ export default function CanvasElementRenderer({
       element.id,
       element.type,
       props,
-      runAction
+      runAction,
     ]
   );
 
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
     <Component
       id={element.id}
-      {...props}
-      binding={binding}
-      emit={emit}
-    />
-  );
 
+      {...props}
+
+      binding={binding}
+
+      emit={emit}
+    >
+      {children}
+    </Component>
+  );
 }

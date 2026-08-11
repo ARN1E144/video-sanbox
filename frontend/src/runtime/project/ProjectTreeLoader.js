@@ -1,236 +1,428 @@
 // src/runtime/project/ProjectTreeLoader.js
 
+/*
+========================================================
+PROJECT TREE → CANVAS ELEMENTS
+========================================================
 
-/**
- * ProjectTreeLoader
- *
- * Converts projectSchema.tree
- * into CanvasContext.elements format.
- *
- * Flow:
- *
- * projectSchema.tree
- *        |
- *        ↓
- * projectTreeToElements()
- *        |
- *        ↓
- * Canvas elements[]
- *
- */
+Project tree:
 
+App
+├── AgoraFeed
+├── ControlPanel
+│   ├── ControlButton
+│   └── ControlButton
+└── ChatPanel
+
+becomes:
+
+Canvas elements:
+
+AgoraFeed
+  parentId: null
+
+ControlPanel
+  parentId: null
+
+ControlButton
+  parentId: ControlPanel.id
+
+ControlButton
+  parentId: ControlPanel.id
+
+ChatPanel
+  parentId: null
+
+
+IMPORTANT:
+
+App is a logical project root.
+
+It is NOT a Canvas element.
+
+Real Containers such as ControlPanel ARE Canvas
+elements.
+========================================================
+*/
+
+
+// =====================================================
+// DEFAULT ELEMENT SIZES
+// =====================================================
 
 const DEFAULT_ELEMENT_SIZE = {
 
-  Container:{
-    width:1000,
-    height:700,
+  App: {
+    width: 1440,
+    height: 900,
   },
 
-  AgoraFeed:{
-    width:800,
-    height:450,
+  Container: {
+    width: 1000,
+    height: 700,
   },
 
-  ControlPanel:{
-    width:250,
-    height:80,
+  AgoraFeed: {
+    width: 800,
+    height: 450,
   },
 
-  Text:{
-    width:250,
-    height:50,
+  ControlPanel: {
+    width: 250,
+    height: 80,
   },
 
-  default:{
-    width:300,
-    height:150,
-  }
+  ControlButton: {
+    width: 140,
+    height: 44,
+  },
+
+  Text: {
+    width: 250,
+    height: 50,
+  },
+
+  TextLabel: {
+    width: 250,
+    height: 50,
+  },
+
+  ChatPanel: {
+    width: 300,
+    height: 300,
+  },
+
+  VideoFeed: {
+    width: 800,
+    height: 450,
+  },
+
+  default: {
+    width: 300,
+    height: 150,
+  },
 
 };
 
 
+// =====================================================
+// DEFAULT POSITION
+// =====================================================
 
-function createDefaultPosition(index = 0) {
+function createDefaultPosition(
+  index = 0
+) {
 
   return {
+
     x: 50,
-    y: 50 + (index * 150),
+
+    y:
+      50 +
+      (
+        index *
+        150
+      ),
+
   };
 
 }
 
 
+// =====================================================
+// GET SIZE
+// =====================================================
 
-/**
- * Convert a single tree node
- *
- * Input:
- *
- * {
- *   type:"AgoraFeed",
- *   id:"agora_host"
- * }
- *
- *
- * Output:
- *
- * {
- *   id:"agora_host",
- *   type:"AgoraFeed",
- *   x:50,
- *   y:50,
- *   width:800,
- *   height:500,
- *   props:{}
- * }
- *
- */
+function getDefaultSize(
+  type
+) {
+
+  return (
+    DEFAULT_ELEMENT_SIZE[
+      type
+    ] ||
+    DEFAULT_ELEMENT_SIZE.default
+  );
+
+}
 
 
-function convertNode(node, index = 0) {
+// =====================================================
+// CONVERT NODE
+// =====================================================
 
+function convertNode(
+  node,
+  index = 0,
+  parentId = null
+) {
 
-  if (!node || typeof node !== "object") {
+  if (
+    !node ||
+    typeof node !== "object"
+  ) {
+
     return null;
+
   }
 
 
-  const position = createDefaultPosition(index);
-  
+  const position =
+    createDefaultPosition(
+      index
+    );
+
 
   const size =
-  DEFAULT_ELEMENT_SIZE[node.type]
-  ||
-  DEFAULT_ELEMENT_SIZE.default;
+    getDefaultSize(
+      node.type
+    );
 
 
+  const element = {
 
-  return {
+    // -------------------------------------------------
+    // ID
+    // -------------------------------------------------
 
-
-    // Canvas identity
     id:
-    node.id ||
-    `${node.type || "element"}_${index}`,
+      node.id ||
+      `${node.type || "element"}_${index}`,
 
+    // -------------------------------------------------
+    // TYPE
+    // -------------------------------------------------
 
-
-    // Registry component type
     type:
       node.type ||
       "Text",
 
+    // -------------------------------------------------
+    // HIERARCHY
+    // -------------------------------------------------
 
+    parentId:
+      parentId ??
+      null,
 
-    // Canvas positioning
+    // -------------------------------------------------
+    // POSITION
+    // -------------------------------------------------
+
     x:
       node.x ??
       position.x,
-
 
     y:
       node.y ??
       position.y,
 
-
+    // -------------------------------------------------
+    // SIZE
+    // -------------------------------------------------
 
     width:
-    node.width ??
-    size.width,
-
+      node.width ??
+      size.width,
 
     height:
-    node.height ??
-    size.height,
+      node.height ??
+      size.height,
 
+    // -------------------------------------------------
+    // PROPS
+    // -------------------------------------------------
 
+    props: {
 
-    // Runtime bindings / component props
-    props:
-      {
-        ...(node.props || {})
-      },
+      ...(node.props || {}),
 
+    },
 
-    // Optional metadata
-    meta:
-      {
-        source:"project-tree"
-      }
+    // -------------------------------------------------
+    // META
+    // -------------------------------------------------
+
+    meta: {
+
+      ...(node.meta || {}),
+
+      source:
+        node.meta?.source ||
+        "project-tree",
+
+    },
 
   };
 
 
+  // ---------------------------------------------------
+  // ROLE
+  // ---------------------------------------------------
+
+  if (
+    node.role !== undefined
+  ) {
+
+    element.role =
+      node.role;
+
+  }
+
+
+  return element;
+
 }
 
 
+// =====================================================
+// FLATTEN TREE
+// =====================================================
 
-/**
- * Handles tree children
- *
- * Future compatible with:
- *
- * {
- *   type:"Container",
- *   children:[
- *      {...},
- *      {...}
- *   ]
- * }
- *
- */
-
-
-function flattenTree(node, result = []) {
+function flattenTree(
+  node,
+  result = [],
+  parentId = null
+) {
 
   if (!node) {
+
     return result;
+
   }
 
 
-  if (Array.isArray(node)) {
+  // ===================================================
+  // ARRAY
+  // ===================================================
 
-    node.forEach(child =>
-      flattenTree(child, result)
+  if (
+    Array.isArray(node)
+  ) {
+
+    node.forEach(
+      (
+        child,
+        index
+      ) => {
+
+        flattenTree(
+          child,
+          result,
+          parentId
+        );
+
+      }
     );
 
     return result;
+
   }
 
 
+  // ===================================================
+  // APP ROOT
+  // ===================================================
+
   /*
-    App is the project root.
-    It is not a canvas element.
+  -----------------------------------------------------
+  App is a logical project root.
+
+  We deliberately do NOT create:
+
+  {
+    type: "App"
+  }
+
+  as a Canvas element.
+  -----------------------------------------------------
   */
 
-  if (node.type !== "App") {
+  const isApp =
+    node.type === "App";
+
+
+  // ===================================================
+  // CURRENT PARENT
+  // ===================================================
+
+  let currentParentId =
+    parentId;
+
+
+  // ===================================================
+  // REAL CANVAS ELEMENT
+  // ===================================================
+
+  if (
+    !isApp
+  ) {
 
     const element =
       convertNode(
         node,
-        result.length
+        result.length,
+        parentId
       );
 
 
-    if(element){
-      result.push(element);
+    if (
+      element
+    ) {
+
+      result.push(
+        element
+      );
+
+
+      /*
+      -------------------------------------------------
+      IMPORTANT
+
+      Children now inherit this element's ID.
+
+      Therefore:
+
+      ControlPanel
+        ↓
+      ControlButton
+
+      becomes:
+
+      ControlPanel parentId:null
+      ControlButton parentId:ControlPanel.id
+      -------------------------------------------------
+      */
+
+      currentParentId =
+        element.id;
+
     }
 
   }
 
 
+  // ===================================================
+  // CHILDREN
+  // ===================================================
 
-  if(Array.isArray(node.children)) {
+  if (
+    Array.isArray(
+      node.children
+    )
+  ) {
 
-    node.children.forEach(child => {
+    node.children.forEach(
+      child => {
 
-      flattenTree(
-        child,
-        result
-      );
+        flattenTree(
+          child,
+          result,
+          currentParentId
+        );
 
-    });
+      }
+    );
 
   }
 
@@ -240,38 +432,67 @@ function flattenTree(node, result = []) {
 }
 
 
+// =====================================================
+// PUBLIC API
+// =====================================================
 
+export function projectTreeToElements(
+  tree
+) {
 
+  if (
+    !tree
+  ) {
 
-/**
- * Public API
- *
- * Converts:
- *
- * projectSchema.tree
- *
- * into:
- *
- * Canvas elements[]
- *
- */
-
-
-export function projectTreeToElements(tree) {
-
-
-  if(!tree){
     return [];
+
   }
 
 
-  return flattenTree(tree);
+  const result =
+    flattenTree(
+      tree
+    );
+
+
+  console.log(
+    "[ProjectTreeLoader] Tree → Elements",
+    result.map(
+      element => ({
+        id:
+          element.id,
+
+        type:
+          element.type,
+
+        parentId:
+          element.parentId,
+
+        x:
+          element.x,
+
+        y:
+          element.y,
+
+        width:
+          element.width,
+
+        height:
+          element.height,
+      })
+    )
+  );
+
+
+  return result;
 
 }
 
 
-
+// =====================================================
+// DEFAULT EXPORT
+// =====================================================
 
 export default {
-  projectTreeToElements
+  projectTreeToElements,
 };

@@ -58,7 +58,7 @@
           "targetId": "training-video"
         }
       },
-      {
+     {
         "id": "training-start",
         "type": "ControlButton",
         "props": {
@@ -68,17 +68,24 @@
         }
       },
       {
-        "id": "training-end",
+        "id": "end-training",
         "type": "ControlButton",
+        "x": 980,
+        "y": 570,
+        "width": 180,
+        "height": 50,
         "props": {
           "label": "End Training",
-          "action": "call.endCall",
-          "targetId": "training-video"
+          "action": "call.endCall"
         }
       },
       {
         "id": "training-chat",
         "type": "ChatPanel",
+        "x": 980,
+        "y": 100,
+        "width": 300,
+        "height": 400,
         "props": {}
       }
     ]

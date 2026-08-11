@@ -8,6 +8,7 @@ import AppBar from "./AppBar.js";
 import Container from "./Container.js";
 import Text from "./Text.js";
 import ControlPanel from "./ControlPanel.js";
+import FetchCallsDebug from "./FetchCallsDebug.js";
 
 
 
@@ -52,7 +53,11 @@ Container:{
 
 Text:{
  component:Text
-}
+},
+
+FetchCallsDebug:{
+ component:FetchCallsDebug
+},
 
 };
 

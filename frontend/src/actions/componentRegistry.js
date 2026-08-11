@@ -9,6 +9,7 @@ import Container from "../components/elements/Container";
 import Text from "../components/elements/Text";
 import ControlPanel from "../components/elements/ControlPanel";
 import TextLabel from "../components/elements/TextLabel.js";
+import FetchCallsDebug from "../components/elements/FetchCallsDebug.js";
 
 
 import videoContract
@@ -44,6 +45,8 @@ import controlPanelContract
 import textLabelContract
   from "../runtime/contracts/components/TextLabel.contract.js";
 
+import fetchCallsDebug
+  from "../runtime/contracts/components/FetchCallsDebug.contract.js";
 
 export const componentRegistry = {
 
@@ -100,7 +103,12 @@ export const componentRegistry = {
   TextLabel: {
     component: TextLabel,
     contract: textLabelContract
-  }
+  },
+
+  FetchCallsDebug: {
+  component: FetchCallsDebug,
+  contract: fetchCallsDebug,
+},
 
 };
 

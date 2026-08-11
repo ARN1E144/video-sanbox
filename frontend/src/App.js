@@ -1,32 +1,37 @@
-import { useEffect } from "react";
+
+import React from "react";
+
 import { PreviewProvider } from "./context/PreviewContext";
 import { CanvasProvider } from "./context/CanvasContext";
 import { ProjectProvider } from "./context/ProjectContext";
 import { ActionProvider } from "./context/ActionContext";
-import { AuthProvider } from "./context/AuthContext";
-import agoraEngine from "./services/agoraEngine";
-import { useRuntimeState } from "./context/RuntimeStateContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+
 import { RuntimeEventProvider } from "./context/RuntimeEventContext";
 import { RuntimeTriggersProvider } from "./context/RuntimeTriggersContext";
 import { RuntimeStateProvider } from "./context/RuntimeStateContext";
 import { RuntimeDebuggerProvider } from "./context/RuntimeDebuggerContext";
-import RuntimeTestPanel from "./dev/RuntimeTestPanel";
+import {
+  RuntimeAuthProvider,
+  useRuntimeAuth,
+} from "./context/RuntimeAuthContext";
+
 import RuntimeBootstrap from "./runtime/RuntimeBootstrap";
 import RuntimeDevWiring from "./dev/RuntimeDevWiring";
+import RuntimeTestPanel from "./dev/RuntimeTestPanel";
 import ConfoTest from "./dev/ConfoTest";
 import ConfoRenderer from "./runtime/confos/ConfoRenderer";
 import ContractTest from "./dev/ContractTest";
+
 import MainApp from "./MainApp";
-
-import { 
-  RuntimeAuthProvider,
-  useRuntimeAuth
-} from "./context/RuntimeAuthContext";
+import AuthPortal from "./components/AuthPortal";
 
 
+// =====================================================
+// RUNTIME AUTH DEBUG
+// =====================================================
 
-function RuntimeAuthDebug(){
-
+function RuntimeAuthDebug() {
   const runtimeAuth = useRuntimeAuth();
 
   console.log(
@@ -39,64 +44,149 @@ function RuntimeAuthDebug(){
 }
 
 
-function App() {
+// =====================================================
+// LOADING SCREEN
+// =====================================================
+
+function AuthLoading() {
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#020617",
+        color: "#fff",
+        fontFamily: "sans-serif",
+      }}
+    >
+      Loading...
+    </div>
+  );
+}
+
+
+// =====================================================
+// AUTH GATE
+//
+// IMPORTANT:
+//
+// ProjectProvider is deliberately NOT mounted until
+// authentication has completed.
+//
+// This prevents:
+//
+//   ProjectProvider
+//        ↓
+//   GET /api/projects
+//        ↓
+//   401
+//
+// when there is no authenticated user.
+// =====================================================
+
+function AuthGate() {
+  const {
+    session,
+    loading,
+  } = useAuth();
+
+  // ---------------------------------------------------
+  // AUTH HYDRATION
+  // ---------------------------------------------------
+
+  if (loading) {
+    return <AuthLoading />;
+  }
+
+  // ---------------------------------------------------
+  // NOT AUTHENTICATED
+  // ---------------------------------------------------
+
+  if (!session?.tokens?.accessToken) {
+    return (
+      <AuthPortal />
+    );
+  }
+
+  // ---------------------------------------------------
+  // AUTHENTICATED
+  // ---------------------------------------------------
 
   return (
-    <RuntimeDebuggerProvider>
+    <AuthenticatedApp />
+  );
+}
 
-      <AuthProvider>
 
-        <RuntimeAuthProvider>
+// =====================================================
+// AUTHENTICATED APPLICATION
+// =====================================================
 
-          <RuntimeAuthDebug />
+function AuthenticatedApp() {
+  return (
+    <RuntimeAuthProvider>
 
-          <RuntimeEventProvider>
+      <RuntimeAuthDebug />
 
-            <RuntimeStateProvider>
+      <RuntimeEventProvider>
 
-              <RuntimeBootstrap />
+        <RuntimeStateProvider>
 
-              <ActionProvider>
+          <RuntimeBootstrap />
 
-                <RuntimeTriggersProvider>
+          <ActionProvider>
 
-                  <RuntimeDevWiring />
+            <RuntimeTriggersProvider>
 
-                   <ContractTest />
+              <RuntimeDevWiring />
 
-                  <ProjectProvider>
+              <ContractTest />
 
-                    <CanvasProvider>
+              <ProjectProvider>
 
-                      <PreviewProvider>
+                <CanvasProvider>
 
-                        <MainApp />
+                  <PreviewProvider>
 
-                        <ConfoRenderer />
+                    <MainApp />
 
-                        <RuntimeTestPanel />
+                    <ConfoRenderer />
 
-                        <ConfoTest />
+                    <RuntimeTestPanel />
 
-                      </PreviewProvider>
+                    <ConfoTest />
 
-                    </CanvasProvider>
+                  </PreviewProvider>
 
-                  </ProjectProvider>
+                </CanvasProvider>
 
-                </RuntimeTriggersProvider>
+              </ProjectProvider>
 
-              </ActionProvider>
+            </RuntimeTriggersProvider>
 
-            </RuntimeStateProvider>
+          </ActionProvider>
 
-          </RuntimeEventProvider>
+        </RuntimeStateProvider>
 
-        </RuntimeAuthProvider>
+      </RuntimeEventProvider>
 
-      </AuthProvider>
+    </RuntimeAuthProvider>
+  );
+}
 
-    </RuntimeDebuggerProvider>
+
+// =====================================================
+// ROOT APP
+// =====================================================
+
+function App() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
   );
 }
 

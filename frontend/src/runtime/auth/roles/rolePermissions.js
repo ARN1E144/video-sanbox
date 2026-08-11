@@ -15,18 +15,20 @@ export const ROLE_PERMISSIONS = {
       "ControlPanel",
       "ControlButton",
       "ChatPanel",
-      "Text"
+      "Text",
+      "FetchCallsDebug"
     ],
 
     allowedActions: [
-      "call.startCall",
-      "call.acceptCall",
-      "call.joinCall",
-      "call.leaveCall",
-      "call.endCall",
-      "call.toggleMic",
-      "call.toggleVideo",
-      "call.spotlightUser"
+    "call.startCall",
+    "call.acceptCall",
+    "call.joinCall",
+    "call.leaveCall",
+    "call.endCall",
+    "call.toggleMic",
+    "call.toggleVideo",
+    "call.spotlightUser",
+    "call.fetchAvailableCalls"
     ]
 
   },
@@ -46,15 +48,17 @@ export const ROLE_PERMISSIONS = {
       "Text"
     ],
 
-    allowedActions: [
-      "call.startCall",
-      "call.acceptCall",
-      "call.joinCall",
-      "call.leaveCall",
-      "call.endCall",
-      "call.toggleMic",
-      "call.toggleVideo"
-    ]
+     allowedActions: [
+        "call.startCall",
+        "call.acceptCall",
+        "call.joinCall",
+        "call.leaveCall",
+        "call.endCall",
+        "call.toggleMic",
+        "call.toggleVideo",
+        "call.spotlightUser",
+        "call.fetchAvailableCalls"
+        ]
 
   },
 

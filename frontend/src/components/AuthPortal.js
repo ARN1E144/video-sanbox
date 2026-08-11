@@ -25,32 +25,62 @@ export default function AuthPortal({ onAuthed }) {
 
   const refreshMembers = async () => {
     if (!token || !tenantId) return;
-    console.log("[AuthPortal] Refreshing members for tenant:", tenantId); 
+    console.log("[AuthPortal] Refreshing members for tenant:", tenantId);
     const res = await authApi.members(tenantId);
     setMembers(res.data?.members || []);
     console.log("[AuthPortal] Fetched members:", res.data?.members);
 
   };
 
+
+  const inputStyle = {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "10px 12px",
+    marginBottom: 8,
+    borderRadius: 6,
+    border: "1px solid #3a3a3a",
+    background: "#0f172a",
+    color: "#f8fafc",
+    outline: "none",
+  };
+
+  const selectStyle = {
+    padding: "8px 10px",
+    borderRadius: 6,
+    border: "1px solid #3a3a3a",
+    background: "#0f172a",
+    color: "#f8fafc",
+    outline: "none",
+  };
+
+  const buttonStyle = {
+    padding: "9px 14px",
+    borderRadius: 6,
+    border: "1px solid #3a3a3a",
+    background: "#1e293b",
+    color: "#f8fafc",
+    cursor: "pointer",
+  };
+
+
+
   console.log("[AuthPortal] token:", token, "tenantId:", tenantId);
 
   useEffect(() => {
-    (async () => {
-      setError("");
-      setMe(null);
-      if (!token) return;
-      
-      try {
-        const res = await authApi.me(token);
-        setMe(res);
+  setError("");
 
-        // ✅ auto-switch to build after login/register
-        if (typeof onAuthed === "function") onAuthed();
-      } catch (e) {
-        setError(e.message);
-      }
-    })();
-  }, [token]);
+  if (!token) {
+    setMe(null);
+    return;
+  }
+
+  setMe(session?.me || null);
+
+  if (typeof onAuthed === "function") {
+    onAuthed();
+  }
+}, [token, session, onAuthed]);
 
   useEffect(() => {
     refreshMembers().catch(() => {});
@@ -122,11 +152,53 @@ export default function AuthPortal({ onAuthed }) {
             <form onSubmit={onRegister} style={{ background: "#141414", border: "1px solid #2a2a2a", padding: 12, borderRadius: 10 }}>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Register</div>
 
-              <input placeholder="First name" value={reg.firstName} onChange={(e) => setReg({ ...reg, firstName: e.target.value })} />
-              <input placeholder="Last name" value={reg.lastName} onChange={(e) => setReg({ ...reg, lastName: e.target.value })} />
-              <input placeholder="Email" value={reg.email} onChange={(e) => setReg({ ...reg, email: e.target.value })} />
-              <input placeholder="Password" type="password" value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} />
-              <input placeholder="Tenant name" value={reg.tenantName} onChange={(e) => setReg({ ...reg, tenantName: e.target.value })} />
+                <input
+                  style={inputStyle}
+                  placeholder="First name"
+                  value={reg.firstName}
+                  onChange={(e) =>
+                    setReg({ ...reg, firstName: e.target.value })
+                  }
+                />
+
+                <input
+                  style={inputStyle}
+                  placeholder="Last name"
+                  value={reg.lastName}
+                  onChange={(e) =>
+                    setReg({ ...reg, lastName: e.target.value })
+                  }
+                />
+
+                <input
+                  style={inputStyle}
+                  placeholder="Email"
+                  value={reg.email}
+                  onChange={(e) =>
+                    setReg({ ...reg, email: e.target.value })
+                  }
+                />
+
+                <input
+                  style={inputStyle}
+                  placeholder="Password"
+                  type="password"
+                  value={reg.password}
+                  onChange={(e) =>
+                    setReg({ ...reg, password: e.target.value })
+                  }
+                />
+
+                <input
+                  style={inputStyle}
+                  placeholder="Tenant name"
+                  value={reg.tenantName}
+                  onChange={(e) =>
+                    setReg({ ...reg, tenantName: e.target.value })
+                  }
+                />
+
+
 
               <button type="submit" style={{ marginTop: 10 }}>Create account</button>
             </form>

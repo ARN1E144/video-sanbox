@@ -300,9 +300,19 @@ export function ActionProvider({ children }) {
       -------------------------------------------
       */
 
-      if(
+
+
+      console.log("[AUTH CHECK]", {
+        role: runtimeAuth.role,
+        action: actionName,
+        allowed: runtimeAuth.allowedActions,
+        hasExactMatch:
+          runtimeAuth.allowedActions.includes(actionName),
+      });
+
+      if (
         !runtimeAuth.allowedActions.includes(actionName)
-      ){
+      ) {
 
         console.warn(
           "[AUTH BLOCKED ACTION]",
@@ -314,12 +324,10 @@ export function ActionProvider({ children }) {
           }
         );
 
-
         return {
-          ok:false,
-          error:"permission_denied"
+          ok: false,
+          error: "permission_denied"
         };
-
       }
 
 

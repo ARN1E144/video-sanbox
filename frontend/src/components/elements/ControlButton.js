@@ -1,3 +1,4 @@
+
 import React from "react";
 
 import { useActionContext } from "../../context/ActionContext";
@@ -49,7 +50,15 @@ export default function ControlButton(props) {
 
     <button
 
-      className="px-4 py-2 bg-blue-500 text-white rounded"
+      className="
+        w-full
+        h-full
+        px-4
+        py-2
+        bg-blue-500
+        text-white
+        rounded
+      "
 
       onClick={handleClick}
 

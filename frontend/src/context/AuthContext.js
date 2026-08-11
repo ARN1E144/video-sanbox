@@ -138,21 +138,57 @@ export function AuthProvider({ children }) {
     };
 
     const login = async (payload) => {
-      const res = await authApi.login(payload);
-      const data = res.data;
+  const res = await authApi.login(payload);
+  const data = res.data;
 
-      const nextToken = data?.tokens?.accessToken;
-      if (!nextToken) {
-        save(data);
-        return data;
-      }
+  console.log("[Auth] LOGIN RESPONSE:", data);
 
-      // ✅ Token FIRST
+  const nextToken = data?.tokens?.accessToken;
+
+  if (!nextToken) {
+    console.error(
+      "[Auth] Login succeeded but no access token was returned"
+    );
+
+    save(data);
+    return data;
+  }
+
+      console.log("[Auth] Access token received");
+
+      // =====================================================
+      // IMPORTANT:
+      // Save the token BEFORE calling /me.
+      //
+      // api.js request interceptor reads the token from
+      // localStorage, not React state.
+      // =====================================================
+
+      save(data);
+
+      // Also prime Axios immediately.
       setApiToken(nextToken);
 
-      // ✅ Then hydrate /me
+      console.log(
+        "[Auth] Token stored and Axios configured"
+      );
+
+      // =====================================================
+      // Now /me can authenticate successfully.
+      // =====================================================
+
       const meRes = await authApi.me();
-      save({ ...data, me: meRes.data });
+
+      const nextSession = {
+        ...data,
+        me: meRes.data,
+      };
+
+      save(nextSession);
+
+      console.log(
+        "[Auth] Session hydrated successfully"
+      );
 
       return data;
     };

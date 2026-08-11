@@ -21,9 +21,7 @@ import {
   elementsToProjectTree,
 } from "../runtime/project/ProjectTreeWriter";
 
-
 const CanvasContext = createContext();
-
 
 // =====================================================
 // DEFAULT EXTRACTION
@@ -33,29 +31,26 @@ function extractDefaults(editableProps = {}) {
 
   const result = {};
 
-  Object.entries(editableProps)
-    .forEach(([key, value]) => {
+  Object.entries(editableProps).forEach(([key, value]) => {
 
-      if (
-        value &&
-        typeof value === "object" &&
-        value.default !== undefined
-      ) {
+    if (
+      value &&
+      typeof value === "object" &&
+      value.default !== undefined
+    ) {
 
-        result[key] = value.default;
+      result[key] = value.default;
 
-      }
-      else {
+    } else {
 
-        result[key] = value;
+      result[key] = value;
 
-      }
+    }
 
-    });
+  });
 
   return result;
 }
-
 
 // =====================================================
 // NORMALIZE ELEMENT
@@ -72,14 +67,11 @@ function normalizeElement(el) {
 
   }
 
-
   const registryEntry =
     COMPONENTS[el.type];
 
-
   const metaDefaults =
     registryEntry?.meta?.editableProps || {};
-
 
   const props = {
 
@@ -91,39 +83,31 @@ function normalizeElement(el) {
 
   };
 
-
   return {
 
     ...el,
-
 
     type:
       COMPONENTS[el.type]
         ? el.type
         : "Text",
 
-
-    /*
-    =====================================================
-    HIERARCHY
-
-    null = top-level canvas element
-
-    parentId = child of another canvas element
-    =====================================================
-    */
+    // =================================================
+    // HIERARCHY
+    //
+    // null     = top-level canvas element
+    // parentId = child of another canvas element
+    // =================================================
 
     parentId:
       el.parentId ??
       null,
-
 
     props
 
   };
 
 }
-
 
 // =====================================================
 // NORMALIZE ELEMENTS
@@ -137,13 +121,11 @@ function normalizeElements(list) {
 
   }
 
-
   return list
     .map(normalizeElement)
     .filter(Boolean);
 
 }
-
 
 // =====================================================
 // PROVIDER
@@ -156,23 +138,15 @@ export function CanvasProvider({
   const {
     projectSchema,
     setProjectSchema,
-  } =
-    useProjectContext();
-
+  } = useProjectContext();
 
   const [
     elements,
     setElements
-  ] =
-    useState([]);
-
+  ] = useState([]);
 
   const isSyncingRef =
     useRef(false);
-
-  const syncingTree =
-    useRef(false);
-
 
   // =====================================================
   // TREE → CANVAS
@@ -191,7 +165,6 @@ export function CanvasProvider({
 
     }
 
-
     if (
       !projectSchema?.tree
     ) {
@@ -202,30 +175,37 @@ export function CanvasProvider({
 
     }
 
-
     const generated =
       projectTreeToElements(
         projectSchema.tree
       );
-
 
     const normalized =
       normalizeElements(
         generated
       );
 
+    console.table(
+      normalized.map(el => ({
+        id: el.id,
+        type: el.type,
+        parentId: el.parentId,
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height
+      }))
+    );
 
     console.log(
       "[Canvas] Hydrating from tree",
       normalized
     );
 
-
     console.log(
       "🟢 TREE → CANVAS",
       projectSchema?.tree
     );
-
 
     setElements(
       normalized
@@ -234,7 +214,6 @@ export function CanvasProvider({
   }, [
     projectSchema?.tree
   ]);
-
 
   // =====================================================
   // CANVAS → TREE
@@ -249,16 +228,13 @@ export function CanvasProvider({
             nextElements
           );
 
-
         console.log(
           "🔵 CANVAS → TREE",
           tree
         );
 
-
         isSyncingRef.current =
           true;
-
 
         setProjectSchema(
           prev => ({
@@ -276,7 +252,6 @@ export function CanvasProvider({
       ]
     );
 
-
   // =====================================================
   // ADD ELEMENT
   // =====================================================
@@ -290,7 +265,6 @@ export function CanvasProvider({
             newEl
           );
 
-
         console.log(
           "[NORMALIZED ELEMENT]",
           {
@@ -299,13 +273,11 @@ export function CanvasProvider({
           }
         );
 
-
         if (!normalized) {
 
           return;
 
         }
-
 
         setElements(prev => {
 
@@ -316,7 +288,6 @@ export function CanvasProvider({
             normalized
 
           ];
-
 
           console.log(
             "[CANVAS ELEMENTS AFTER ADD]",
@@ -334,9 +305,7 @@ export function CanvasProvider({
             }))
           );
 
-
           syncTree(next);
-
 
           return next;
 
@@ -347,7 +316,6 @@ export function CanvasProvider({
         syncTree
       ]
     );
-
 
   // =====================================================
   // UPDATE ELEMENT
@@ -373,13 +341,11 @@ export function CanvasProvider({
 
               }
 
-
               return normalizeElement({
 
                 ...el,
 
                 ...updates,
-
 
                 props: {
 
@@ -393,9 +359,7 @@ export function CanvasProvider({
 
             });
 
-
           syncTree(next);
-
 
           return next;
 
@@ -407,6 +371,169 @@ export function CanvasProvider({
       ]
     );
 
+  // =====================================================
+  // MOVE ELEMENT TO PARENT
+  // =====================================================
+
+  const moveElementToParent =
+    useCallback(
+      (
+        elementId,
+        parentId = null
+      ) => {
+
+        setElements(prev => {
+
+          const element =
+            prev.find(
+              el =>
+                el.id === elementId
+            );
+
+          if (!element) {
+
+            console.warn(
+              "[Canvas] Cannot move missing element",
+              elementId
+            );
+
+            return prev;
+
+          }
+
+          // ---------------------------------------------
+          // Prevent self-parenting
+          // ---------------------------------------------
+
+          if (
+            parentId === elementId
+          ) {
+
+            console.warn(
+              "[Canvas] Cannot parent element to itself",
+              {
+                elementId,
+                parentId
+              }
+            );
+
+            return prev;
+
+          }
+
+          // ---------------------------------------------
+          // Parent must exist unless null
+          // ---------------------------------------------
+
+          if (
+            parentId !== null &&
+            !prev.some(
+              el =>
+                el.id === parentId
+            )
+          ) {
+
+            console.warn(
+              "[Canvas] Parent does not exist",
+              {
+                elementId,
+                parentId
+              }
+            );
+
+            return prev;
+
+          }
+
+          // ---------------------------------------------
+          // Prevent circular hierarchy
+          // ---------------------------------------------
+
+          if (parentId !== null) {
+
+            let currentParent =
+              prev.find(
+                el =>
+                  el.id === parentId
+              );
+
+            while (currentParent) {
+
+              if (
+                currentParent.id === elementId
+              ) {
+
+                console.warn(
+                  "[Canvas] Circular hierarchy rejected",
+                  {
+                    elementId,
+                    parentId
+                  }
+                );
+
+                return prev;
+
+              }
+
+              if (
+                !currentParent.parentId
+              ) {
+
+                break;
+
+              }
+
+              currentParent =
+                prev.find(
+                  el =>
+                    el.id ===
+                    currentParent.parentId
+                );
+
+            }
+
+          }
+
+          const next =
+            prev.map(el => {
+
+              if (
+                el.id !== elementId
+              ) {
+
+                return el;
+
+              }
+
+              return normalizeElement({
+
+                ...el,
+
+                parentId
+
+              });
+
+            });
+
+          console.log(
+            "[CANVAS PARENT CHANGE]",
+            {
+              elementId,
+              parentId
+            }
+          );
+
+          syncTree(next);
+
+          return next;
+
+        });
+
+      },
+      [
+        syncTree
+      ]
+    );
 
   // =====================================================
   // REMOVE ELEMENT
@@ -422,23 +549,16 @@ export function CanvasProvider({
           =================================================
           REMOVE THE ELEMENT AND ITS CHILDREN
           =================================================
-
-          If a ControlPanel is deleted, its buttons
-          should not remain orphaned on the canvas.
-          =================================================
           */
 
           const idsToRemove =
             new Set([id]);
 
-
           let changed = true;
-
 
           while (changed) {
 
             changed = false;
-
 
             prev.forEach(el => {
 
@@ -464,7 +584,6 @@ export function CanvasProvider({
 
           }
 
-
           const next =
             prev.filter(
               el =>
@@ -473,9 +592,7 @@ export function CanvasProvider({
                 )
             );
 
-
           syncTree(next);
-
 
           return next;
 
@@ -486,7 +603,6 @@ export function CanvasProvider({
         syncTree
       ]
     );
-
 
   // =====================================================
   // CLEAR CANVAS
@@ -506,7 +622,6 @@ export function CanvasProvider({
       ]
     );
 
-
   // =====================================================
   // LOAD ELEMENTS
   // =====================================================
@@ -520,11 +635,9 @@ export function CanvasProvider({
             saved
           );
 
-
         setElements(
           normalized
         );
-
 
         syncTree(
           normalized
@@ -536,7 +649,6 @@ export function CanvasProvider({
       ]
     );
 
-
   // =====================================================
   // CONTEXT
   // =====================================================
@@ -544,7 +656,6 @@ export function CanvasProvider({
   return (
 
     <CanvasContext.Provider
-
       value={{
 
         elements,
@@ -553,6 +664,8 @@ export function CanvasProvider({
 
         updateElement,
 
+        moveElementToParent,
+
         removeElement,
 
         clearCanvas,
@@ -560,7 +673,6 @@ export function CanvasProvider({
         loadElements,
 
       }}
-
     >
 
       {children}
@@ -570,7 +682,6 @@ export function CanvasProvider({
   );
 
 }
-
 
 // =====================================================
 // HOOK
@@ -583,7 +694,6 @@ export function useCanvasState() {
       CanvasContext
     );
 
-
   if (!ctx) {
 
     throw new Error(
@@ -591,7 +701,6 @@ export function useCanvasState() {
     );
 
   }
-
 
   return ctx;
 

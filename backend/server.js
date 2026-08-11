@@ -23,12 +23,32 @@ import tenantRoutes from "./routes/tenantRoutes.js";
 import meRoutes from "./routes/me.js";
 import callRoutes from "./routes/callRoutes.js";
 import videoRoutes from "./routes/videoRoutes.js";
-
+import projectRoutes from "./routes/projectRoutes.js";
 
 
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "http://192.168.0.111:3000",
+    ],
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+    ],
+    credentials: true,
+  })
+);
 
 app.use(bodyParser.json());
 
@@ -40,6 +60,8 @@ app.use("/api/tenant", tenantRoutes);
 app.use("/api", meRoutes);
 app.use("/api/calls", callRoutes);
 app.use("/api/videos", videoRoutes);
+app.use("/api/projects", projectRoutes);
+
 
 
 app.get("/", (req, res) => {
