@@ -140,6 +140,152 @@ router.patch(
   }
 );
 
+router.patch(
+  "/:tenantId/members/me/availability",
+  requireAuth,
+  requireTenant,
+  async (req, res) => {
+    try {
+      const { tenantId } = req.params;
+      const { isAvailable } = req.body;
+
+      // -------------------------------------------------
+      // Tenant protection
+      // -------------------------------------------------
+
+      if (tenantId !== String(req.user.tenantId)) {
+        return res.status(403).json({
+          error: "Tenant mismatch",
+        });
+      }
+
+      // -------------------------------------------------
+      // Validate value
+      // -------------------------------------------------
+
+      if (typeof isAvailable !== "boolean") {
+        return res.status(400).json({
+          error: "isAvailable must be a boolean",
+        });
+      }
+
+      // -------------------------------------------------
+      // Find THIS user's membership
+      // -------------------------------------------------
+
+      const membership = await Membership.findOne({
+        tenantId,
+        userId: req.user.userId,
+      });
+
+      if (!membership) {
+        return res.status(404).json({
+          error: "Membership not found",
+        });
+      }
+
+      // -------------------------------------------------
+      // Update availability
+      // -------------------------------------------------
+
+      membership.isAvailable = isAvailable;
+
+      await membership.save();
+
+      console.log("[AVAILABILITY PATCH] Saved membership:", {
+        membershipId: membership._id,
+        userId: membership.userId,
+        tenantId: membership.tenantId,
+        availability: membership.availability,
+      });
+
+      console.log(
+        "[TenantRoutes] Availability changed:",
+        {
+          tenantId,
+          userId: req.user.userId,
+          role: membership.role,
+          isAvailable: membership.isAvailable,
+        }
+      );
+
+      return res.json({
+        ok: true,
+        availability: {
+          isAvailable: membership.isAvailable,
+        },
+      });
+
+    } catch (err) {
+
+      console.error(
+        "[TenantRoutes] Availability update error:",
+        err
+      );
+
+      return res.status(500).json({
+        error: "Failed to update availability",
+      });
+    }
+  }
+);
+
+router.patch(
+  "/members/me/availability",
+  requireAuth,
+  requireTenant,
+  async (req, res) => {
+    try {
+      const { userId, tenantId } = req.user;
+      const { isAvailable } = req.body;
+
+      if (typeof isAvailable !== "boolean") {
+        return res.status(400).json({
+          error: "isAvailable must be a boolean",
+        });
+      }
+
+      const membership = await Membership.findOne({
+        userId,
+        tenantId,
+      });
+
+      if (!membership) {
+        return res.status(403).json({
+          error: "Membership not found",
+        });
+      }
+
+      membership.isAvailable = isAvailable;
+
+      await membership.save();
+
+      console.log("[TenantRoutes] Availability changed:", {
+        tenantId: String(tenantId),
+        userId: String(userId),
+        role: membership.role,
+        isAvailable: membership.isAvailable,
+      });
+
+      return res.json({
+        ok: true,
+        availability: {
+          isAvailable: membership.isAvailable,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "[TenantRoutes] Failed to update availability:",
+        err
+      );
+
+      return res.status(500).json({
+        error: "Failed to update availability",
+      });
+    }
+  }
+);
+
 
 
 export default router;

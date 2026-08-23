@@ -11,7 +11,14 @@ const callSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["waiting", "claimed", "active", "ended", "canceled"],
+      enum: [
+        "waiting",
+        "claimed",
+        "active",
+        "ended",
+        "canceled",
+        "expired",
+      ],
       default: "waiting",
       index: true,
     },
@@ -22,6 +29,7 @@ const callSchema = new mongoose.Schema(
     claimedAt: { type: Date, default: null },
     endedAt: { type: Date, default: null },
     canceledAt: { type: Date, default: null },
+    expiredAt: {type: Date, default: null },
   },
   { timestamps: true }
 );

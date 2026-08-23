@@ -1,30 +1,39 @@
-// src/dev/panels/RuntimeStatusPanel.js
-
 import React from "react";
 
 import {
-  useRuntimeValue
+  useRuntimeValue,
 } from "../../hooks/useRuntimeValue";
 
 import {
-  useRuntimeState
+  useRuntimeState,
 } from "../../context/RuntimeStateContext";
 
 
-export default function RuntimeStatusPanel(){
+export default function RuntimeStatusPanel() {
 
   const runtime =
     useRuntimeState();
 
 
+  // =====================================================
+  // RUNTIME READY
+  // =====================================================
+
   const runtimeReady =
     runtime.runtimeReady;
 
+
+  // =====================================================
+  // AGORA
+  // =====================================================
 
   const agora =
     runtime.agora;
 
 
+  // =====================================================
+  // CALL
+  // =====================================================
 
   const callId =
     useRuntimeValue(
@@ -50,6 +59,10 @@ export default function RuntimeStatusPanel(){
     );
 
 
+  // =====================================================
+  // MEDIA
+  // =====================================================
+
   const micEnabled =
     useRuntimeValue(
       "media.micEnabled"
@@ -57,10 +70,19 @@ export default function RuntimeStatusPanel(){
 
 
   const videoEnabled =
-  useRuntimeValue(
-    "media.videoEnabled"
-  );
+    useRuntimeValue(
+      "media.videoEnabled"
+    );
 
+
+  // =====================================================
+  // PARTICIPANTS
+  //
+  // This is a NUMBER.
+  //
+  // RuntimeState:
+  // call.participants = 1
+  // =====================================================
 
   const participants =
     useRuntimeValue(
@@ -68,36 +90,67 @@ export default function RuntimeStatusPanel(){
     );
 
 
+  // =====================================================
+  // REMOTE USERS
+  //
+  // This is an OBJECT keyed by Agora UID.
+  //
+  // Example:
+  //
+  // {
+  //   "13510": {
+  //     uid: 13510,
+  //     hasAudio: true,
+  //     hasVideo: true
+  //   }
+  // }
+  // =====================================================
+
   const remoteUsers =
     useRuntimeValue(
       "call.remoteUsers"
     );
 
-    console.log(
-        "%c🔥 NEW RuntimeStatusPanel loaded",
-        "color: #FF5722; font-weight: bold; font-size: 13px;"
-        );
-    
-    console.log(
-    "🔥 STATUS VALUES",
-    {
-        joined,
-        micEnabled,
-        videoEnabled,
-        runtime: runtime.getAll()
-    }
-    );
 
+  const remoteUserCount =
+    remoteUsers &&
+    typeof remoteUsers === "object"
+      ? Object.keys(remoteUsers).length
+      : 0;
+
+
+  // =====================================================
+  // DEBUG
+  // =====================================================
+
+  console.log(
+    "[RuntimeStatusPanel] status",
+    {
+      callId,
+      channel,
+      state,
+      joined,
+      micEnabled,
+      videoEnabled,
+      participants,
+      remoteUserCount,
+      agoraUid:
+        agora?.uid || null,
+    }
+  );
+
+
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
 
     <div>
 
-
       <h4>
         Runtime Status
       </h4>
-
 
 
       <Status
@@ -108,44 +161,56 @@ export default function RuntimeStatusPanel(){
 
       <Status
         label="Call ID"
-        value={callId || "none"}
+        value={
+          callId || "none"
+        }
       />
 
 
       <Status
         label="Channel"
-        value={channel || "none"}
+        value={
+          channel || "none"
+        }
       />
 
 
       <Status
         label="State"
-        value={state || "idle"}
+        value={
+          state || "idle"
+        }
       />
 
 
       <Status
         label="Joined"
-        value={joined}
+        value={
+          joined
+        }
       />
 
 
       <Status
         label="Mic Enabled"
-        value={micEnabled}
+        value={
+          micEnabled
+        }
       />
 
 
       <Status
         label="Video Enabled"
-        value={videoEnabled}
+        value={
+          videoEnabled
+        }
       />
 
 
       <Status
         label="Remote Users"
         value={
-          remoteUsers?.length || 0
+          remoteUserCount
         }
       />
 
@@ -153,7 +218,7 @@ export default function RuntimeStatusPanel(){
       <Status
         label="Participants"
         value={
-          participants?.length || 0
+          participants ?? 0
         }
       />
 
@@ -165,8 +230,6 @@ export default function RuntimeStatusPanel(){
         }
       />
 
-
-
     </div>
 
   );
@@ -174,42 +237,39 @@ export default function RuntimeStatusPanel(){
 }
 
 
+// =======================================================
+// STATUS
+// =======================================================
 
 function Status({
   label,
   value
-}){
-
+}) {
 
   return (
 
     <div
       style={{
-        marginBottom:6
+        marginBottom: 6,
       }}
     >
 
       {label}:
 
       <strong
-
         style={{
-
-          marginLeft:8,
+          marginLeft: 8,
 
           color:
             value
               ? "#00d26a"
-              : "#ff6b6b"
-
+              : "#ff6b6b",
         }}
-
       >
 
         {String(value)}
 
       </strong>
-
 
     </div>
 

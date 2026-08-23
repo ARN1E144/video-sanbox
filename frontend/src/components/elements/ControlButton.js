@@ -8,48 +8,56 @@ export default function ControlButton(props) {
   const {
     label = "Button",
     action,
-    targetId
+    targetId,
+    params = {},
   } = props;
 
   const {
-    runAction
+    runAction,
   } = useActionContext();
 
   const handleClick = async () => {
 
     if (!action) {
-
       console.warn(
         "[ControlButton] No action configured",
-        {
-          label
-        }
+        { label }
       );
-
       return;
     }
+
+    const actionParams = {
+      ...params,
+      targetId,
+    };
 
     console.log(
       "[CANVAS EVENT → ACTION]",
       {
         action,
-        targetId
+        targetId,
+        params: actionParams,
       }
     );
 
     await runAction(
       action,
-      {
-        targetId
-      }
+      actionParams
     );
-
   };
 
+   console.log(
+    "[ControlButton PROPS]",
+    {
+      label,
+      action,
+      targetId,
+      params
+    }
+  );
+
   return (
-
     <button
-
       className="
         w-full
         h-full
@@ -59,15 +67,9 @@ export default function ControlButton(props) {
         text-white
         rounded
       "
-
       onClick={handleClick}
-
     >
-
       {label}
-
     </button>
-
   );
-
 }

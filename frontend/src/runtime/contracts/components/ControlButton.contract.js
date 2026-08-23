@@ -38,61 +38,53 @@ export default {
 
   editableProps: {
 
-    label: {
-
-      type: "string",
-
-      ui: "build",
-
-      default: "Button"
-
-    },
-
-
-    icon: {
-
-      type: "string",
-
-      ui: "build",
-
-      default: ""
-
-    },
-
-
-    action: {
-
-      type: "action",
-
-      ui: "build",
-
-      default: ""
-
-    },
-
-
-    targetId: {
-  type: "component",
-  ui: "build",
-  label: "Target",
-  default: ""
-},
-
-condition: {
-  type: "condition",
-  ui: "advanced",
-  label: "Condition",
-  default: ""
-},
-
-style: {
-  type: "style",
-  ui: "advanced",
-  label: "Style",
-  default: {}
-},
-
+  label: {
+    type: "string",
+    ui: "build",
+    default: "Button"
   },
+
+  icon: {
+    type: "string",
+    ui: "build",
+    default: ""
+  },
+
+  action: {
+    type: "action",
+    ui: "build",
+    default: ""
+  },
+
+  params: {
+    type: "object",
+    ui: "build",
+    label: "Action Parameters",
+    default: {}
+  },
+
+  targetId: {
+    type: "component",
+    ui: "build",
+    label: "Target",
+    default: ""
+  },
+
+  condition: {
+    type: "condition",
+    ui: "advanced",
+    label: "Condition",
+    default: ""
+  },
+
+  style: {
+    type: "style",
+    ui: "advanced",
+    label: "Style",
+    default: {}
+  },
+
+},
 
 
 
@@ -198,8 +190,8 @@ style: {
     optional: [
 
       "targetId",
-
-      "condition"
+      "condition",
+      "params"
 
     ]
 

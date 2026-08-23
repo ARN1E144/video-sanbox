@@ -141,6 +141,18 @@ export default function CanvasElementRenderer({
     ]
   );
 
+    console.log(
+    "[CanvasElementRenderer] RESOLVED COMPONENT",
+    {
+        elementId: element?.id,
+        elementType: element?.type,
+        ComponentName:
+        Component?.displayName ||
+        Component?.name ||
+        "UNKNOWN",
+    }
+    );
+
   // =====================================================
   // RENDER
   // =====================================================

@@ -1,21 +1,26 @@
 // src/hooks/useAgoraRuntime.js
 
-import { useRef, useCallback } from "react";
+import {
+  useCallback,
+  useEffect,
+} from "react";
 
-import AgoraRTC from "agora-rtc-sdk-ng";
+import {
+  useRuntimeEvents,
+} from "../context/RuntimeEventContext";
 
-import api from "../services/api";
+import {
+  useRuntimeState,
+} from "../context/RuntimeStateContext";
 
-import { useRuntimeEvents }
-from "../context/RuntimeEventContext";
+import AgoraEngine
+  from "../services/agoraEngine";
 
-import { useRuntimeState }
-from "../context/RuntimeStateContext";
 
 export default function useAgoraRuntime() {
 
   // =====================================================
-  // 🔥 RUNTIME SYSTEMS
+  // RUNTIME SYSTEMS
   // =====================================================
 
   const runtime =
@@ -24,495 +29,760 @@ export default function useAgoraRuntime() {
   const runtimeState =
     useRuntimeState();
 
-  // =====================================================
-  // 🔥 RTC REFS
-  // =====================================================
-
-  const clientRef =
-    useRef(null);
-
-  const localAudioTrackRef =
-    useRef(null);
-
-  const localVideoTrackRef =
-    useRef(null);
-
-  const remoteUsersRef =
-    useRef({});
 
   // =====================================================
-  // 🔥 JOIN CALL
+  // REMOTE USER BRIDGE
+  //
+  // AgoraEngine
+  //      ↓
+  // RuntimeState
+  //      ↓
+  // AgoraFeed
   // =====================================================
 
-  const joinCall = useCallback(async ({
-    channel = "test-call",
-    tokenEndpoint = "/agora/token",
-  }) => {
+  const handleRemoteUsersChanged =
+    useCallback(
+      ({
+        users = {},
+        count = 0
+      } = {}) => {
 
-    // already joined
-    if (
-      runtimeState.get("call.joined")
-    ) {
-      return;
-    }
-
-    try {
-
-      // ============================================
-      // CREATE CLIENT
-      // ============================================
-
-      const client =
-        AgoraRTC.createClient({
-          mode: "rtc",
-          codec: "vp8",
-        });
-
-      clientRef.current = client;
-
-      // ============================================
-      // REMOTE USER PUBLISHED
-      // ============================================
-
-      client.on(
-        "user-published",
-        async (user, mediaType) => {
-
-          await client.subscribe(
-            user,
-            mediaType
-          );
-
-          // -------------------------
-          // update users ref
-          // -------------------------
-
-          remoteUsersRef.current = {
-            ...remoteUsersRef.current,
-            [user.uid]: user,
-          };
-
-          // -------------------------
-          // runtime graph
-          // -------------------------
-
-          runtimeState.set(
-            "call.remoteUsers",
-            remoteUsersRef.current
-          );
-
-          // -------------------------
-          // runtime events
-          // -------------------------
-
-          runtime.emit(
-            "USER_JOINED",
-            {
-              uid: user.uid,
-              user,
-            }
-          );
-
-          runtime.emit(
-            "TRACK_PUBLISHED",
-            {
-              uid: user.uid,
-              user,
-              mediaType,
-            }
-          );
-
-          // -------------------------
-          // autoplay audio
-          // -------------------------
-
-          if (
-            mediaType === "audio"
-          ) {
-            user.audioTrack?.play();
-          }
-        }
-      );
-
-      // ============================================
-      // USER UNPUBLISHED
-      // ============================================
-
-      client.on(
-        "user-unpublished",
-        (user, mediaType) => {
-
-          runtime.emit(
-            "TRACK_UNPUBLISHED",
-            {
-              uid: user.uid,
-              user,
-              mediaType,
-            }
-          );
-        }
-      );
-
-      // ============================================
-      // USER LEFT
-      // ============================================
-
-      client.on(
-        "user-left",
-        (user) => {
-
-          const next = {
-            ...remoteUsersRef.current,
-          };
-
-          delete next[user.uid];
-
-          remoteUsersRef.current =
-            next;
-
-          // -------------------------
-          // runtime graph
-          // -------------------------
-
-          runtimeState.set(
-            "call.remoteUsers",
-            next
-          );
-
-          // -------------------------
-          // runtime event
-          // -------------------------
-
-          runtime.emit(
-            "USER_LEFT",
-            {
-              uid: user.uid,
-              user,
-            }
-          );
-        }
-      );
-
-      // ============================================
-      // TOKEN REQUEST
-      // ============================================
-
-      const { data } =
-        await api.get(
-          tokenEndpoint,
+        console.log(
+          "[AgoraRuntime] remote users changed",
           {
-            params: {
-              channel,
-            },
+            count,
+            users
           }
         );
 
-      const {
-        appId,
-        token,
-        uid,
-      } = data;
 
-      // ============================================
-      // JOIN AGORA
-      // ============================================
+        runtimeState.set(
+          "call.remoteUsers",
+          users
+        );
 
-      await client.join(
-        appId,
-        channel,
-        token,
-        uid
-      );
 
-      // ============================================
-      // CREATE LOCAL TRACKS
-      // ============================================
+        runtimeState.set(
+          "call.participants",
+          count
+        );
 
-      const audioTrack =
-        await AgoraRTC
-          .createMicrophoneAudioTrack();
+        console.log(
+          "[AgoraRuntime] AFTER RUNTIME STATE WRITE",
+          {
+            remoteUsers:
+              runtimeState.get("call.remoteUsers"),
 
-      const videoTrack =
-        await AgoraRTC
-          .createCameraVideoTrack();
+            participants:
+              runtimeState.get("call.participants"),
+          });
 
-      localAudioTrackRef.current =
-        audioTrack;
 
-      localVideoTrackRef.current =
-        videoTrack;
+        runtime.emit(
+          "REMOTE_USERS_CHANGED",
+          {
+            users,
+            count
+          }
+        );
 
-      // ============================================
-      // PUBLISH TRACKS
-      // ============================================
+      },
+      [
+        runtime,
+        runtimeState,
+      ]
+    );
 
-      await client.publish([
-        audioTrack,
-        videoTrack,
-      ]);
 
-      // ============================================
-      // RUNTIME GRAPH
-      // ============================================
+  // =====================================================
+  // ENGINE EVENT BRIDGE
+  // =====================================================
 
-      runtimeState.patch(
-        "call",
-        {
-          joined: true,
-          channel,
-          uid,
-        }
-      );
-
-      runtimeState.patch(
-        "media",
-        {
-          micEnabled: true,
-          videoEnabled: true,
-        }
-      );
-
-      // ============================================
-      // RUNTIME EVENTS
-      // ============================================
-
-      runtime.emit(
-        "CALL_JOINED",
-        {
-          uid,
-          channel,
-        }
-      );
+  useEffect(
+    () => {
 
       console.log(
-        "[AgoraRuntime] joined",
-        channel
+        "[AgoraRuntime] installing AgoraEngine bridge"
       );
 
-    } catch (err) {
 
-      console.error(
-        "[AgoraRuntime] join failed",
-        err
-      );
+      const unsubscribeRemoteUsers =
+        AgoraEngine.on(
+          "REMOTE_USERS_CHANGED",
+          handleRemoteUsersChanged
+        );
 
-      runtime.emit(
-        "CALL_JOIN_FAILED",
-        {
-          error: err,
-        }
-      );
-    }
 
-  }, [
-    runtime,
-    runtimeState,
-  ]);
+      const unsubscribeJoinStarted =
+        AgoraEngine.on(
+          "JOIN_STARTED",
+          ({
+            channel,
+            uid
+          }) => {
 
-  // =====================================================
-  // 🔥 LEAVE CALL
-  // =====================================================
+            runtimeState.patch(
+              "call",
+              {
+                state: "joining",
 
-  const leaveCall =
-    useCallback(async () => {
+                channel,
 
-      try {
+                uid,
 
-        localAudioTrackRef
-          .current
-          ?.stop();
+                joined: false,
+              }
+            );
 
-        localAudioTrackRef
-          .current
-          ?.close();
 
-        localVideoTrackRef
-          .current
-          ?.stop();
+            runtimeState.patch(
+              "agora",
+              {
+                uid,
 
-        localVideoTrackRef
-          .current
-          ?.close();
+                connected: false,
+              }
+            );
 
-        await clientRef
-          .current
-          ?.leave();
-
-        // ========================================
-        // RESET REFS
-        // ========================================
-
-        clientRef.current =
-          null;
-
-        localAudioTrackRef.current =
-          null;
-
-        localVideoTrackRef.current =
-          null;
-
-        remoteUsersRef.current =
-          {};
-
-        // ========================================
-        // RESET GRAPH
-        // ========================================
-
-        runtimeState.patch(
-          "call",
-          {
-            joined: false,
-            channel: null,
-            uid: null,
           }
         );
+
+
+      const unsubscribeLocalTracks =
+        AgoraEngine.on(
+          "LOCAL_TRACKS_READY",
+          ({
+            audioTrack,
+            videoTrack
+          }) => {
+
+            runtimeState.patch(
+              "media",
+              {
+                micEnabled:
+                  !!audioTrack?.enabled,
+
+                videoEnabled:
+                  !!videoTrack?.enabled,
+
+                audioPublished:
+                  !!audioTrack,
+
+                videoPublished:
+                  !!videoTrack,
+              }
+            );
+
+          }
+        );
+
+
+      const unsubscribeJoined =
+        AgoraEngine.on(
+          "CALL_JOINED",
+          ({
+            channel,
+            uid
+          }) => {
+
+            runtimeState.patch(
+              "call",
+              {
+                state: "joined",
+
+                joined: true,
+
+                channel,
+
+                uid,
+              }
+            );
+
+
+            runtimeState.patch(
+              "agora",
+              {
+                uid,
+
+                connected: true,
+              }
+            );
+
+
+            runtime.emit(
+              "CALL_JOINED",
+              {
+                channel,
+                uid
+              }
+            );
+
+          }
+        );
+
+
+      const unsubscribeJoinFailed =
+        AgoraEngine.on(
+          "CALL_JOIN_FAILED",
+          ({
+            error
+          }) => {
+
+            runtimeState.patch(
+              "call",
+              {
+                state: "accepted",
+
+                joined: false,
+              }
+            );
+
+
+            runtimeState.patch(
+              "agora",
+              {
+                uid: null,
+
+                connected: false,
+              }
+            );
+
+
+            runtimeState.patch(
+              "media",
+              {
+                micEnabled: false,
+
+                videoEnabled: false,
+
+                audioPublished: false,
+
+                videoPublished: false,
+              }
+            );
+
+
+            runtimeState.set(
+              "call.remoteUsers",
+              {}
+            );
+
+
+            runtimeState.set(
+              "call.participants",
+              0
+            );
+
+
+            runtime.emit(
+              "CALL_JOIN_FAILED",
+              {
+                error
+              }
+            );
+
+          }
+        );
+
+
+      const unsubscribeLeft =
+        AgoraEngine.on(
+          "CALL_LEFT",
+          ({
+            uid,
+            channel
+          }) => {
+
+            runtimeState.patch(
+              "call",
+              {
+                state: "idle",
+
+                joined: false,
+
+                channel: null,
+
+                uid: null,
+              }
+            );
+
+
+            runtimeState.patch(
+              "agora",
+              {
+                uid: null,
+
+                connected: false,
+              }
+            );
+
+
+            runtimeState.patch(
+              "media",
+              {
+                micEnabled: false,
+
+                videoEnabled: false,
+
+                audioPublished: false,
+
+                videoPublished: false,
+              }
+            );
+
+
+            runtimeState.set(
+              "call.remoteUsers",
+              {}
+            );
+
+
+            runtimeState.set(
+              "call.participants",
+              0
+            );
+
+
+            runtime.emit(
+              "CALL_LEFT",
+              {
+                uid,
+                channel
+              }
+            );
+
+          }
+        );
+
+
+      const unsubscribeMic =
+        AgoraEngine.on(
+          "MIC_TOGGLED",
+          ({
+            enabled
+          }) => {
+
+            runtimeState.set(
+              "media.micEnabled",
+              enabled
+            );
+
+
+            runtime.emit(
+              "MIC_TOGGLED",
+              {
+                enabled
+              }
+            );
+
+          }
+        );
+
+
+      const unsubscribeVideo =
+        AgoraEngine.on(
+          "VIDEO_TOGGLED",
+          ({
+            enabled
+          }) => {
+
+            runtimeState.set(
+              "media.videoEnabled",
+              enabled
+            );
+
+
+            runtime.emit(
+              "VIDEO_TOGGLED",
+              {
+                enabled
+              }
+            );
+
+          }
+        );
+
+
+      // -------------------------------------------------
+      // Initial synchronisation
+      // -------------------------------------------------
+
+      const existingUsers =
+        AgoraEngine.getRemoteUsersSnapshot();
+
+
+      handleRemoteUsersChanged({
+        users:
+          existingUsers,
+
+        count:
+          Object.keys(existingUsers).length
+      });
+
+
+      // -------------------------------------------------
+      // Cleanup
+      // -------------------------------------------------
+
+      return () => {
+
+        unsubscribeRemoteUsers();
+
+        unsubscribeJoinStarted();
+
+        unsubscribeLocalTracks();
+
+        unsubscribeJoined();
+
+        unsubscribeJoinFailed();
+
+        unsubscribeLeft();
+
+        unsubscribeMic();
+
+        unsubscribeVideo();
+
+      };
+
+    },
+    [
+      handleRemoteUsersChanged,
+      runtime,
+      runtimeState,
+    ]
+  );
+
+
+  // =====================================================
+  // JOIN CALL
+  // =====================================================
+
+  const joinCall =
+    useCallback(
+      async ({
+        channel = "test-call",
+      } = {}) => {
+
+        // -------------------------------------------------
+        // Existing runtime state
+        // -------------------------------------------------
+
+        const alreadyJoined =
+          runtimeState.get(
+            "call.joined"
+          );
+
+
+        if (
+          alreadyJoined
+        ) {
+
+          console.log(
+            "[AgoraRuntime] already joined"
+          );
+
+          return true;
+
+        }
+
+
+        if (!channel) {
+
+          console.warn(
+            "[AgoraRuntime] join blocked - missing channel"
+          );
+
+          return false;
+
+        }
+
+
+        // -------------------------------------------------
+        // Reset runtime state
+        // -------------------------------------------------
 
         runtimeState.set(
           "call.remoteUsers",
           {}
         );
 
-        // ========================================
-        // EVENTS
-        // ========================================
 
-        runtime.emit(
-          "CALL_LEFT",
-          {}
+        runtimeState.set(
+          "call.participants",
+          0
         );
 
-        console.log(
-          "[AgoraRuntime] left call"
+
+        runtimeState.patch(
+          "call",
+          {
+            state: "joining",
+
+            channel,
+
+            joined: false,
+          }
         );
 
-      } catch (err) {
 
-        console.error(
-          "[AgoraRuntime] leave failed",
-          err
+        runtimeState.patch(
+          "agora",
+          {
+            connected: false,
+
+            uid: null,
+          }
         );
-      }
 
-    }, [
-      runtime,
-      runtimeState,
-    ]);
+
+        try {
+
+          console.log(
+            "[AgoraRuntime] joining",
+            {
+              channel
+            }
+          );
+
+
+          const joined =
+            await AgoraEngine.joinCall({
+              channel
+            });
+
+
+          if (!joined) {
+
+            console.warn(
+              "[AgoraRuntime] AgoraEngine join returned false"
+            );
+
+
+            return false;
+
+          }
+
+
+          /*
+           * CALL_JOINED is emitted by AgoraEngine.
+           *
+           * The engine event bridge above updates:
+           *
+           * call
+           * agora
+           * media
+           *
+           * so we deliberately do NOT duplicate those
+           * state writes here.
+           */
+
+
+          return true;
+
+
+        } catch (error) {
+
+          console.error(
+            "[AgoraRuntime] join failed",
+            error
+          );
+
+
+          runtimeState.patch(
+            "call",
+            {
+              state: "accepted",
+
+              joined: false,
+            }
+          );
+
+
+          runtimeState.patch(
+            "agora",
+            {
+              uid: null,
+
+              connected: false,
+            }
+          );
+
+
+          runtimeState.set(
+            "call.remoteUsers",
+            {}
+          );
+
+
+          runtimeState.set(
+            "call.participants",
+            0
+          );
+
+
+          runtime.emit(
+            "CALL_JOIN_FAILED",
+            {
+              error
+            }
+          );
+
+
+          return false;
+
+        }
+
+      },
+      [
+        runtime,
+        runtimeState,
+      ]
+    );
+
 
   // =====================================================
-  // 🔥 TOGGLE MIC
+  // LEAVE CALL
+  // =====================================================
+
+  const leaveCall =
+    useCallback(
+      async () => {
+
+        try {
+
+          console.log(
+            "[AgoraRuntime] leaving"
+          );
+
+
+          const left =
+            await AgoraEngine.leaveCall();
+
+
+          if (!left) {
+
+            console.warn(
+              "[AgoraRuntime] AgoraEngine leave failed"
+            );
+
+            return false;
+
+          }
+
+
+          /*
+           * CALL_LEFT is emitted by AgoraEngine.
+           *
+           * Runtime state is reset by the event bridge.
+           */
+
+
+          return true;
+
+
+        } catch (error) {
+
+          console.error(
+            "[AgoraRuntime] leave failed",
+            error
+          );
+
+
+          return false;
+
+        }
+
+      },
+      []
+    );
+
+
+  // =====================================================
+  // TOGGLE MIC
   // =====================================================
 
   const toggleMic =
-    useCallback(async () => {
+    useCallback(
+      async () => {
 
-      const track =
-        localAudioTrackRef.current;
+        const result =
+          await AgoraEngine.toggleMic();
 
-      if (!track) return;
 
-      const current =
-        runtimeState.get(
-          "media.micEnabled"
-        );
+        if (
+          result === false ||
+          result === undefined
+        ) {
 
-      const next = !current;
+          return result;
 
-      await track.setEnabled(next);
-
-      // ========================================
-      // GRAPH
-      // ========================================
-
-      runtimeState.set(
-        "media.micEnabled",
-        next
-      );
-
-      // ========================================
-      // EVENT
-      // ========================================
-
-      runtime.emit(
-        "MIC_TOGGLED",
-        {
-          enabled: next,
         }
-      );
 
-      return next;
 
-    }, [
-      runtime,
-      runtimeState,
-    ]);
+        /*
+         * MIC_TOGGLED is emitted by the engine.
+         *
+         * The event bridge updates runtime state.
+         */
+
+
+        return result;
+
+      },
+      []
+    );
+
 
   // =====================================================
-  // 🔥 TOGGLE VIDEO
+  // TOGGLE VIDEO
   // =====================================================
 
   const toggleVideo =
-    useCallback(async () => {
+    useCallback(
+      async () => {
 
-      const track =
-        localVideoTrackRef.current;
+        const result =
+          await AgoraEngine.toggleVideo();
 
-      if (!track) return;
 
-      const current =
-        runtimeState.get(
-          "media.videoEnabled"
-        );
+        if (
+          result === false ||
+          result === undefined
+        ) {
 
-      const next = !current;
+          return result;
 
-      await track.setEnabled(next);
-
-      // ========================================
-      // GRAPH
-      // ========================================
-
-      runtimeState.set(
-        "media.videoEnabled",
-        next
-      );
-
-      // ========================================
-      // EVENT
-      // ========================================
-
-      runtime.emit(
-        "VIDEO_TOGGLED",
-        {
-          enabled: next,
         }
-      );
 
-      return next;
 
-    }, [
-      runtime,
-      runtimeState,
-    ]);
+        /*
+         * VIDEO_TOGGLED is emitted by the engine.
+         *
+         * The event bridge updates runtime state.
+         */
+
+
+        return result;
+
+      },
+      []
+    );
+
 
   // =====================================================
-  // 🔥 PUBLIC API
+  // PUBLIC API
   // =====================================================
 
   return {
 
-    // rtc
-    clientRef,
-
-    localAudioTrackRef,
-    localVideoTrackRef,
-
-    remoteUsersRef,
-
-    // actions
     joinCall,
+
     leaveCall,
 
     toggleMic,
+
     toggleVideo,
+
   };
+
 }

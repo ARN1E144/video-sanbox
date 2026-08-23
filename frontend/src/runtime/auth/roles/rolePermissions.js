@@ -16,7 +16,8 @@ export const ROLE_PERMISSIONS = {
       "ControlButton",
       "ChatPanel",
       "Text",
-      "FetchCallsDebug"
+      "FetchCallsDebug",
+      "AvailabilityButton"
     ],
 
     allowedActions: [
@@ -28,7 +29,8 @@ export const ROLE_PERMISSIONS = {
     "call.toggleMic",
     "call.toggleVideo",
     "call.spotlightUser",
-    "call.fetchAvailableCalls"
+    "call.fetchAvailableCalls",
+    "call.setAvailability"
     ]
 
   },
@@ -45,7 +47,8 @@ export const ROLE_PERMISSIONS = {
       "ControlPanel",
       "ControlButton",
       "ChatPanel",
-      "Text"
+      "Text",
+      "AvailabilityButton"
     ],
 
      allowedActions: [
@@ -57,7 +60,8 @@ export const ROLE_PERMISSIONS = {
         "call.toggleMic",
         "call.toggleVideo",
         "call.spotlightUser",
-        "call.fetchAvailableCalls"
+        "call.fetchAvailableCalls",
+        "call.setAvailability"
         ]
 
   },

@@ -198,6 +198,38 @@ export function ProjectProvider({
   }, [
     loadProjects,
   ]);
+  
+
+  useEffect(() => {
+
+  if (
+    !activeProject ||
+    projectsLoading
+  ) {
+    return;
+  }
+
+  const exists =
+    projects.some(
+      project =>
+        project._id === activeProject
+    );
+
+  if (!exists) {
+
+    console.log(
+      "[Projects] Clearing stale active project:",
+      activeProject
+    );
+
+    setActiveProject(null);
+  }
+
+}, [
+  projects,
+  activeProject,
+  projectsLoading,
+]);
 
 
   // ===================================================
@@ -206,6 +238,7 @@ export function ProjectProvider({
 
   const saveProject = useCallback(
   async (name) => {
+
     if (!name?.trim()) {
       return;
     }
@@ -217,62 +250,106 @@ export function ProjectProvider({
     // =====================================================
 
     if (activeProject) {
-      const currentProject = projects[activeProject];
+
+      const currentProject =
+        projects.find(
+          project =>
+            project._id === activeProject
+        );
+
+      // ---------------------------------------------------
+      // Active project no longer belongs to this user
+      // ---------------------------------------------------
 
       if (!currentProject) {
+
         console.warn(
           "[Projects] Active project not found:",
           activeProject
         );
 
-        return;
+        // Clear stale project selection.
+        setActiveProject(null);
+
+        // Treat this save as a NEW project.
+        // We deliberately continue below rather than return.
       }
 
-      const confirmed = window.confirm(
-        `Save changes to "${currentProject.name}"?\n\n` +
-        `This will overwrite the existing saved version of this project.`
-      );
+      // ---------------------------------------------------
+      // Existing project found
+      // ---------------------------------------------------
 
-      if (!confirmed) {
-        return;
-      }
+      else {
 
-      try {
-        const response = await api.put(
-          `/projects/${activeProject}`,
-          {
-            name: currentProject.name,
-            type: projectType,
-            schema: projectSchema,
-            backgroundConfigs,
+        const confirmed =
+          window.confirm(
+            `Save changes to "${currentProject.name}"?\n\n` +
+            `This will overwrite the existing saved version of this project.`
+          );
+
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+
+          const response =
+            await api.patch(
+              `/projects/${activeProject}`,
+              {
+                name:
+                  currentProject.name,
+
+                type:
+                  projectType,
+
+                schema:
+                  projectSchema,
+
+                backgroundConfigs,
+              }
+            );
+
+          const updatedProject =
+            response.data?.project;
+
+          if (!updatedProject) {
+            throw new Error(
+              "Server did not return updated project."
+            );
           }
-        );
 
-        const updatedProject = response.data.project;
+          setProjects(
+            prev =>
+              prev.map(
+                project =>
+                  project._id === activeProject
+                    ? updatedProject
+                    : project
+              )
+          );
 
-        setProjects((prev) => ({
-          ...prev,
-          [activeProject]: updatedProject,
-        }));
+          console.log(
+            "[Projects] Updated project:",
+            updatedProject
+          );
 
-        console.log(
-          "[Projects] Updated project:",
-          updatedProject
-        );
+          return activeProject;
 
-        return activeProject;
-      } catch (error) {
-        console.error(
-          "[Projects] Update failed:",
-          error
-        );
+        } catch (error) {
 
-        alert(
-          error.response?.data?.error ||
-          "Failed to save project."
-        );
+          console.error(
+            "[Projects] Update failed:",
+            error
+          );
 
-        return;
+          alert(
+            error.response?.data?.error ||
+            "Failed to save project."
+          );
+
+          return;
+        }
       }
     }
 
@@ -280,13 +357,15 @@ export function ProjectProvider({
     // NEW PROJECT
     // =====================================================
 
-    const duplicate = Object.values(projects).some(
-      (project) =>
-        project.name.trim().toLowerCase() ===
-        trimmedName.toLowerCase()
-    );
+    const duplicate =
+      projects.some(
+        project =>
+          project.name?.trim().toLowerCase() ===
+          trimmedName.toLowerCase()
+      );
 
     if (duplicate) {
+
       alert(
         `A project named "${trimmedName}" already exists.\n\n` +
         `Please choose a different project name.`
@@ -295,33 +374,62 @@ export function ProjectProvider({
       return;
     }
 
+    // =====================================================
+    // CREATE
+    // =====================================================
+
     try {
-      const response = await api.post(
-        "/projects",
-        {
-          name: trimmedName,
-          type: projectType,
-          schema: projectSchema,
-          backgroundConfigs,
-        }
+
+      const response =
+        await api.post(
+          "/projects",
+          {
+            name:
+              trimmedName,
+
+            type:
+              projectType,
+
+            schema:
+              projectSchema,
+
+            backgroundConfigs,
+          }
+        );
+
+      const newProject =
+        response.data?.project;
+
+      if (!newProject) {
+
+        throw new Error(
+          "Server did not return created project."
+        );
+
+      }
+
+      // IMPORTANT:
+      // projects is an ARRAY.
+      setProjects(
+        prev => [
+          ...prev,
+          newProject
+        ]
       );
 
-      const newProject = response.data.project;
-
-      setProjects((prev) => ({
-        ...prev,
-        [newProject.id]: newProject,
-      }));
-
-      setActiveProject(newProject.id);
+      setActiveProject(
+        newProject._id
+      );
 
       console.log(
         "[Projects] Created project:",
         newProject
       );
 
-      return newProject.id;
+      return newProject._id;
+
     } catch (error) {
+
       console.error(
         "[Projects] Create failed:",
         error
@@ -332,6 +440,7 @@ export function ProjectProvider({
         "Failed to create project."
       );
     }
+
   },
   [
     activeProject,

@@ -16,6 +16,7 @@ import spotlightUser from "./call/spotlightUser";
 
 import toggleMic from "./call/toggleMic";
 import toggleVideo from "./call/toggleVideo";
+import setAvailability from "./call/setAvailability";
 
 import {
   setColor,
@@ -38,6 +39,7 @@ export const ACTIONS = {
   CALL_END: "call.endCall",
   CALL_FETCH: "call.fetchAvailableCalls",
   CALL_SPOTLIGHT: "call.spotlightUser",
+  CALL_AVAILABILITY: "call.setAvailability",
 
   // CALL MEDIA
   CALL_TOGGLE_MIC: "call.toggleMic",
@@ -130,119 +132,88 @@ export const actionRegistry = {
 
   call: {
 
-    startCall: createAction({
-      value: ACTIONS.CALL_START,
-      label:"Start Call",
-      category:"call",
-      run:startCall,
-      targets:["CallPanel","AgoraFeed"],
-    }),
-
-
-    acceptCall:createAction({
-      value:ACTIONS.CALL_ACCEPT,
-      label:"Accept Call",
-      category:"call",
-      run:acceptCall,
-      targets:["CallPanel","AgoraFeed"],
-    }),
-
-
-    joinCall:createAction({
-
-      value:ACTIONS.CALL_JOIN,
-
-      label:"Join Call",
-
-      category:"call",
-
-      run:joinCall,
-
-      targets:[
-        "AgoraFeed"
-      ]
-
-    }),
-
-
-    toggleMic:createAction({
-      value:ACTIONS.CALL_TOGGLE_MIC,
-      label:"Toggle Mic",
-      category:"call",
-      run:toggleMic,
-      targets:["AgoraFeed"]
-    }),
-
-
-
-      toggleVideo:createAction({
-
-        value:ACTIONS.CALL_TOGGLE_VIDEO,
-
-        label:"Toggle Video",
-
-        category:"call",
-
-        run:toggleVideo,
-
-        targets:[
-          "AgoraFeed"
-        ]
-
+  startCall: createAction({
+    value: ACTIONS.CALL_START,
+    label: "Start Call",
+    category: "call",
+    run: startCall,
+    targets: ["CallPanel", "AgoraFeed"],
   }),
 
+  acceptCall: createAction({
+    value: ACTIONS.CALL_ACCEPT,
+    label: "Accept Call",
+    category: "call",
+    run: acceptCall,
+    targets: ["CallPanel", "AgoraFeed"],
+  }),
 
+  joinCall: createAction({
+    value: ACTIONS.CALL_JOIN,
+    label: "Join Call",
+    category: "call",
+    run: joinCall,
+    targets: ["AgoraFeed"],
+  }),
 
-    leaveCall:createAction({
-      value:ACTIONS.CALL_LEAVE,
-      label:"Leave Call",
-      category:"call",
-      run:leaveCall,
-      targets:["AgoraFeed"]
-    }),
+  toggleMic: createAction({
+    value: ACTIONS.CALL_TOGGLE_MIC,
+    label: "Toggle Mic",
+    category: "call",
+    run: toggleMic,
+    targets: ["AgoraFeed"],
+  }),
 
+  toggleVideo: createAction({
+    value: ACTIONS.CALL_TOGGLE_VIDEO,
+    label: "Toggle Video",
+    category: "call",
+    run: toggleVideo,
+    targets: ["AgoraFeed"],
+  }),
 
-    endCall:createAction({
-      value:ACTIONS.CALL_END,
-      label:"End Call",
-      category:"call",
-      run:endCall,
-      targets:["CallPanel"]
-    }),
+  // ✅ ADD THIS
+  setAvailability: createAction({
+    value: ACTIONS.CALL_AVAILABILITY,
+    label: "Set Availability",
+    category: "call",
+    run: setAvailability,
+    targets: ["AvailabilityButton"],
+  }),
 
-    fetchAvailableCalls: createAction({
+  leaveCall: createAction({
+    value: ACTIONS.CALL_LEAVE,
+    label: "Leave Call",
+    category: "call",
+    run: leaveCall,
+    targets: ["AgoraFeed"],
+  }),
 
-      value: ACTIONS.CALL_FETCH,
+  endCall: createAction({
+    value: ACTIONS.CALL_END,
+    label: "End Call",
+    category: "call",
+    run: endCall,
+    targets: ["CallPanel"],
+  }),
 
-      label: "Fetch Available Calls",
+  fetchAvailableCalls: createAction({
+    value: ACTIONS.CALL_FETCH,
+    label: "Fetch Available Calls",
+    category: "call",
+    run: fetchAvailableCalls,
+    targets: ["CallPanel"],
+  }),
 
-      category: "call",
+  spotlightUser: createAction({
+    value: ACTIONS.CALL_SPOTLIGHT,
+    label: "Spotlight User",
+    category: "call",
+    run: spotlightUser,
+    targets: ["AgoraFeed"],
+  }),
 
-      run: fetchAvailableCalls,
-
-      targets: [
-        "CallPanel"
-      ]
-
-    }),
-
-    spotlightUser: createAction({
-
-      value: ACTIONS.CALL_SPOTLIGHT,
-
-      label: "Spotlight User",
-
-      category: "call",
-
-      run: spotlightUser,
-
-      targets: [
-        "AgoraFeed"
-      ]
-
-    }),
-
-  },
+},
 
 
 

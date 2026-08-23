@@ -1040,6 +1040,18 @@ export default function Canvas({
       }
     );
 
+        console.log(
+      "🔥🔥 BEFORE ADD ELEMENT",
+      {
+        id: newElement.id,
+        type: newElement.type,
+        draggedType,
+        metaName: meta.name,
+        meta,
+        newElement,
+      }
+    );
+
     // -----------------------------------------------
     // ADD
     // -----------------------------------------------
@@ -1047,6 +1059,7 @@ export default function Canvas({
     addElement(
       newElement
     );
+
 
     // -----------------------------------------------
     // VIDEO FEED
@@ -1427,6 +1440,16 @@ export default function Canvas({
 
   const renderTopLevelElement =
     (el) => {
+
+      console.log(
+      "🔥 TOP LEVEL ELEMENT BEFORE RESOLVE",
+      {
+        id: el.id,
+        type: el.type,
+        props: el.props,
+        parentId: el.parentId,
+      }
+    );
       const entry =
         componentRegistry[
           el.type

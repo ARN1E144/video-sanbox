@@ -2,12 +2,43 @@
 
 import api from "../../services/api";
 
+
 export default async function startCall(
   ctx,
   params = {}
 ) {
 
+  console.log(
+    "=============================================="
+  );
+
+  console.log(
+    "[startCall] START"
+  );
+
+  console.log(
+    "=============================================="
+  );
+
+
   try {
+
+    // =====================================================
+    // INPUT
+    // =====================================================
+
+    console.log(
+      "[startCall] params",
+      params
+    );
+
+
+    // recipientId is optional for queue mode
+
+    const {
+      recipientId = null
+    } = params;
+
 
     // =====================================================
     // EXISTING CALL CHECK
@@ -17,14 +48,15 @@ export default async function startCall(
       ctx.get?.("call") || {};
 
 
-    /*
-    -----------------------------------------------------
-    If a call already exists and we are already joined,
-    do NOT create another call.
+    console.log(
+      "[startCall] current runtime call",
+      currentCall
+    );
 
-    This makes call.startCall idempotent.
-    -----------------------------------------------------
-    */
+
+    // -----------------------------------------------------
+    // Already joined
+    // -----------------------------------------------------
 
     if (
       currentCall.id &&
@@ -32,8 +64,7 @@ export default async function startCall(
     ) {
 
       console.log(
-        "[startCall] Call already active",
-        currentCall
+        "[startCall] Call already active"
       );
 
 
@@ -43,27 +74,29 @@ export default async function startCall(
 
         result: {
 
-          id: currentCall.id,
+          id:
+            currentCall.id,
 
           channel:
             currentCall.channel,
 
           state:
-            currentCall.state || "joined"
+            currentCall.state ||
+            "joined",
 
-        }
+          joined:
+            true,
+
+        },
 
       };
 
     }
 
 
-    /*
-    -----------------------------------------------------
-    If a call exists but we aren't joined, attempt to
-    join the existing call instead of creating another.
-    -----------------------------------------------------
-    */
+    // -----------------------------------------------------
+    // Existing call but not joined
+    // -----------------------------------------------------
 
     if (
       currentCall.id &&
@@ -71,8 +104,14 @@ export default async function startCall(
     ) {
 
       console.log(
-        "[startCall] Existing call found, attempting join",
-        currentCall
+        "[startCall] Existing call found - attempting join",
+        {
+          id:
+            currentCall.id,
+
+          channel:
+            currentCall.channel,
+        }
       );
 
 
@@ -81,19 +120,25 @@ export default async function startCall(
           "call.joinCall",
           {
             channel:
-              currentCall.channel
+              currentCall.channel,
           }
         );
 
 
       if (!joinResult?.ok) {
 
+        console.error(
+          "[startCall] Existing call join failed",
+          joinResult
+        );
+
+
         return {
 
           ok: false,
 
           error:
-            "CALL_EXISTS_BUT_JOIN_FAILED"
+            "CALL_EXISTS_BUT_JOIN_FAILED",
 
         };
 
@@ -113,9 +158,12 @@ export default async function startCall(
             currentCall.channel,
 
           state:
-            "joined"
+            "joined",
 
-        }
+          joined:
+            true,
+
+        },
 
       };
 
@@ -123,36 +171,59 @@ export default async function startCall(
 
 
     // =====================================================
-    // CREATE NEW CALL
+    // CREATE NEW QUEUE CALL
     // =====================================================
 
     console.log(
-      "[startCall] Creating new call"
+      "[startCall] Creating new queue call",
+      {
+        recipientId,
+      }
     );
 
 
-    const { data } =
+    const {
+      data
+    } =
       await api.post(
         "/calls",
         {
-          recipientId:
-            params.recipientId
+          recipientId,
         }
       );
 
 
+    console.log(
+      "[startCall] Backend response",
+      data
+    );
+
+
     const call =
-      data.call;
+      data?.call;
 
 
-    if (!call?._id || !call?.channelName) {
+    // =====================================================
+    // VALIDATE RESPONSE
+    // =====================================================
+
+    if (
+      !call?._id ||
+      !call?.channelName
+    ) {
+
+      console.error(
+        "[startCall] Invalid backend response",
+        data
+      );
+
 
       return {
 
         ok: false,
 
         error:
-          "INVALID_CALL_RESPONSE"
+          "INVALID_CALL_RESPONSE",
 
       };
 
@@ -160,7 +231,7 @@ export default async function startCall(
 
 
     // =====================================================
-    // STORE CALL IN RUNTIME STATE
+    // STORE EXACT BACKEND CALL
     // =====================================================
 
     ctx.patch?.(
@@ -180,49 +251,66 @@ export default async function startCall(
           false,
 
         remoteUsers:
-          [],
+          {},
 
         participants:
-          [],
+          0,
 
         createdAt:
-          Date.now()
+          Date.now(),
 
       }
     );
 
 
     console.log(
-      "[startCall] Call created",
+      "[startCall] Runtime call created",
       {
         id:
           call._id,
 
         channel:
-          call.channelName
+          call.channelName,
       }
     );
 
 
     // =====================================================
-    // JOIN
+    // JOIN EXACT CHANNEL
     // =====================================================
+
+    console.log(
+      "[startCall] Joining created channel",
+      {
+        callId:
+          call._id,
+
+        channel:
+          call.channelName,
+      }
+    );
+
 
     const joinResult =
       await ctx.runAction?.(
         "call.joinCall",
         {
           channel:
-            call.channelName
+            call.channelName,
         }
       );
+
+
+    console.log(
+      "[startCall] join result",
+      joinResult
+    );
 
 
     if (!joinResult?.ok) {
 
       console.error(
-        "[startCall] Call created but join failed",
-        joinResult
+        "[startCall] Call created but join failed"
       );
 
 
@@ -231,7 +319,17 @@ export default async function startCall(
         ok: false,
 
         error:
-          "CALL_CREATED_BUT_JOIN_FAILED"
+          "CALL_CREATED_BUT_JOIN_FAILED",
+
+        result: {
+
+          id:
+            call._id,
+
+          channel:
+            call.channelName,
+
+        },
 
       };
 
@@ -241,6 +339,35 @@ export default async function startCall(
     // =====================================================
     // SUCCESS
     // =====================================================
+
+    console.log(
+      "=============================================="
+    );
+
+    console.log(
+      "[startCall] SUCCESS"
+    );
+
+    console.log(
+      "=============================================="
+    );
+
+    console.log(
+      "[startCall] Call identity",
+      {
+
+        id:
+          call._id,
+
+        channel:
+          call.channelName,
+
+        uid:
+          joinResult?.result?.uid,
+
+      }
+    );
+
 
     return {
 
@@ -255,19 +382,30 @@ export default async function startCall(
           call.channelName,
 
         state:
-          "joined"
+          "joined",
 
-      }
+        joined:
+          true,
+
+        uid:
+          joinResult?.result?.uid,
+
+      },
 
     };
 
 
-  }
-  catch (err) {
+  } catch (err) {
 
     console.error(
-      "[startCall]",
+      "[startCall] FAILED",
       err
+    );
+
+
+    console.error(
+      "[startCall] Backend error",
+      err?.response?.data
     );
 
 
@@ -276,7 +414,9 @@ export default async function startCall(
       ok: false,
 
       error:
-        err.message
+        err?.response?.data?.error ||
+        err?.message ||
+        "START_CALL_FAILED",
 
     };
 

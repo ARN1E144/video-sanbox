@@ -35,6 +35,18 @@ export default function ProjectSidebar() {
     ProjectContext
   );
 
+    // ===================================================
+  // NORMALIZE PROJECT LIST
+  // ===================================================
+
+  const projectList =
+    Array.isArray(projects)
+      ? projects
+      : projects &&
+        typeof projects === "object"
+        ? Object.values(projects)
+        : [];
+
 
   // ===================================================
   // SAVE
@@ -319,7 +331,7 @@ export default function ProjectSidebar() {
           {/* Empty */}
 
           {!projectsLoading &&
-            projects.length === 0 && (
+            projectList.length === 0 && (
 
               <div
                 style={{
@@ -336,7 +348,7 @@ export default function ProjectSidebar() {
           {/* Project list */}
 
           {!projectsLoading &&
-            projects.map(
+            projectList.map(
               project => (
 
                 <div

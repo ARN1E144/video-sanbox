@@ -11,7 +11,7 @@ import React, {
 
 import { useProjectContext } from "./ProjectContext";
 
-import COMPONENTS from "../components/elements/registry";
+import componentRegistry from "../actions/componentRegistry";
 
 import {
   projectTreeToElements,
@@ -68,7 +68,7 @@ function normalizeElement(el) {
   }
 
   const registryEntry =
-    COMPONENTS[el.type];
+    componentRegistry[el.type];
 
   const metaDefaults =
     registryEntry?.meta?.editableProps || {};
@@ -88,7 +88,7 @@ function normalizeElement(el) {
     ...el,
 
     type:
-      COMPONENTS[el.type]
+      registryEntry
         ? el.type
         : "Text",
 
@@ -359,7 +359,17 @@ export function CanvasProvider({
 
             });
 
+          console.log(
+            "[UPDATE ELEMENT → SYNC TREE]",
+            next.find(el => el.id === id)
+          );
+
           syncTree(next);
+
+          console.log(
+            "[SYNC TREE INPUT]",
+            next
+          );
 
           return next;
 

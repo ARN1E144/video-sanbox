@@ -17,7 +17,20 @@ function isEmployeeRole(role) {
 
 async function loadMembership(req) {
   const { userId, tenantId } = req.user;
-  const membership = await Membership.findOne({ userId, tenantId }).select("role permissions userId tenantId");
+
+  const membership = await Membership.findOne({
+    userId,
+    tenantId,
+  });
+
+  console.log("[LOAD MEMBERSHIP DEBUG]", {
+    userId,
+    tenantId,
+    membershipId: membership?._id,
+    role: membership?.role,
+    availability: membership?.availability,
+  });
+
   return membership;
 }
 
@@ -53,6 +66,14 @@ router.post("/", requireAuth, requireTenant, async (req, res) => {
     
   try {
     const membership = await loadMembership(req);
+
+    console.log("[CALLS AVAILABLE] Loaded membership:", {
+      id: membership?._id,
+      userId: membership?.userId,
+      tenantId: membership?.tenantId,
+      role: membership?.role,
+      availability: membership?.availability,
+    });
     const callPolicy = DEFAULT_CALL_POLICY;
 
     if (!membership) return res.status(403).json({ error: "Not a member of this tenant" });
@@ -85,16 +106,91 @@ router.post("/", requireAuth, requireTenant, async (req, res) => {
  * GET /api/calls/available
  */
 router.get("/available", requireAuth, requireTenant, async (req, res) => {
-    console.log("GET /api/calls/available called by user:", req.user.userId);
+
+   console.log("🔥🔥🔥 AVAILABLE ROUTE HIT 🔥🔥🔥");
+  console.log(
+    "GET /api/calls/available called by user:",
+    req.user.userId
+  );
+
+  
+
   try {
+    
     const membership = await loadMembership(req);
     const callPolicy = DEFAULT_CALL_POLICY;
 
-    if (!membership) return res.status(403).json({ error: "Not a member of this tenant" });
+    if (!membership) {
+      return res.status(403).json({
+        error: "Not a member of this tenant",
+      });
+    }
 
     if (!canAcceptCall(membership, callPolicy)) {
-    return res.status(403).json({ error: "Not allowed to view available calls" });
-}
+      return res.status(403).json({
+        error: "Not allowed to view available calls",
+      });
+    }
+
+    // =====================================================
+    // AVAILABILITY GATE
+    // =====================================================
+
+    if (!membership.isAvailable) {
+      console.log(
+        "[CALLS AVAILABLE] User is unavailable:",
+        req.user.userId
+      );
+
+      return res.json({
+        ok: true,
+        calls: [],
+      });
+    }
+
+    // =====================================================
+    // FETCH WAITING CALLS
+    // =====================================================
+
+    console.log("[CALLS AVAILABLE] Query:", {
+      tenantId: String(req.user.tenantId),
+      userId: String(req.user.userId),
+      isAvailable: membership.availability?.isAvailable,
+    });
+
+    
+    async function expireWaitingCalls(tenantId) {
+      const CALL_EXPIRY_MINUTES = 5;
+
+      const expiryDate = new Date(
+        Date.now() - CALL_EXPIRY_MINUTES * 60 * 1000
+      );
+
+      const result = await Call.updateMany(
+        {
+          tenantId,
+          status: "waiting",
+          createdAt: { $lt: expiryDate },
+        },
+        {
+          $set: {
+            status: "expired",
+            expiredAt: new Date(),
+          },
+        }
+      );
+
+      if (result.modifiedCount > 0) {
+        console.log(
+          "[CALL EXPIRY] Expired calls:",
+          result.modifiedCount
+        );
+      }
+
+      return result.modifiedCount;
+    }
+    
+
     const calls = await Call.find({
       tenantId: req.user.tenantId,
       status: "waiting",
@@ -104,20 +200,75 @@ router.get("/available", requireAuth, requireTenant, async (req, res) => {
       .limit(50)
       .lean();
 
-    // Optional: attach client email for display
-    const clientIds = [...new Set(calls.map((c) => String(c.clientUserId)))];
-    const users = await User.find({ _id: { $in: clientIds } }).select("email firstName lastName").lean();
-    const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+      await expireWaitingCalls(req.user.tenantId);
+
+
+      console.log("[CALLS AVAILABLE] Loaded membership:", {
+        membershipId: membership?._id,
+        userId: membership?.userId,
+        tenantId: membership?.tenantId,
+        role: membership?.role,
+        availability: membership?.availability,
+      });
+
+    console.log(
+  "[CALLS AVAILABLE] Raw waiting calls:",
+    calls.map((c) => ({
+      id: c._id,
+      tenantId: c.tenantId,
+      status: c.status,
+      claimedByUserId: c.claimedByUserId,
+      clientUserId: c.clientUserId,
+      channelName: c.channelName,
+    }))
+  );
+
+    // =====================================================
+    // ENRICH CLIENT DATA
+    // =====================================================
+
+    const clientIds = [
+      ...new Set(
+        calls.map((c) => String(c.clientUserId))
+      ),
+    ];
+
+    const users = await User.find({
+      _id: { $in: clientIds },
+    })
+      .select("email firstName lastName")
+      .lean();
+
+    const userMap = new Map(
+      users.map((u) => [String(u._id), u])
+    );
 
     const enriched = calls.map((c) => ({
       ...c,
-      client: userMap.get(String(c.clientUserId)) || null,
+      client:
+        userMap.get(String(c.clientUserId)) || null,
     }));
 
-    return res.json({ ok: true, calls: enriched });
+    console.log(
+      "[CALLS AVAILABLE] Returning calls:",
+      enriched.length
+    );
+
+    return res.json({
+      ok: true,
+      calls: enriched,
+    });
+
   } catch (err) {
-    console.error("GET /api/calls/available error:", err);
-    return res.status(500).json({ error: "Failed to load calls" });
+    console.error(
+      "GET /api/calls/available error:",
+      err
+    );
+
+    return res.status(500).json({
+      error: "Failed to load available calls",
+    });
   }
 });
 

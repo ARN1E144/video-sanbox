@@ -10,6 +10,7 @@ import Text from "../components/elements/Text";
 import ControlPanel from "../components/elements/ControlPanel";
 import TextLabel from "../components/elements/TextLabel.js";
 import FetchCallsDebug from "../components/elements/FetchCallsDebug.js";
+import AvailabilityButton from "../components/elements/AvailabilityButton.js";
 
 
 import videoContract
@@ -47,6 +48,9 @@ import textLabelContract
 
 import fetchCallsDebug
   from "../runtime/contracts/components/FetchCallsDebug.contract.js";
+
+import availabilityButtonContract
+  from "../runtime/contracts/components/AvailabilityButton.contract.js";
 
 export const componentRegistry = {
 
@@ -108,6 +112,11 @@ export const componentRegistry = {
   FetchCallsDebug: {
   component: FetchCallsDebug,
   contract: fetchCallsDebug,
+},
+
+AvailabilityButton: {
+  component: AvailabilityButton,
+  contract: availabilityButtonContract,
 },
 
 };
