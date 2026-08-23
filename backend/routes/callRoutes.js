@@ -189,6 +189,8 @@ router.get("/available", requireAuth, requireTenant, async (req, res) => {
 
       return result.modifiedCount;
     }
+
+     await expireWaitingCalls(req.user.tenantId);
     
 
     const calls = await Call.find({
@@ -199,9 +201,6 @@ router.get("/available", requireAuth, requireTenant, async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();
-
-
-      await expireWaitingCalls(req.user.tenantId);
 
 
       console.log("[CALLS AVAILABLE] Loaded membership:", {
@@ -312,7 +311,11 @@ router.post("/:callId/accept", requireAuth, requireTenant, async (req, res) => {
     );
 
     if (!call) {
-      return res.status(409).json({ error: "Call already claimed or no longer available" });
+      return res.status(409).json({
+        ok: false,
+        error: "CALL_NOT_AVAILABLE",
+        message: "This call is no longer available",
+      });
     }
 
     return res.json({ ok: true, call });
@@ -320,6 +323,162 @@ router.post("/:callId/accept", requireAuth, requireTenant, async (req, res) => {
     console.error("POST /api/calls/:callId/accept error:", err);
     return res.status(500).json({ error: "Failed to accept call" });
   }
+});
+
+/**
+ * EMPLOYEE: Release a claimed call
+ *
+ * Used when an employee successfully claims a call
+ * but cannot establish the Agora session.
+ *
+ * The call is returned to the waiting queue.
+ */
+router.post("/:callId/release", requireAuth, requireTenant, async (req, res) => {
+
+  try {
+
+    const membership =
+      await loadMembership(req);
+
+
+    if (!membership) {
+
+      return res.status(403).json({
+        error: "Not a member of this tenant",
+      });
+
+    }
+
+
+    if (
+      !canAcceptCall(
+        membership,
+        DEFAULT_CALL_POLICY
+      )
+    ) {
+
+      return res.status(403).json({
+        error: "Not allowed to release calls",
+      });
+
+    }
+
+
+    const {
+      callId
+    } = req.params;
+
+
+    if (
+      !mongoose.isValidObjectId(callId)
+    ) {
+
+      return res.status(400).json({
+        error: "Invalid callId",
+      });
+
+    }
+
+
+    // =====================================================
+    // ATOMIC RELEASE
+    //
+    // Only the employee who claimed the call
+    // can release it.
+    // =====================================================
+
+    const call =
+      await Call.findOneAndUpdate(
+
+        {
+          _id:
+            callId,
+
+          tenantId:
+            req.user.tenantId,
+
+          status:
+            "claimed",
+
+          claimedByUserId:
+            req.user.userId,
+        },
+
+        {
+          $set: {
+            status:
+              "waiting",
+          },
+
+          $unset: {
+            claimedByUserId: "",
+            claimedAt: "",
+          },
+        },
+
+        {
+          new: true,
+        }
+
+      );
+
+
+    if (!call) {
+
+      return res.status(409).json({
+        error:
+          "Call is no longer claimed by this user",
+      });
+
+    }
+
+
+    console.log(
+      "[CALL RELEASED]",
+      {
+        callId:
+          call._id,
+
+        releasedBy:
+          req.user.userId,
+
+        status:
+          call.status,
+
+        claimedByUserId:
+          call.claimedByUserId,
+
+      }
+    );
+
+
+    return res.json({
+
+      ok:
+        true,
+
+      call,
+
+    });
+
+
+  } catch (err) {
+
+    console.error(
+      "POST /api/calls/:callId/release error:",
+      err
+    );
+
+
+    return res.status(500).json({
+
+      error:
+        "Failed to release call",
+
+    });
+
+  }
+
 });
 
 /**

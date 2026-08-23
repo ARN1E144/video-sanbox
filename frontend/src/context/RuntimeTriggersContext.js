@@ -132,20 +132,48 @@ export function RuntimeTriggersProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = runtimeState.subscribeAll(
-      (state, changedKeys, meta = {}) => {
+    (state, changedKeys, meta = {}) => {
 
-        const safeChangedKeys = Array.isArray(changedKeys) ? changedKeys : [];
-        const commitId = meta?.commitId;
+      const safeChangedKeys =
+        Array.isArray(changedKeys)
+          ? changedKeys
+          : [];
 
-        if (!commitId) return;
+      const commitId =
+        meta?.commitId;
 
-        evaluateTriggers(state, safeChangedKeys, meta);
 
-        queueMicrotask(() => {
-          flushActions();
-        });
-      }
-    );
+      console.log(
+        "[RuntimeTriggers] STATE COMMIT RECEIVED",
+        {
+          commitId,
+          changedKeys: safeChangedKeys,
+          participantLeft:
+            state?.call?.participantLeft,
+          participants:
+            state?.call?.participants,
+          joined:
+            state?.call?.joined,
+        }
+      );
+
+
+      if (!commitId) return;
+
+
+      evaluateTriggers(
+        state,
+        safeChangedKeys,
+        meta
+      );
+
+
+      queueMicrotask(() => {
+        flushActions();
+      });
+
+    }
+  );
 
     return unsubscribe;
   }, [runtimeState, evaluateTriggers, flushActions]);

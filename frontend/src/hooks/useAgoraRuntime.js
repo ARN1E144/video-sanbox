@@ -112,6 +112,77 @@ export default function useAgoraRuntime() {
           handleRemoteUsersChanged
         );
 
+        const unsubscribeUserLeft =
+  AgoraEngine.on(
+    "USER_LEFT",
+    ({
+      uid
+    }) => {
+
+      console.log(
+        "[AgoraRuntime] USER_LEFT",
+        {
+          uid
+        }
+      );
+
+
+      // -------------------------------------------------
+      // Record the departure as a runtime state change.
+      //
+      // This gives RuntimeTriggersProvider something
+      // deterministic to react to.
+      // -------------------------------------------------
+
+      runtimeState.set(
+        "call.participantLeft",
+        {
+          uid,
+          timestamp: Date.now()
+        }
+      );
+
+
+      // -------------------------------------------------
+      // Keep participant/remote-user state consistent.
+      // -------------------------------------------------
+
+      const remoteUsers =
+        AgoraEngine.getRemoteUsersSnapshot();
+
+
+      const count =
+        Object.keys(
+          remoteUsers
+        ).length;
+
+
+      runtimeState.set(
+        "call.remoteUsers",
+        remoteUsers
+      );
+
+
+      runtimeState.set(
+        "call.participants",
+        count
+      );
+
+
+      // -------------------------------------------------
+      // Runtime event for debugger / other consumers.
+      // -------------------------------------------------
+
+      runtime.emit(
+        "USER_LEFT",
+        {
+          uid
+        }
+      );
+
+    }
+  );
+
 
       const unsubscribeJoinStarted =
         AgoraEngine.on(
@@ -427,6 +498,8 @@ export default function useAgoraRuntime() {
       return () => {
 
         unsubscribeRemoteUsers();
+
+        unsubscribeUserLeft();
 
         unsubscribeJoinStarted();
 

@@ -9,6 +9,15 @@ export default async function acceptCall(
   params = {}
 ) {
 
+  // =====================================================
+  // INPUT
+  // =====================================================
+
+  const {
+    callId
+  } = params;
+
+
   console.log(
     "================================================="
   );
@@ -28,9 +37,32 @@ export default async function acceptCall(
     // 1. INPUT
     // =====================================================
 
-    const {
-      callId
-    } = params;
+    console.log(
+      "[acceptCall] Input params:",
+      {
+        params,
+        callId,
+      }
+    );
+
+
+    if (!callId) {
+
+      console.error(
+        "[acceptCall] BLOCKED - missing callId"
+      );
+
+
+      return {
+
+        ok: false,
+
+        error:
+          "MISSING_CALL_ID",
+
+      };
+
+    }
 
 
     console.log(
@@ -414,41 +446,193 @@ console.log(
 
     if (!joinResult?.ok) {
 
-      console.error(
-        "[acceptCall] ACCEPTED BUT AGORA JOIN FAILED",
-        {
-          callId:
-            acceptedCallId,
+  console.error(
+    "[acceptCall] ACCEPTED BUT AGORA JOIN FAILED",
+    {
+      callId:
+        acceptedCallId,
 
-          channel,
+      channel,
 
-          joinResult,
-        }
+      joinResult,
+    }
+  );
+
+
+  // =====================================================
+  // RELEASE BACKEND CLAIM
+  //
+  // The backend accepted the call, but Agora did not
+  // establish the session.
+  //
+  // Return the call to the waiting queue so another
+  // employee can accept it.
+  // =====================================================
+
+  try {
+
+    console.log(
+      "[acceptCall] RELEASING BACKEND CLAIM",
+      {
+        callId:
+          acceptedCallId,
+      }
+    );
+
+
+    const {
+      data:
+        releaseData
+    } =
+      await api.post(
+        `/calls/${acceptedCallId}/release`
       );
 
 
-      return {
+    console.log(
+      "[acceptCall] BACKEND CLAIM RELEASED",
+      releaseData
+    );
 
-        ok: false,
+
+  } catch (releaseError) {
+
+    console.error(
+      "[acceptCall] FAILED TO RELEASE BACKEND CLAIM",
+      {
+        callId:
+          acceptedCallId,
+
+        response:
+          releaseError?.response?.data,
+
+        status:
+          releaseError?.response?.status,
 
         error:
-          "ACCEPTED_BUT_JOIN_FAILED",
+          releaseError,
+      }
+    );
 
-        result: {
 
-          callId:
-            acceptedCallId,
+    // -------------------------------------------------
+    // Important:
+    //
+    // Agora failed AND the backend release failed.
+    //
+    // We don't pretend the lifecycle is clean.
+    // -------------------------------------------------
 
-          channel,
+    return {
 
-          joinError:
-            joinResult?.error,
+      ok:
+        false,
 
-        },
+      error:
+        "ACCEPTED_BUT_JOIN_FAILED_RELEASE_FAILED",
 
-      };
+      result: {
+
+        callId:
+          acceptedCallId,
+
+        channel,
+
+        joinError:
+          joinResult?.error,
+
+        releaseError:
+          releaseError?.response?.data?.error ||
+          releaseError?.message,
+
+      },
+
+    };
+
+  }
+
+
+  // =====================================================
+  // RESET LOCAL RUNTIME STATE
+  // =====================================================
+
+  ctx.patch?.(
+    "call",
+    {
+
+      state:
+        "accepted",
+
+      joined:
+        false,
+
+      remoteUsers:
+        {},
+
+      participants:
+        0,
 
     }
+  );
+
+
+  ctx.patch?.(
+    "agora",
+    {
+
+      uid:
+        null,
+
+      connected:
+        false,
+
+    }
+  );
+
+
+  ctx.patch?.(
+    "media",
+    {
+
+      micEnabled:
+        false,
+
+      videoEnabled:
+        false,
+
+      audioPublished:
+        false,
+
+      videoPublished:
+        false,
+
+    }
+  );
+
+
+  return {
+
+    ok:
+      false,
+
+    error:
+      "ACCEPTED_BUT_JOIN_FAILED",
+
+    result: {
+
+      callId:
+        acceptedCallId,
+
+      channel,
+
+      joinError:
+        joinResult?.error,
+
+    },
+
+  };
+
+}
 
 
     // =====================================================
@@ -554,33 +738,50 @@ console.log(
 
   } catch (err) {
 
-    console.error(
-      "================================================="
-    );
+  console.error(
+    "================================================="
+  );
 
-    console.error(
-      "[acceptCall] EXCEPTION"
-    );
+  console.error(
+    "[acceptCall] EXCEPTION"
+  );
 
-    console.error(
-      "================================================="
-    );
+  console.error(
+    "================================================="
+  );
 
-    console.error(
-      "[acceptCall] Error:",
-      err
-    );
+  console.error(
+    "[acceptCall] Error:",
+    err
+  );
+
+  console.error(
+    "[acceptCall] Response:",
+    err?.response?.data
+  );
+
+  console.error(
+    "[acceptCall] Status:",
+    err?.response?.status
+  );
 
 
-    console.error(
-      "[acceptCall] Response:",
-      err?.response?.data
-    );
+  // =====================================================
+  // STALE / ENDED CALL
+  // =====================================================
 
+  if (
+    err?.response?.status === 409
+  ) {
 
-    console.error(
-      "[acceptCall] Status:",
-      err?.response?.status
+    console.warn(
+      "[acceptCall] BLOCKED - call is no longer available",
+      {
+        callId,
+
+        response:
+          err?.response?.data,
+      }
     );
 
 
@@ -589,12 +790,26 @@ console.log(
       ok: false,
 
       error:
-        err?.response?.data?.error ||
-        err?.message ||
-        "ACCEPT_CALL_FAILED",
+        "CALL_NOT_AVAILABLE",
+
+      callId,
 
     };
 
   }
+
+
+  return {
+
+    ok: false,
+
+    error:
+      err?.response?.data?.error ||
+      err?.message ||
+      "ACCEPT_CALL_FAILED",
+
+  };
+
+}
 
 }

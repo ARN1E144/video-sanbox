@@ -2,6 +2,17 @@
 
 export default async function joinCall(ctx) {
 
+  const FORCE_JOIN_FAILURE =
+    window.__FORCE_AGORA_JOIN_FAILURE__ === true;
+
+  console.log(
+    "================================================="
+  );
+
+  console.log(
+    "[joinCall ACTION] START"
+  );
+
   console.log(
     "================================================="
   );
@@ -89,6 +100,31 @@ export default async function joinCall(ctx) {
     state:"joining"
 
   });
+
+
+  if (FORCE_JOIN_FAILURE) {
+
+  console.warn(
+    "[DEV] FORCING AGORA JOIN FAILURE"
+  );
+
+  ctx.patch?.("call", {
+
+    state: "accepted",
+
+    joined: false
+
+  });
+
+  return {
+
+    ok: false,
+
+    error: "DEV_FORCED_AGORA_JOIN_FAILURE"
+
+  };
+
+}
 
 
   const joined =

@@ -335,9 +335,13 @@ return resolvePath(
     // =====================================================
 
     globalSubscribersRef.current.forEach(cb =>
-      cb(stateRef.current, changed, {
-        commitId: "immediate",
-      })
+      cb(
+        stateRef.current,
+        changed,
+        {
+          commitId: tx.id,
+        }
+      )
     );
 
     // =====================================================
