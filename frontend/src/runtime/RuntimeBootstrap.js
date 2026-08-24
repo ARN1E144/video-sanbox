@@ -9,11 +9,17 @@ import useAgoraRuntime
 import agoraEngine
   from "../services/agoraEngine";
 
+import { useAuth } 
+  from "../context/AuthContext";
 
 export default function RuntimeBootstrap() {
 
   const runtime =
     useRuntimeState();
+
+  const {
+    session,
+  } = useAuth();
 
 
   // =====================================================
@@ -21,6 +27,46 @@ export default function RuntimeBootstrap() {
   // =====================================================
 
   useAgoraRuntime();
+
+
+  // =====================================================
+  // AUTHENTICATED RUNTIME STATE
+  // =====================================================
+
+  useEffect(() => {
+
+    const isAvailable =
+      session?.me?.membership?.isAvailable;
+
+
+    if (typeof isAvailable !== "boolean") {
+
+      console.log(
+        "[RuntimeBootstrap] Availability not available yet"
+      );
+
+      return;
+
+    }
+
+
+    console.log(
+      "[RuntimeBootstrap] Hydrating availability:",
+      isAvailable
+    );
+
+
+    runtime.patch(
+      "availability",
+      {
+        isAvailable,
+      }
+    );
+
+  }, [
+    session,
+    runtime,
+  ]);
 
 
   // =====================================================

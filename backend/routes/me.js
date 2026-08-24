@@ -29,7 +29,7 @@ router.get(
       const [user, membership, tenant] = await Promise.all([
         User.findById(userId).select("email firstName lastName emailVerifiedAt"),
         Membership.findOne({ userId, tenantId }).select(
-          "role permissions tenantId userId"
+          "role permissions tenantId userId isAvailable"
         ),
         Tenant.findById(tenantId).select("name slug ownerUserId"),
       ]);
