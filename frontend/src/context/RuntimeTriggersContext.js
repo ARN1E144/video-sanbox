@@ -7,201 +7,761 @@ import React, {
   useEffect,
 } from "react";
 
-import { useRuntimeState } from "../context/RuntimeStateContext";
-import { useActionContext } from "../context/ActionContext";
-import { useRuntimeDebugger } from "../context/RuntimeDebuggerContext";
+import {
+  useRuntimeState,
+} from "../context/RuntimeStateContext";
 
-const RuntimeTriggersContext = createContext(null);
+import {
+  useActionContext,
+} from "../context/ActionContext";
 
-export function RuntimeTriggersProvider({ children }) {
-  const runtimeState = useRuntimeState();
-  const actions = useActionContext();
-  const debuggerRuntime = useRuntimeDebugger?.();
+import {
+  useRuntimeDebugger,
+} from "../context/RuntimeDebuggerContext";
 
-  const triggersRef = useRef([]);
 
-  // queued actions per commit
-  const pendingRef = useRef([]);
+const RuntimeTriggersContext =
+  createContext(null);
 
-  // 🔥 LOOP PROTECTION STATE
-  const activeCommitRef = useRef(null);
-  const executedActionsRef = useRef(new Set());
 
-  const flushingRef = useRef(false);
+// =====================================================
+// PROVIDER
+// =====================================================
 
-  // =====================================================
-  // REGISTER
-  // =====================================================
+export function RuntimeTriggersProvider({
+  children,
+}) {
 
-  const registerTrigger = useCallback((trigger) => {
-    triggersRef.current.push(trigger);
+  const runtimeState =
+    useRuntimeState();
 
-    return () => {
-      triggersRef.current =
-        triggersRef.current.filter((t) => t !== trigger);
-    };
-  }, []);
+  const actions =
+    useActionContext();
 
-  // =====================================================
-  // TRIGGER EVALUATION
-  // =====================================================
+  const debuggerRuntime =
+    useRuntimeDebugger?.();
 
-  const evaluateTriggers = useCallback(
-    (state, changedKeys = [], meta = {}) => {
-      const commitId = meta?.commitId;
 
-      // lock commit context
-      if (commitId) {
-        if (activeCommitRef.current === commitId) return;
-        activeCommitRef.current = commitId;
+  // ===================================================
+  // REGISTERED TRIGGERS
+  // ===================================================
 
-        // reset per commit
+  const triggersRef =
+    useRef([]);
+
+
+  // ===================================================
+  // PENDING ACTIONS
+  // ===================================================
+
+  const pendingRef =
+    useRef([]);
+
+
+  // ===================================================
+  // COMMIT LOCK
+  // ===================================================
+
+  const activeCommitRef =
+    useRef(null);
+
+
+  // ===================================================
+  // PER-COMMIT ACTION DEDUPE
+  // ===================================================
+
+  const executedActionsRef =
+    useRef(
+      new Set()
+    );
+
+
+  // ===================================================
+  // ACTION FLUSH
+  // ===================================================
+
+  const flushingRef =
+    useRef(false);
+
+
+  // ===================================================
+  // REGISTER TRIGGER
+  // ===================================================
+
+  const registerTrigger =
+    useCallback(
+      (
+        trigger
+      ) => {
+
+        if (
+          !trigger ||
+          typeof trigger !== "object"
+        ) {
+
+          console.warn(
+            "[RuntimeTriggers] Invalid trigger registration",
+            trigger
+          );
+
+          return () => {};
+
+        }
+
+
+        if (
+          !trigger.event
+        ) {
+
+          console.warn(
+            "[RuntimeTriggers] Trigger requires an event",
+            trigger
+          );
+
+          return () => {};
+
+        }
+
+
+        const normalizedTrigger = {
+
+          ...trigger,
+
+          actions:
+            Array.isArray(
+              trigger.actions
+            )
+              ? trigger.actions
+              : [],
+
+        };
+
+
+        triggersRef.current.push(
+          normalizedTrigger
+        );
+
+
+        console.log(
+          "[RuntimeTriggers] Registered",
+          normalizedTrigger
+        );
+
+
+        return () => {
+
+          triggersRef.current =
+            triggersRef.current.filter(
+              registered =>
+                registered !==
+                normalizedTrigger
+            );
+
+
+          console.log(
+            "[RuntimeTriggers] Unregistered",
+            normalizedTrigger
+          );
+
+        };
+
+      },
+      []
+    );
+
+
+  // ===================================================
+  // CLEAR PER-COMMIT STATE
+  // ===================================================
+
+  const beginCommit =
+    useCallback(
+      (
+        commitId
+      ) => {
+
+        if (
+          !commitId
+        ) {
+
+          return false;
+
+        }
+
+
+        if (
+          activeCommitRef.current ===
+          commitId
+        ) {
+
+          return false;
+
+        }
+
+
+        activeCommitRef.current =
+          commitId;
+
+
         executedActionsRef.current.clear();
-      }
 
-      for (const trigger of triggersRef.current) {
-        if (!changedKeys.includes(trigger.event)) continue;
 
-        try {
-          const passed =
-            typeof trigger.condition === "function"
-              ? trigger.condition({ state, changedKeys })
-              : true;
+        return true;
 
-          if (!passed) continue;
+      },
+      []
+    );
+
+
+  // ===================================================
+  // QUEUE ACTION
+  // ===================================================
+
+  const queueAction =
+    useCallback(
+      ({
+        action,
+        state,
+        trigger,
+        commitId,
+      }) => {
+
+        if (
+          !action
+        ) {
+
+          return;
+
+        }
+
+
+        const actionKey =
+          `${action}_${commitId}`;
+
+
+        if (
+          executedActionsRef.current.has(
+            actionKey
+          )
+        ) {
+
+          console.log(
+            "[RuntimeTriggers] Action deduped",
+            {
+              action,
+              commitId,
+            }
+          );
+
+          return;
+
+        }
+
+
+        executedActionsRef.current.add(
+          actionKey
+        );
+
+
+        pendingRef.current.push({
+
+          action,
+
+          state,
+
+          trigger,
+
+          commitId,
+
+        });
+
+
+        console.log(
+          "[RuntimeTriggers] Action queued",
+          {
+
+            action,
+
+            trigger:
+              trigger?.name,
+
+            event:
+              trigger?.event,
+
+            commitId,
+
+          }
+        );
+
+      },
+      []
+    );
+
+
+  // ===================================================
+  // EVALUATE TRIGGERS
+  // ===================================================
+
+  const evaluateTriggers =
+    useCallback(
+      (
+        state,
+        changedKeys = [],
+        meta = {}
+      ) => {
+
+        const commitId =
+          meta?.commitId;
+
+
+        if (
+          !commitId
+        ) {
+
+          return;
+
+        }
+
+
+        // -----------------------------------------------
+        // Start commit
+        // -----------------------------------------------
+
+        if (
+          !beginCommit(
+            commitId
+          )
+        ) {
+
+          return;
+
+        }
+
+
+        // -----------------------------------------------
+        // Evaluate each registered trigger
+        // -----------------------------------------------
+
+        for (
+          const trigger of
+            triggersRef.current
+        ) {
+
+          if (
+            !changedKeys.includes(
+              trigger.event
+            )
+          ) {
+
+            continue;
+
+          }
+
+
+          let passed =
+            true;
+
+
+          try {
+
+            if (
+              typeof trigger.condition ===
+              "function"
+            ) {
+
+              passed =
+                !!trigger.condition({
+                  state,
+                  changedKeys,
+                  meta,
+                });
+
+            }
+
+          }
+          catch (
+            error
+          ) {
+
+            console.error(
+              "[RuntimeTriggers] Condition failed",
+              {
+
+                trigger:
+                  trigger.name,
+
+                event:
+                  trigger.event,
+
+                error,
+
+              }
+            );
+
+
+            continue;
+
+          }
+
+
+          if (
+            !passed
+          ) {
+
+            continue;
+
+          }
+
+
+          // ---------------------------------------------
+          // Debugger
+          // ---------------------------------------------
 
           debuggerRuntime?.logTrigger?.({
-            trigger: trigger.name,
-            event: trigger.event,
+
+            trigger:
+              trigger.name,
+
+            event:
+              trigger.event,
+
             commitId,
+
           });
 
-          for (const action of trigger.actions || []) {
-            const actionKey = `${action}_${commitId}`;
 
-            // 🔥 DEDUPE ACTIONS PER COMMIT
-            if (executedActionsRef.current.has(actionKey)) continue;
+          console.log(
+            "[RuntimeTriggers] TRIGGER FIRED",
+            {
 
-            executedActionsRef.current.add(actionKey);
+              name:
+                trigger.name,
 
-            pendingRef.current.push({
-              action,
-              state,
-              trigger,
+              event:
+                trigger.event,
+
               commitId,
+
+            }
+          );
+
+
+          // ---------------------------------------------
+          // Queue actions
+          // ---------------------------------------------
+
+          for (
+            const action of
+              trigger.actions
+          ) {
+
+            queueAction({
+
+              action,
+
+              state,
+
+              trigger,
+
+              commitId,
+
             });
+
           }
-        } catch (err) {
-          console.error("[Trigger Error]", err);
+
         }
-      }
+
+      },
+      [
+        beginCommit,
+        debuggerRuntime,
+        queueAction,
+      ]
+    );
+
+
+  // ===================================================
+  // FLUSH ACTIONS
+  // ===================================================
+
+  const flushActions =
+    useCallback(
+      async () => {
+
+        if (
+          flushingRef.current
+        ) {
+
+          return;
+
+        }
+
+
+        if (
+          pendingRef.current.length ===
+          0
+        ) {
+
+          return;
+
+        }
+
+
+        flushingRef.current =
+          true;
+
+
+        const batch =
+          [
+            ...pendingRef.current,
+          ];
+
+
+        pendingRef.current =
+          [];
+
+
+        console.log(
+          "[RuntimeTriggers] FLUSH",
+          {
+            count:
+              batch.length,
+          }
+        );
+
+
+        try {
+
+          for (
+            const item of
+              batch
+          ) {
+
+            try {
+
+              const result =
+                await actions.runAction(
+                  item.action,
+                  {
+
+                    state:
+                      item.state,
+
+                    trigger:
+                      item.trigger,
+
+                    commitId:
+                      item.commitId,
+
+                  }
+                );
+
+
+              console.log(
+                "[RuntimeTriggers] ACTION RESULT",
+                {
+
+                  action:
+                    item.action,
+
+                  trigger:
+                    item.trigger?.name,
+
+                  commitId:
+                    item.commitId,
+
+                  result,
+
+                }
+              );
+
+            }
+            catch (
+              error
+            ) {
+
+              console.error(
+                "[RuntimeTriggers] Action failed",
+                {
+
+                  action:
+                    item.action,
+
+                  trigger:
+                    item.trigger?.name,
+
+                  error,
+
+                }
+              );
+
+            }
+
+          }
+
+        }
+        finally {
+
+          flushingRef.current =
+            false;
+
+        }
+
+      },
+      [
+        actions,
+      ]
+    );
+
+
+  // ===================================================
+  // RUNTIME STATE SUBSCRIPTION
+  // ===================================================
+
+  useEffect(
+    () => {
+
+      const unsubscribe =
+        runtimeState.subscribeAll(
+          (
+            state,
+            changedKeys,
+            meta = {}
+          ) => {
+
+            const safeChangedKeys =
+              Array.isArray(
+                changedKeys
+              )
+                ? changedKeys
+                : [];
+
+
+            const commitId =
+              meta?.commitId;
+
+
+            console.log(
+              "[RuntimeTriggers] STATE COMMIT RECEIVED",
+              {
+
+                commitId,
+
+                changedKeys:
+                  safeChangedKeys,
+
+                participants:
+                  state?.call?.participants,
+
+                joined:
+                  state?.call?.joined,
+
+              }
+            );
+
+
+            if (
+              !commitId
+            ) {
+
+              return;
+
+            }
+
+
+            evaluateTriggers(
+              state,
+              safeChangedKeys,
+              meta
+            );
+
+
+            queueMicrotask(
+              () => {
+
+                flushActions();
+
+              }
+            );
+
+          }
+        );
+
+
+      return unsubscribe;
+
     },
-    [debuggerRuntime]
+    [
+      runtimeState,
+      evaluateTriggers,
+      flushActions,
+    ]
   );
 
-  // =====================================================
-  // ACTION FLUSH (SAFE BATCH)
-  // =====================================================
 
-  const flushActions = useCallback(async () => {
-    if (flushingRef.current) return;
-
-    flushingRef.current = true;
-
-    const batch = [...pendingRef.current];
-    pendingRef.current = [];
-
-    for (const item of batch) {
-      try {
-        await actions.runAction(item.action, {
-          state: item.state,
-          trigger: item.trigger,
-          commitId: item.commitId,
-        });
-      } catch (err) {
-        console.error("[Action Error]", err);
-      }
-    }
-
-    flushingRef.current = false;
-  }, [actions]);
-
-  // =====================================================
-  // COMMIT-AWARE SUBSCRIPTION
-  // =====================================================
-
-  useEffect(() => {
-    const unsubscribe = runtimeState.subscribeAll(
-    (state, changedKeys, meta = {}) => {
-
-      const safeChangedKeys =
-        Array.isArray(changedKeys)
-          ? changedKeys
-          : [];
-
-      const commitId =
-        meta?.commitId;
-
-
-      console.log(
-        "[RuntimeTriggers] STATE COMMIT RECEIVED",
-        {
-          commitId,
-          changedKeys: safeChangedKeys,
-          participantLeft:
-            state?.call?.participantLeft,
-          participants:
-            state?.call?.participants,
-          joined:
-            state?.call?.joined,
-        }
-      );
-
-
-      if (!commitId) return;
-
-
-      evaluateTriggers(
-        state,
-        safeChangedKeys,
-        meta
-      );
-
-
-      queueMicrotask(() => {
-        flushActions();
-      });
-
-    }
-  );
-
-    return unsubscribe;
-  }, [runtimeState, evaluateTriggers, flushActions]);
-
-  // =====================================================
+  // ===================================================
   // API
-  // =====================================================
+  // ===================================================
 
-  const value = useMemo(
-    () => ({
-      registerTrigger,
-    }),
-    [registerTrigger]
-  );
+  const value =
+    useMemo(
+      () => ({
+
+        registerTrigger,
+
+      }),
+      [
+        registerTrigger,
+      ]
+    );
+
+
+  // ===================================================
+  // RENDER
+  // ===================================================
 
   return (
-    <RuntimeTriggersContext.Provider value={value}>
-      {children}
+
+    <RuntimeTriggersContext.Provider
+      value={
+        value
+      }
+    >
+
+      {
+        children
+      }
+
     </RuntimeTriggersContext.Provider>
+
   );
+
 }
 
-export function useRuntimeTriggers() {
-  const ctx = useContext(RuntimeTriggersContext);
 
-  if (!ctx) {
-    throw new Error("useRuntimeTriggers must be used inside provider");
+// =====================================================
+// HOOK
+// =====================================================
+
+export function useRuntimeTriggers() {
+
+  const ctx =
+    useContext(
+      RuntimeTriggersContext
+    );
+
+
+  if (
+    !ctx
+  ) {
+
+    throw new Error(
+      "useRuntimeTriggers must be used inside provider"
+    );
+
   }
 
+
   return ctx;
+
 }

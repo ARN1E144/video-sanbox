@@ -10,6 +10,9 @@ import hostToMany
 import remoteTraining
   from "./remote-training.json";
 
+import aiVideoInterviewer
+  from "./ai-video-interviewer.json";
+
 
 const ConfosRegistry = {
 
@@ -23,7 +26,10 @@ const ConfosRegistry = {
     hostToMany,
 
   "confo.remote_training":
-    remoteTraining
+    remoteTraining,
+
+  "confo.ai_video_interviewer":
+    aiVideoInterviewer,
 
 };
 

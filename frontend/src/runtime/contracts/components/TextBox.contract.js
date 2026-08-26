@@ -32,35 +32,41 @@ export default {
 
   editableProps: {
 
-    label: {
-      type: "string",
-      ui: "build",
-      default: "Enter text..."
-    },
-
-    placeholder: {
-      type: "string",
-      ui: "build",
-      default: "Enter text..."
-    },
-
-    value: {
-      type: "string",
-      ui: "runtime",
-      default: ""
-    },
-
-    style: {
-      type: "style",
-      ui: "advanced",
-      default: {
-        backgroundColor: "#2C2C2E",
-        color: "#FFFFFF",
-        borderRadius: "8px"
-      }
-    }
-
+  label: {
+    type: "string",
+    ui: "build",
+    default: "Enter text..."
   },
+
+  placeholder: {
+    type: "string",
+    ui: "build",
+    default: "Enter text..."
+  },
+
+  value: {
+    type: "string",
+    ui: "runtime",
+    default: ""
+  },
+
+  bindTo: {
+    type: "string",
+    ui: "runtime",
+    default: ""
+  },
+
+  style: {
+    type: "style",
+    ui: "advanced",
+    default: {
+      backgroundColor: "#2C2C2E",
+      color: "#FFFFFF",
+      borderRadius: "8px"
+    }
+  }
+
+},
 
   bindings: {
 

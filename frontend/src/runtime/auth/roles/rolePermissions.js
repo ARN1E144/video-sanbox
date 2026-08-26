@@ -4,23 +4,24 @@ console.log("🔥 rolePermissions.js EXECUTED");
 
 export const ROLE_PERMISSIONS = {
 
-  owner: {
+ owner: {
 
-    canBuild: true,
+  canBuild: true,
 
-    allowedElements: [
-      "Container",
-      "AgoraFeed",
-      "VideoFeed",
-      "ControlPanel",
-      "ControlButton",
-      "ChatPanel",
-      "Text",
-      "FetchCallsDebug",
-      "AvailabilityButton"
-    ],
+  allowedElements: [
+    "Container",
+    "AgoraFeed",
+    "VideoFeed",
+    "ControlPanel",
+    "ControlButton",
+    "ChatPanel",
+    "Text",
+    "FetchCallsDebug",
+    "AvailabilityButton"
+  ],
 
-    allowedActions: [
+  allowedActions: [
+    // CALL
     "call.startCall",
     "call.acceptCall",
     "call.joinCall",
@@ -30,10 +31,22 @@ export const ROLE_PERMISSIONS = {
     "call.toggleVideo",
     "call.spotlightUser",
     "call.fetchAvailableCalls",
-    "call.setAvailability"
-    ]
+    "call.setAvailability",
 
-  },
+    // AI INTERVIEW
+    "interview.start",
+    "interview.nextQuestion",
+    "interview.submitAnswer",
+    "interview.evaluate",
+
+    "video.toggleMic",
+    "video.toggleVideo",
+    "video.startRecording",
+    "video.stopRecording",
+    "video.uploadRecording"
+  ]
+
+},
 
 
   admin: {

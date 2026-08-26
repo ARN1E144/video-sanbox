@@ -1,10 +1,12 @@
+// src/dev/ConfoTest.jsx
 
 import React, {
   useEffect,
   useState,
 } from "react";
 
-import ConfoLoader from "../runtime/confos/ConfoLoader";
+import ConfoLoader
+  from "../runtime/confos/ConfoLoader";
 
 import {
   useProjectContext,
@@ -14,36 +16,211 @@ import {
   installConfo,
 } from "../runtime/confos/ConfoProjectInstaller";
 
-import ConfosRegistry from "../configs/confos/ConfosRegistry";
+import ConfosRegistry
+  from "../configs/confos/ConfosRegistry";
+
 
 // =====================================================
 // AVAILABLE CONFOS
 // =====================================================
 
 const AVAILABLE_CONFOS = [
+
   {
-    id: "confo.one_to_one",
-    name: "1-to-1 Video Call",
+    id:
+      "confo.one_to_one",
+
+    name:
+      "1-to-1 Video Call",
   },
 
   {
-    id: "confo.one_to_many",
-    name: "1-to-Many Video Call",
+    id:
+      "confo.one_to_many",
+
+    name:
+      "1-to-Many Video Call",
   },
 
   {
-    id: "confo.host_to_many",
-    name: "Host-to-Many Video Call",
+    id:
+      "confo.host_to_many",
+
+    name:
+      "Host-to-Many Video Call",
   },
 
   {
-    id: "confo.remote_training",
-    name: "Remote Training",
+    id:
+      "confo.remote_training",
+
+    name:
+      "Remote Training",
   },
+
+  {
+    id:
+      "confo.ai_video_interviewer",
+
+    name:
+      "AI Video Interviewer",
+  },
+
 ];
 
+
 // =====================================================
-// CONFO TEST
+// DEBUG / TREE HELPERS
+// =====================================================
+
+function inspectTree(
+  node,
+  path = "root",
+  result = []
+) {
+
+  if (
+    !node ||
+    typeof node !== "object"
+  ) {
+
+    return result;
+
+  }
+
+
+  result.push({
+
+    path,
+
+    id:
+      node.id ||
+      null,
+
+    type:
+      node.type ||
+      null,
+
+    sourceId:
+      node.meta?.sourceId ||
+      null,
+
+    source:
+      node.meta?.source ||
+      null,
+
+    meta:
+      node.meta ||
+      {},
+
+    props:
+      node.props ||
+      {},
+
+  });
+
+
+  if (
+    Array.isArray(
+      node.children
+    )
+  ) {
+
+    node.children.forEach(
+      (
+        child,
+        index
+      ) => {
+
+        inspectTree(
+          child,
+          `${path}.${index}`,
+          result
+        );
+
+      }
+    );
+
+  }
+
+
+  return result;
+
+}
+
+
+function findNodeBySourceId(
+  node,
+  sourceId
+) {
+
+  if (
+    !node ||
+    typeof node !== "object"
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    node?.meta?.sourceId ===
+    sourceId
+  ) {
+
+    return node;
+
+  }
+
+
+  if (
+    node?.id ===
+    sourceId
+  ) {
+
+    return node;
+
+  }
+
+
+  if (
+    Array.isArray(
+      node.children
+    )
+  ) {
+
+    for (
+      const child of node.children
+    ) {
+
+      const match =
+        findNodeBySourceId(
+          child,
+          sourceId
+        );
+
+
+      if (
+        match
+      ) {
+
+        return match;
+
+      }
+
+    }
+
+  }
+
+
+  return null;
+
+}
+
+
+// =====================================================
+// CONFO TEST / INSTALLER
 // =====================================================
 
 export default function ConfoTest() {
@@ -51,7 +228,13 @@ export default function ConfoTest() {
   const {
     projectSchema,
     setProjectSchema,
-  } = useProjectContext();
+
+    activeProject,
+
+    projects,
+  } =
+    useProjectContext();
+
 
   const [
     selected,
@@ -60,252 +243,606 @@ export default function ConfoTest() {
     "confo.remote_training"
   );
 
+
   const [
     confo,
     setConfo,
-  ] = useState(null);
+  ] = useState(
+    null
+  );
+
 
   const [
     errors,
     setErrors,
-  ] = useState([]);
+  ] = useState(
+    []
+  );
+
 
   const [
     installing,
     setInstalling,
-  ] = useState(false);
+  ] = useState(
+    false
+  );
+
 
   const [
     installResult,
     setInstallResult,
-  ] = useState(null);
+  ] = useState(
+    null
+  );
+
+
+  // ===================================================
+  // CURRENT PROJECT
+  // ===================================================
+
+  const currentProject =
+    projects?.find(
+      project =>
+        String(
+          project?._id
+        ) ===
+        String(
+          activeProject
+        )
+    ) ||
+    null;
+
 
   // ===================================================
   // LOAD SELECTED CONFO
   // ===================================================
 
-  useEffect(() => {
+  useEffect(
+    () => {
 
-    try {
+      let cancelled =
+        false;
 
-      console.log(
-        "[ConfoTest] Loading",
-        selected
-      );
 
-      // -------------------------------------------------
-      // Get config from registry
-      // -------------------------------------------------
+      const loadConfo =
+        () => {
 
-      const config =
-        ConfosRegistry[selected];
+          try {
 
-      if (!config) {
+            console.log(
+              "[ConfoTest] Loading",
+              selected
+            );
 
-        console.error(
-          "[ConfoTest] Confo not found in registry",
-          selected
-        );
 
-        setConfo(null);
+            setErrors([]);
 
-        setErrors([
-          `Confo '${selected}' not found in ConfosRegistry.`,
-        ]);
+            setInstallResult(
+              null
+            );
 
-        return;
-      }
 
-      console.log(
-        "[ConfoTest] Registry config",
-        config
-      );
+            // -------------------------------------------
+            // REGISTRY
+            // -------------------------------------------
 
-      // -------------------------------------------------
-      // Validate through ConfoLoader
-      // -------------------------------------------------
+            const config =
+              ConfosRegistry[
+                selected
+              ];
 
-      const loader =
-        new ConfoLoader();
 
-      const result =
-        loader.load(config);
+            if (
+              !config
+            ) {
 
-      console.log(
-        "[ConfoTest] LOAD RESULT",
-        result
-      );
+              throw new Error(
+                `Confo '${selected}' not found in ConfosRegistry.`
+              );
 
-      // -------------------------------------------------
-      // Validation failed
-      // -------------------------------------------------
+            }
 
-      if (!result.valid) {
 
-        console.error(
-          "[ConfoTest] Invalid Confo",
-          result.errors
-        );
+            console.log(
+              "[ConfoTest] Registry config",
+              config
+            );
 
-        setConfo(null);
 
-        setErrors(
-          result.errors || [
-            "Unknown Confo validation error.",
-          ]
-        );
+            // -------------------------------------------
+            // LOAD / VALIDATE
+            // -------------------------------------------
 
-        return;
-      }
+            const loader =
+              new ConfoLoader();
 
-      // -------------------------------------------------
-      // Valid Confo
-      // -------------------------------------------------
 
-      setErrors([]);
+            const result =
+              loader.load(
+                config
+              );
 
-      setInstallResult(null);
 
-      setConfo(
-        result.confo
-      );
+            console.log(
+              "[ConfoTest] LOAD RESULT",
+              result
+            );
 
-    }
-    catch (error) {
 
-      console.error(
-        "[ConfoTest]",
-        error
-      );
+            if (
+              !result?.valid
+            ) {
 
-      setConfo(null);
+              const validationErrors =
+                result?.errors || [
+                  "Unknown Confo validation error.",
+                ];
 
-      setErrors([
-        error.message,
-      ]);
 
-    }
+              throw new Error(
+                validationErrors.join(
+                  "\n"
+                )
+              );
 
-  }, [
-    selected,
-  ]);
+            }
+
+
+            if (
+              cancelled
+            ) {
+
+              return;
+
+            }
+
+
+            setConfo(
+              result.confo
+            );
+
+
+            console.log(
+              "[ConfoTest] Confo ready",
+              {
+                id:
+                  result.confo?.id,
+
+                name:
+                  result.confo?.name,
+              }
+            );
+
+          }
+          catch (
+            error
+          ) {
+
+            console.error(
+              "[ConfoTest] Load failed",
+              error
+            );
+
+
+            if (
+              cancelled
+            ) {
+
+              return;
+
+            }
+
+
+            setConfo(
+              null
+            );
+
+
+            setErrors([
+              error?.message ||
+              "Failed to load Confo.",
+            ]);
+
+          }
+
+        };
+
+
+      loadConfo();
+
+
+      return () => {
+
+        cancelled =
+          true;
+
+      };
+
+    },
+    [
+      selected,
+    ]
+  );
+
 
   // ===================================================
   // INSTALL CONFO
   // ===================================================
 
-  const handleInstall = () => {
+  const handleInstall =
+    async () => {
 
-    if (!confo) {
+      setErrors([]);
 
-      setErrors([
-        "No valid Confo is loaded.",
-      ]);
-
-      return;
-    }
-
-    setInstalling(true);
-
-    setErrors([]);
-
-    setInstallResult(null);
-
-    try {
-
-      console.log(
-        "[ConfoTest] Installing Confo",
-        {
-          id:
-            confo.id,
-
-          name:
-            confo.name,
-        }
+      setInstallResult(
+        null
       );
 
-      // -------------------------------------------------
-      // Convert Confo tree → Project tree
-      // -------------------------------------------------
 
-      const result =
-        installConfo(
-          confo,
-          projectSchema
-        );
+      // =================================================
+      // VALIDATE CURRENT STATE
+      // =================================================
 
-      console.log(
-        "[ConfoTest] INSTALL RESULT",
-        result
-      );
+      if (
+        !confo
+      ) {
 
-      // -------------------------------------------------
-      // Installer failure
-      // -------------------------------------------------
-
-      if (!result?.success) {
-
-        const installerErrors =
-          result?.errors || [
-            "Confo installation failed.",
-          ];
-
-        console.error(
-          "[ConfoTest] Installation failed",
-          installerErrors
-        );
-
-        setErrors(
-          installerErrors
-        );
+        setErrors([
+          "No valid Confo is loaded.",
+        ]);
 
         return;
+
       }
 
-      // -------------------------------------------------
-      // Write installed project tree
-      // -------------------------------------------------
 
-      setProjectSchema(
-        prev => ({
-          ...prev,
+      if (
+        !activeProject
+      ) {
+
+        setErrors([
+          "No active project is selected.",
+          "Create or open a project before installing a Confo.",
+        ]);
+
+        return;
+
+      }
+
+
+      if (
+        !currentProject
+      ) {
+
+        setErrors([
+          "The active project could not be resolved.",
+          "Reload the project list and try again.",
+        ]);
+
+        return;
+
+      }
+
+
+      // =================================================
+      // START
+      // =================================================
+
+      setInstalling(
+        true
+      );
+
+
+      try {
+
+        console.log(
+          "=============================================="
+        );
+
+        console.log(
+          "[ConfoTest] INSTALL START"
+        );
+
+        console.log(
+          {
+            confoId:
+              confo.id,
+
+            confoName:
+              confo.name,
+
+            projectId:
+              activeProject,
+
+            projectName:
+              currentProject.name,
+
+          }
+        );
+
+
+        // =================================================
+        // INSTALL
+        // =================================================
+
+        const result =
+          installConfo(
+            confo,
+            projectSchema
+          );
+
+
+        console.log(
+          "[ConfoTest] INSTALL RESULT",
+          result
+        );
+
+
+        // =================================================
+        // INSTALL FAILURE
+        // =================================================
+
+        if (
+          !result?.success
+        ) {
+
+          const installerErrors =
+            result?.errors || [
+              "Confo installation failed.",
+            ];
+
+
+          console.error(
+            "[ConfoTest] Installation failed",
+            installerErrors
+          );
+
+
+          setErrors(
+            installerErrors
+          );
+
+
+          return;
+
+        }
+
+
+        // =================================================
+        // INSPECT INSTALLED TREE
+        // =================================================
+        //
+        // This is diagnostic only.
+        // It must NEVER block installation.
+        // =================================================
+
+        const diagnostics =
+          inspectTree(
+            result.tree
+          );
+
+
+        console.group(
+          "[ConfoTest] INSTALLED TREE"
+        );
+
+
+        console.table(
+          diagnostics
+        );
+
+
+        console.log(
+          "[ConfoTest] INSTALLED TREE OBJECT",
+          result.tree
+        );
+
+
+        console.groupEnd();
+
+
+        // =================================================
+        // VIDEOFEED DIAGNOSTIC
+        // =================================================
+
+        const videoFeeds =
+          diagnostics.filter(
+            item =>
+              item.type ===
+              "VideoFeed"
+          );
+
+
+        console.log(
+          "[ConfoTest] VIDEOFEED NODES",
+          videoFeeds
+        );
+
+
+        const interviewVideo =
+          findNodeBySourceId(
+            result.tree,
+            "interview-video"
+          );
+
+
+        console.log(
+          "[ConfoTest] INTERVIEW VIDEO SOURCE",
+          {
+
+            found:
+              !!interviewVideo,
+
+            id:
+              interviewVideo?.id ||
+              null,
+
+            type:
+              interviewVideo?.type ||
+              null,
+
+            sourceId:
+              interviewVideo?.meta?.sourceId ||
+              null,
+
+            meta:
+              interviewVideo?.meta ||
+              null,
+
+            props:
+              interviewVideo?.props ||
+              null,
+
+          }
+        );
+
+
+        // =================================================
+        // BUILD NEXT PROJECT SCHEMA
+        // =================================================
+
+        const nextProjectSchema = {
+
+          ...projectSchema,
+
+          name:
+            confo.name ||
+            projectSchema?.name ||
+            "Untitled App",
 
           tree:
             result.tree,
-        })
-      );
 
-      setInstallResult({
-        success: true,
+          metadata: {
 
-        message:
-          `${confo.name} installed successfully.`,
-      });
+            ...(projectSchema?.metadata || {}),
 
-      console.log(
-        "[ConfoTest] Confo installed into project"
-      );
+            installedFromConfo:
+              confo.id ||
+              confo.name,
 
-    }
-    catch (error) {
+            confoVersion:
+              confo.version ||
+              1,
 
-      console.error(
-        "[ConfoTest] Installation error",
+            appName:
+              confo.name ||
+              projectSchema?.name ||
+              "Untitled App",
+
+          },
+
+        };
+
+
+        // =================================================
+        // UPDATE PROJECT CONTEXT
+        // =================================================
+
+        setProjectSchema(
+          nextProjectSchema
+        );
+
+
+        // =================================================
+        // SUCCESS
+        // =================================================
+
+        setInstallResult({
+
+          success:
+            true,
+
+          message:
+            `${confo.name} installed successfully.`,
+
+          projectId:
+            activeProject,
+
+          projectName:
+            currentProject.name,
+
+          videoFeedFound:
+            !!interviewVideo,
+
+          videoFeedId:
+            interviewVideo?.id ||
+            null,
+
+          videoFeedSourceId:
+            interviewVideo?.meta?.sourceId ||
+            null,
+
+        });
+
+
+        console.log(
+          "[ConfoTest] Confo installed into active project",
+          {
+
+            projectId:
+              activeProject,
+
+            projectName:
+              currentProject.name,
+
+            confo:
+              confo.name,
+
+            videoFeedFound:
+              !!interviewVideo,
+
+            videoFeedId:
+              interviewVideo?.id ||
+              null,
+
+            videoFeedSourceId:
+              interviewVideo?.meta?.sourceId ||
+              null,
+
+          }
+        );
+
+
+        console.log(
+          "=============================================="
+        );
+
+        console.log(
+          "[ConfoTest] INSTALL COMPLETE"
+        );
+
+        console.log(
+          "=============================================="
+        );
+
+      }
+      catch (
         error
-      );
+      ) {
 
-      setErrors([
-        error.message,
-      ]);
+        console.error(
+          "[ConfoTest] Installation error",
+          error
+        );
 
-    }
-    finally {
 
-      setInstalling(false);
+        setErrors([
+          error?.message ||
+          "Confo installation failed.",
+        ]);
 
-    }
+      }
+      finally {
 
-  };
+        setInstalling(
+          false
+        );
+
+      }
+
+    };
+
 
   // ===================================================
   // RENDER
@@ -315,12 +852,25 @@ export default function ConfoTest() {
 
     <div
       style={{
-        width: "100%",
-        minHeight: "100vh",
-        background: "#181818",
-        color: "#fff",
-        padding: 20,
-        boxSizing: "border-box",
+
+        width:
+          "100%",
+
+        minHeight:
+          "100vh",
+
+        background:
+          "#181818",
+
+        color:
+          "#fff",
+
+        padding:
+          20,
+
+        boxSizing:
+          "border-box",
+
       }}
     >
 
@@ -328,23 +878,108 @@ export default function ConfoTest() {
         Confo Project Installer
       </h2>
 
+
       <p
         style={{
-          color: "#aaa",
-          marginBottom: 20,
+          color:
+            "#aaa",
+
+          marginBottom:
+            20,
         }}
       >
+
         Select a Confo, validate it, then install it
-        into the current project. The Canvas will render
-        the installed project automatically.
+        into the current project.
+
       </p>
 
-      {/* ===============================================
-          TEMPLATE SELECTOR
-      =============================================== */}
+
+      {/* =================================================
+          CURRENT PROJECT
+      ================================================= */}
+
+      <div
+        style={{
+
+          background:
+            activeProject
+              ? "#132b1c"
+              : "#3b1515",
+
+          border:
+            `1px solid ${
+              activeProject
+                ? "#166534"
+                : "#7f1d1d"
+            }`,
+
+          color:
+            activeProject
+              ? "#86efac"
+              : "#fca5a5",
+
+          padding:
+            12,
+
+          borderRadius:
+            8,
+
+          marginBottom:
+            20,
+
+        }}
+      >
+
+        <strong>
+          Current Project
+        </strong>
+
+
+        <div
+          style={{
+
+            marginTop:
+              6,
+
+            fontSize:
+              13,
+
+            lineHeight:
+              1.5,
+
+          }}
+        >
+
+          {
+            currentProject
+              ? currentProject.name
+              : "No active project"
+          }
+
+          <br />
+
+          Project ID:
+          {" "}
+
+          {
+            activeProject ||
+            "null"
+          }
+
+        </div>
+
+      </div>
+
+
+      {/* =================================================
+          CONFO SELECTOR
+      ================================================= */}
 
       <select
-        value={selected}
+        value={
+          selected
+        }
         onChange={
           e =>
             setSelected(
@@ -352,9 +987,16 @@ export default function ConfoTest() {
             )
         }
         style={{
-          marginBottom: 20,
-          padding: 8,
-          minWidth: 260,
+
+          marginBottom:
+            20,
+
+          padding:
+            8,
+
+          minWidth:
+            260,
+
         }}
       >
 
@@ -363,10 +1005,16 @@ export default function ConfoTest() {
             item => (
 
               <option
-                key={item.id}
-                value={item.id}
+                key={
+                  item.id
+                }
+                value={
+                  item.id
+                }
               >
-                {item.name}
+                {
+                  item.name
+                }
               </option>
 
             )
@@ -375,41 +1023,74 @@ export default function ConfoTest() {
 
       </select>
 
-      {/* ===============================================
-          CONFO INFORMATION
-      =============================================== */}
+
+      {/* =================================================
+          CONFO INFO
+      ================================================= */}
 
       {confo && (
 
         <div
           style={{
-            background: "#202020",
+
+            background:
+              "#202020",
+
             border:
               "1px solid #333",
-            padding: 15,
-            borderRadius: 8,
-            marginBottom: 20,
+
+            padding:
+              15,
+
+            borderRadius:
+              8,
+
+            marginBottom:
+              20,
+
           }}
         >
 
           <div
             style={{
-              fontSize: 18,
-              fontWeight: 600,
-              marginBottom: 6,
+
+              fontSize:
+                18,
+
+              fontWeight:
+                600,
+
+              marginBottom:
+                6,
+
             }}
           >
-            {confo.name}
+
+            {
+              confo.name
+            }
+
           </div>
+
 
           <div
             style={{
-              color: "#aaa",
-              marginBottom: 12,
+
+              color:
+                "#aaa",
+
+              marginBottom:
+                12,
+
             }}
           >
-            {confo.description}
+
+            {
+              confo.description
+            }
+
           </div>
+
 
           <button
             type="button"
@@ -417,36 +1098,50 @@ export default function ConfoTest() {
               handleInstall
             }
             disabled={
-              installing
+              installing ||
+              !activeProject ||
+              !currentProject
             }
             style={{
+
               padding:
                 "10px 16px",
 
-              borderRadius: 6,
+              borderRadius:
+                6,
 
-              border: "none",
+              border:
+                "none",
 
               background:
-                installing
+                installing ||
+                !activeProject ||
+                !currentProject
                   ? "#555"
                   : "#2563eb",
 
-              color: "#fff",
+              color:
+                "#fff",
 
               cursor:
-                installing
+                installing ||
+                !activeProject ||
+                !currentProject
                   ? "default"
                   : "pointer",
 
-              fontWeight: 600,
+              fontWeight:
+                600,
+
             }}
           >
 
             {
               installing
                 ? "Installing..."
-                : "Install Confo"
+                : !activeProject
+                  ? "Select a Project First"
+                  : "Install Confo"
             }
 
           </button>
@@ -455,15 +1150,17 @@ export default function ConfoTest() {
 
       )}
 
-      {/* ===============================================
-          VALIDATION / INSTALL ERRORS
-      =============================================== */}
+
+      {/* =================================================
+          ERRORS
+      ================================================= */}
 
       {
         errors.length > 0 && (
 
           <div
             style={{
+
               background:
                 "#3b1515",
 
@@ -473,17 +1170,22 @@ export default function ConfoTest() {
               color:
                 "#fca5a5",
 
-              padding: 12,
+              padding:
+                12,
 
-              borderRadius: 8,
+              borderRadius:
+                8,
 
-              marginBottom: 20,
+              marginBottom:
+                20,
+
             }}
           >
 
             <strong>
               Confo error
             </strong>
+
 
             <ul>
 
@@ -499,7 +1201,11 @@ export default function ConfoTest() {
                         index
                       }
                     >
-                      {error}
+
+                      {
+                        error
+                      }
+
                     </li>
 
                   )
@@ -513,15 +1219,17 @@ export default function ConfoTest() {
         )
       }
 
-      {/* ===============================================
-          INSTALL SUCCESS
-      =============================================== */}
+
+      {/* =================================================
+          SUCCESS
+      ================================================= */}
 
       {
         installResult?.success && (
 
           <div
             style={{
+
               background:
                 "#12351f",
 
@@ -531,26 +1239,83 @@ export default function ConfoTest() {
               color:
                 "#86efac",
 
-              padding: 12,
+              padding:
+                12,
 
-              borderRadius: 8,
+              borderRadius:
+                8,
 
-              marginBottom: 20,
+              marginBottom:
+                20,
+
             }}
           >
 
-            {installResult.message}
+            {
+              installResult.message
+            }
+
 
             <div
               style={{
-                marginTop: 6,
-                color: "#aaa",
-                fontSize: 13,
+
+                marginTop:
+                  6,
+
+                color:
+                  "#aaa",
+
+                fontSize:
+                  13,
+
+                lineHeight:
+                  1.6,
+
               }}
             >
-              The project tree has been updated.
-              CanvasContext will now hydrate the Canvas
-              from the installed template.
+
+              Project:
+              {" "}
+              {
+                installResult.projectName
+              }
+
+              <br />
+
+              Project ID:
+              {" "}
+              {
+                installResult.projectId
+              }
+
+              <br />
+
+              VideoFeed found:
+              {" "}
+              {
+                String(
+                  installResult.videoFeedFound
+                )
+              }
+
+              <br />
+
+              VideoFeed ID:
+              {" "}
+              {
+                installResult.videoFeedId ||
+                "Not found"
+              }
+
+              <br />
+
+              VideoFeed source ID:
+              {" "}
+              {
+                installResult.videoFeedSourceId ||
+                "Not found"
+              }
+
             </div>
 
           </div>
@@ -558,38 +1323,57 @@ export default function ConfoTest() {
         )
       }
 
-      {/* ===============================================
-          DEBUG PROJECT TREE
-      =============================================== */}
+
+      {/* =================================================
+          PROJECT TREE
+      ================================================= */}
 
       <details>
 
         <summary
           style={{
-            cursor: "pointer",
-            color: "#aaa",
-            marginBottom: 10,
+
+            cursor:
+              "pointer",
+
+            color:
+              "#aaa",
+
+            marginBottom:
+              10,
+
           }}
         >
+
           Project Tree
+
         </summary>
+
 
         <pre
           style={{
+
             background:
               "#101010",
 
-            padding: 12,
+            padding:
+              12,
 
-            borderRadius: 6,
+            borderRadius:
+              6,
 
-            overflow: "auto",
+            overflow:
+              "auto",
 
-            fontSize: 12,
+            fontSize:
+              12,
 
-            color: "#ccc",
+            color:
+              "#ccc",
+
           }}
         >
+
           {
             JSON.stringify(
               projectSchema?.tree,
@@ -597,9 +1381,11 @@ export default function ConfoTest() {
               2
             )
           }
+
         </pre>
 
       </details>
+
 
     </div>
 

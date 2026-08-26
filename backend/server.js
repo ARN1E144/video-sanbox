@@ -14,9 +14,9 @@ requireEnv([
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
-// import aiTemplateRoutes from "./routes/aiTemplates.js";
+import aiTemplateRoutes from "./routes/aiTemplates.js";
 import agoraRoutes from "./routes/agora.js";
-// import aiRoutes from "./routes/aiRoutes.js";
+import aiRoutes from "./routes/aiRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import { connectWithRetry } from "./db/connect.js";
 import tenantRoutes from "./routes/tenantRoutes.js";
@@ -24,6 +24,7 @@ import meRoutes from "./routes/me.js";
 import callRoutes from "./routes/callRoutes.js";
 import videoRoutes from "./routes/videoRoutes.js";
 import projectRoutes from "./routes/projectRoutes.js";
+import interviewRoutes from "./routes/interviewRoutes.js";
 
 
 const app = express();
@@ -54,13 +55,14 @@ app.use(bodyParser.json());
 
 // Routes
 app.use("/api/agora", agoraRoutes);
-// app.use("/api/ai", aiRoutes);
+app.use("/api/ai", aiRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/tenant", tenantRoutes);
 app.use("/api", meRoutes);
 app.use("/api/calls", callRoutes);
 app.use("/api/videos", videoRoutes);
 app.use("/api/projects", projectRoutes);
+app.use("/api", interviewRoutes);
 
 
 

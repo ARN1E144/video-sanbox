@@ -5,66 +5,55 @@
 CONFO → PROJECT INSTALLER
 =====================================================
 
-Purpose:
+Responsibilities:
 
-Validated Confo
+Confo definition
       ↓
-Confo tree
+Installed project tree
       ↓
-Project tree
-      ↓
-CanvasContext
-      ↓
-Canvas
+Canvas / project system
 
-The installer does NOT render anything.
+The installer:
 
-IMPORTANT:
+- preserves Confo hierarchy
+- creates deterministic installed IDs
+- preserves original Confo source IDs
+- preserves metadata
+- resolves targetId references
+- preserves explicit Canvas properties
+- unwraps logical root containers
 
-A Confo root Container is treated as a
-logical/template wrapper.
+It does NOT:
 
-It is NOT installed as a draggable Canvas element.
+- calculate Canvas layout
+- render components
+- create Canvas runtime state
 
-Example Confo:
+ProjectTreeLoader handles Canvas layout.
 
-Container
-├── TextLabel
-├── AgoraFeed
-├── ControlPanel
-│   ├── ControlButton
-│   └── ControlButton
-└── ChatPanel
+IMPORTANT ID MODEL
+-----------------------------------------------------
 
-Becomes:
+Confo ID:
 
-App
-├── TextLabel
-├── AgoraFeed
-├── ControlPanel
-│   ├── ControlButton
-│   └── ControlButton
-└── ChatPanel
+    interview-video
 
-The ControlPanel remains a real Canvas container.
+Installed project ID:
 
-The root Container does not.
+    confo-interview-video-2
+
+Metadata:
+
+    meta.sourceId = "interview-video"
+
+This gives us a stable relationship between the
+template definition and the installed project instance.
 =====================================================
 */
 
 
 // =====================================================
-// ROOT TYPES
-// =====================================================
-
-const LOGICAL_ROOT_TYPES = new Set([
-  "App",
-  "Container",
-]);
-
-
-// =====================================================
-// CREATE UNIQUE INSTALLED ID
+// CREATE INSTALLED ID
 // =====================================================
 
 function createInstalledId(
@@ -82,60 +71,93 @@ function createInstalledId(
         "-"
       );
 
+
   return (
     `confo-${safeId}-${path}`
   );
+
 }
 
 
 // =====================================================
-// COPY OPTIONAL CANVAS PROPERTIES
+// GET ORIGINAL SOURCE ID
+// =====================================================
+//
+// This is deliberately independent from the generated
+// installed ID.
+//
+// Example:
+//
+// node.id = "interview-video"
+//
+// installed node:
+//
+// id:
+//   "confo-interview-video-2"
+//
+// meta.sourceId:
+//   "interview-video"
 // =====================================================
 
-function copyCanvasProperties(node) {
-
-  const result = {};
-
-  if (
-    node.x !== undefined
-  ) {
-    result.x = node.x;
-  }
+function getSourceId(
+  node
+) {
 
   if (
-    node.y !== undefined
+    !node ||
+    typeof node !== "object"
   ) {
-    result.y = node.y;
+
+    return null;
+
   }
+
 
   if (
-    node.width !== undefined
+    typeof node.meta?.sourceId ===
+    "string" &&
+    node.meta.sourceId.trim()
   ) {
-    result.width = node.width;
+
+    return node.meta.sourceId;
+
   }
+
 
   if (
-    node.height !== undefined
+    typeof node.id ===
+    "string" &&
+    node.id.trim()
   ) {
-    result.height = node.height;
+
+    return node.id;
+
   }
 
-  if (
-    node.role !== undefined
-  ) {
-    result.role = node.role;
-  }
 
-  return result;
+  return null;
+
 }
 
 
 // =====================================================
-// INSTALL REAL COMPONENT NODE
+// BUILD ID MAP
+// =====================================================
+//
+// Original Confo ID
+//      ↓
+// Installed project ID
+//
+// Example:
+//
+// interview-video
+//      ↓
+// confo-interview-video-2
 // =====================================================
 
-function installNode(
+function buildIdMap(
   node,
+  map = new Map(),
   path = "0"
 ) {
 
@@ -143,46 +165,268 @@ function installNode(
     !node ||
     typeof node !== "object"
   ) {
-    return null;
+
+    return map;
+
   }
 
-  const type =
-    node.type ||
-    "Text";
+
+  // ---------------------------------------------------
+  // App is a logical root and does not participate in
+  // Confo target ID mapping.
+  // ---------------------------------------------------
+
+  if (
+    node.type !==
+    "App"
+  ) {
+
+    const sourceId =
+      getSourceId(
+        node
+      );
+
+
+    if (
+      sourceId
+    ) {
+
+      map.set(
+        sourceId,
+        createInstalledId(
+          sourceId,
+          path
+        )
+      );
+
+    }
+
+  }
+
+
+  // ---------------------------------------------------
+  // CHILDREN
+  // ---------------------------------------------------
+
+  if (
+    Array.isArray(
+      node.children
+    )
+  ) {
+
+    node.children.forEach(
+      (
+        child,
+        index
+      ) => {
+
+        buildIdMap(
+          child,
+          map,
+          `${path}-${index}`
+        );
+
+      }
+    );
+
+  }
+
+
+  return map;
+
+}
+
+
+// =====================================================
+// RESOLVE TARGET REFERENCES
+// =====================================================
+//
+// Confo:
+//
+// targetId: "interview-video"
+//
+// Installed:
+//
+// targetId: "confo-interview-video-2"
+// =====================================================
+
+function resolveTargetReferences(
+  props,
+  idMap
+) {
+
+  if (
+    !props ||
+    typeof props !== "object"
+  ) {
+
+    return props;
+
+  }
+
+
+  const resolved = {
+
+    ...props,
+
+  };
+
+
+  if (
+    typeof resolved.targetId ===
+    "string"
+  ) {
+
+    resolved.targetId =
+      idMap.get(
+        resolved.targetId
+      ) ||
+      resolved.targetId;
+
+  }
+
+
+  return resolved;
+
+}
+
+
+// =====================================================
+// INSTALL NODE
+// =====================================================
+
+function installNode(
+  node,
+  path,
+  idMap
+) {
+
+  if (
+    !node ||
+    typeof node !== "object"
+  ) {
+
+    return null;
+
+  }
+
+
+  // ===================================================
+  // SOURCE ID
+  // ===================================================
+
+  const sourceId =
+    getSourceId(
+      node
+    );
+
+
+  // ===================================================
+  // INSTALLED ID
+  // ===================================================
+
+  const installedId =
+    sourceId
+
+      ? (
+          idMap.get(
+            sourceId
+          ) ||
+          createInstalledId(
+            sourceId,
+            path
+          )
+        )
+
+      : createInstalledId(
+          node.type ||
+          "element",
+          path
+        );
+
+
+  // ===================================================
+  // META
+  // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // sourceId is written explicitly here.
+  //
+  // We do NOT rely on spreading node.meta to preserve
+  // the relationship.
+  //
+  // ===================================================
+
+  const installedMeta = {
+
+    ...(node.meta || {}),
+
+    source:
+      node.meta?.source ||
+      "confo",
+
+    sourceId:
+      sourceId,
+
+    installedId:
+
+      installedId,
+
+  };
+
+
+  // ===================================================
+  // PROJECT NODE
+  // ===================================================
 
   const installedNode = {
 
-    // -------------------------------------------------
-    // ID
-    // -------------------------------------------------
-
     id:
-      createInstalledId(
-        node.id,
-        path
+      installedId,
+
+    type:
+      node.type ||
+      "Text",
+
+    props:
+      resolveTargetReferences(
+        {
+          ...(node.props || {}),
+        },
+        idMap
       ),
 
-    // -------------------------------------------------
-    // COMPONENT TYPE
-    // -------------------------------------------------
+    meta:
+      installedMeta,
 
-    type,
+    ...(node.x !== undefined
+      ? {
+          x:
+            node.x,
+        }
+      : {}),
 
-    // -------------------------------------------------
-    // CANVAS PROPERTIES
-    // -------------------------------------------------
+    ...(node.y !== undefined
+      ? {
+          y:
+            node.y,
+        }
+      : {}),
 
-    ...copyCanvasProperties(
-      node
-    ),
+    ...(node.width !== undefined
+      ? {
+          width:
+            node.width,
+        }
+      : {}),
 
-    // -------------------------------------------------
-    // COMPONENT PROPS
-    // -------------------------------------------------
-
-    props: {
-      ...(node.props || {})
-    },
+    ...(node.height !== undefined
+      ? {
+          height:
+            node.height,
+        }
+      : {}),
 
   };
 
@@ -197,21 +441,6 @@ function installNode(
 
     installedNode.role =
       node.role;
-
-  }
-
-
-  // ===================================================
-  // META
-  // ===================================================
-
-  if (
-    node.meta
-  ) {
-
-    installedNode.meta = {
-      ...node.meta
-    };
 
   }
 
@@ -235,10 +464,13 @@ function installNode(
           ) =>
             installNode(
               child,
-              `${path}-${childIndex}`
+              `${path}-${childIndex}`,
+              idMap
             )
         )
-        .filter(Boolean);
+        .filter(
+          Boolean
+        );
 
 
     if (
@@ -254,31 +486,13 @@ function installNode(
 
 
   return installedNode;
+
 }
 
 
 // =====================================================
-// UNWRAP CONFO ROOT
+// UNWRAP ROOT
 // =====================================================
-
-/*
--------------------------------------------------------
-A Confo normally has a presentation root such as:
-
-Container
-├── AgoraFeed
-├── ControlPanel
-└── ChatPanel
-
-That Container is NOT a user-created Canvas element.
-
-We therefore unwrap it.
-
-If the Confo root is already a genuine component
-such as ControlPanel, we keep it.
-
--------------------------------------------------------
-*/
 
 function getInstallRoot(
   confoTree
@@ -288,16 +502,19 @@ function getInstallRoot(
     !confoTree ||
     typeof confoTree !== "object"
   ) {
+
     return null;
+
   }
 
 
-  // -----------------------------------------------
-  // App is always a logical project root
-  // -----------------------------------------------
+  // ---------------------------------------------------
+  // Existing App root
+  // ---------------------------------------------------
 
   if (
-    confoTree.type === "App"
+    confoTree.type ===
+    "App"
   ) {
 
     return confoTree;
@@ -305,19 +522,25 @@ function getInstallRoot(
   }
 
 
-  // -----------------------------------------------
-  // Top-level Container is a Confo wrapper
-  // -----------------------------------------------
+  // ---------------------------------------------------
+  // Logical Container root
+  // ---------------------------------------------------
 
   if (
-    confoTree.type === "Container"
+    confoTree.type ===
+    "Container"
   ) {
 
     return {
 
-      id: "root",
+      id:
+        "root",
 
-      type: "App",
+      type:
+        "App",
+
+      props:
+        {},
 
       children:
         Array.isArray(
@@ -326,26 +549,109 @@ function getInstallRoot(
           ? confoTree.children
           : [],
 
+      meta: {
+
+        source:
+          "confo-root-container",
+
+        confoLayout:
+          confoTree.props?.layout ||
+          "vertical",
+
+      },
+
     };
 
   }
 
 
-  // -----------------------------------------------
-  // Any other root is a genuine component
-  // -----------------------------------------------
+  // ---------------------------------------------------
+  // Any other root
+  // ---------------------------------------------------
 
   return {
 
-    id: "root",
+    id:
+      "root",
 
-    type: "App",
+    type:
+      "App",
+
+    props:
+      {},
 
     children: [
-      confoTree
+      confoTree,
     ],
 
+    meta: {
+
+      source:
+        "confo-root",
+
+    },
+
   };
+
+}
+
+
+// =====================================================
+// DEBUG HIERARCHY
+// =====================================================
+
+function debugHierarchy(
+  node,
+  depth = 0
+) {
+
+  if (
+    !node
+  ) {
+
+    return;
+
+  }
+
+
+  const prefix =
+    "  ".repeat(
+      depth
+    );
+
+
+  console.log(
+    `${prefix}${node.type}`,
+    {
+
+      id:
+        node.id,
+
+      sourceId:
+        node.meta?.sourceId,
+
+      meta:
+        node.meta,
+
+    }
+  );
+
+
+  if (
+    Array.isArray(
+      node.children
+    )
+  ) {
+
+    node.children.forEach(
+      child =>
+        debugHierarchy(
+          child,
+          depth + 1
+        )
+    );
+
+  }
 
 }
 
@@ -361,8 +667,17 @@ export function installConfo(
 
   console.log(
     "[ConfoProjectInstaller] Installing",
-    confo?.id ||
-      confo?.name
+    {
+      id:
+        confo?.id,
+
+      name:
+        confo?.name,
+
+      version:
+        confo?.version,
+
+    }
   );
 
 
@@ -370,14 +685,17 @@ export function installConfo(
   // VALIDATION
   // ===================================================
 
-  if (!confo) {
+  if (
+    !confo
+  ) {
 
     return {
 
-      success: false,
+      success:
+        false,
 
       errors: [
-        "Cannot install undefined Confo."
+        "Cannot install undefined Confo.",
       ],
 
     };
@@ -391,10 +709,11 @@ export function installConfo(
 
     return {
 
-      success: false,
+      success:
+        false,
 
       errors: [
-        "Cannot install Confo without a tree."
+        "Cannot install Confo without a tree.",
       ],
 
     };
@@ -403,7 +722,7 @@ export function installConfo(
 
 
   // ===================================================
-  // GET LOGICAL ROOT
+  // RESOLVE ROOT
   // ===================================================
 
   const logicalRoot =
@@ -418,15 +737,34 @@ export function installConfo(
 
     return {
 
-      success: false,
+      success:
+        false,
 
       errors: [
-        "Failed to resolve Confo project root."
+        "Failed to resolve Confo project root.",
       ],
 
     };
 
   }
+
+
+  // ===================================================
+  // BUILD ID MAP
+  // ===================================================
+
+  const idMap =
+    buildIdMap(
+      logicalRoot
+    );
+
+
+  console.log(
+    "[ConfoProjectInstaller] ID MAP",
+    Object.fromEntries(
+      idMap.entries()
+    )
+  );
 
 
   // ===================================================
@@ -448,17 +786,20 @@ export function installConfo(
         ) =>
           installNode(
             child,
-            String(index)
+            String(index),
+            idMap
           )
       )
-      .filter(Boolean);
+      .filter(
+        Boolean
+      );
 
 
   // ===================================================
   // PROJECT TREE
   // ===================================================
 
-  const tree = {
+  const installedTree = {
 
     id:
       projectSchema?.tree?.id ||
@@ -474,13 +815,12 @@ export function installConfo(
     children:
       installedChildren,
 
-    // -------------------------------------------------
-    // PROJECT / CONFO METADATA
-    // -------------------------------------------------
-
     meta: {
 
       ...(projectSchema?.tree?.meta || {}),
+
+      source:
+        "project-tree",
 
       installedFromConfo:
         confo.id ||
@@ -498,30 +838,73 @@ export function installConfo(
   };
 
 
+  // ===================================================
+  // DEBUG
+  // ===================================================
+
   console.log(
-    "[ConfoProjectInstaller] Installed project tree",
-    tree
+    "[ConfoProjectInstaller] INSTALLED TREE",
+    installedTree
+  );
+
+
+  debugHierarchy(
+    installedTree
   );
 
 
   // ===================================================
-  // DEBUG FLATTENED HIERARCHY
+  // EXPLICIT VIDEOFEED CHECK
   // ===================================================
 
-  function debugHierarchy(
-    node,
-    depth = 0
+  let interviewVideo = null;
+
+
+  function findInterviewVideo(
+    node
   ) {
 
     if (
-      !node
+      !node ||
+      typeof node !== "object"
     ) {
+
       return;
+
     }
 
-    console.log(
-      `${"  ".repeat(depth)}${node.type} (${node.id})`
-    );
+
+    if (
+      node.meta?.sourceId ===
+      "interview-video"
+    ) {
+
+      interviewVideo =
+        node;
+
+      return;
+
+    }
+
+
+    if (
+      node.type ===
+      "VideoFeed" &&
+      (
+        node.meta?.sourceId ===
+          "interview-video" ||
+        node.id ===
+          "confo-interview-video"
+      )
+    ) {
+
+      interviewVideo =
+        node;
+
+      return;
+
+    }
+
 
     if (
       Array.isArray(
@@ -529,21 +912,55 @@ export function installConfo(
       )
     ) {
 
-      node.children.forEach(
-        child =>
-          debugHierarchy(
-            child,
-            depth + 1
-          )
-      );
+      for (
+        const child of node.children
+      ) {
+
+        if (
+          interviewVideo
+        ) {
+
+          break;
+
+        }
+
+
+        findInterviewVideo(
+          child
+        );
+
+      }
 
     }
 
   }
 
 
-  debugHierarchy(
-    tree
+  findInterviewVideo(
+    installedTree
+  );
+
+
+  console.log(
+    "[ConfoProjectInstaller] INTERVIEW VIDEO",
+    {
+
+      found:
+        !!interviewVideo,
+
+      id:
+        interviewVideo?.id ||
+        null,
+
+      sourceId:
+        interviewVideo?.meta?.sourceId ||
+        null,
+
+      meta:
+        interviewVideo?.meta ||
+        null,
+
+    }
   );
 
 
@@ -553,11 +970,13 @@ export function installConfo(
 
   return {
 
-    success: true,
+    success:
+      true,
 
     errors: [],
 
-    tree,
+    tree:
+      installedTree,
 
     confo,
 

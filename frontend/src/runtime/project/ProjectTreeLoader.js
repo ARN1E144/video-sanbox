@@ -14,9 +14,7 @@ App
 │   └── ControlButton
 └── ChatPanel
 
-becomes:
-
-Canvas elements:
+becomes Canvas elements:
 
 AgoraFeed
   parentId: null
@@ -40,8 +38,23 @@ App is a logical project root.
 
 It is NOT a Canvas element.
 
-Real Containers such as ControlPanel ARE Canvas
-elements.
+Real components such as Container / ControlPanel
+ARE Canvas elements.
+
+This loader is responsible for:
+
+- flattening the project tree
+- preserving hierarchy
+- resolving default sizes
+- calculating default positions
+- respecting explicit x/y/width/height
+- respecting vertical/horizontal/grid layout
+
+It does NOT:
+
+- modify the source Confo
+- install the Confo
+- render components
 ========================================================
 */
 
@@ -68,8 +81,8 @@ const DEFAULT_ELEMENT_SIZE = {
   },
 
   ControlPanel: {
-    width: 250,
-    height: 80,
+    width: 300,
+    height: 120,
   },
 
   ControlButton: {
@@ -83,8 +96,13 @@ const DEFAULT_ELEMENT_SIZE = {
   },
 
   TextLabel: {
-    width: 250,
+    width: 320,
     height: 50,
+  },
+
+  TextBox: {
+    width: 400,
+    height: 44,
   },
 
   ChatPanel: {
@@ -97,6 +115,16 @@ const DEFAULT_ELEMENT_SIZE = {
     height: 450,
   },
 
+  AvailabilityButton: {
+    width: 160,
+    height: 44,
+  },
+
+  MicButton: {
+    width: 140,
+    height: 44,
+  },
+
   default: {
     width: 300,
     height: 150,
@@ -106,31 +134,70 @@ const DEFAULT_ELEMENT_SIZE = {
 
 
 // =====================================================
-// DEFAULT POSITION
+// LAYOUT DEFAULTS
 // =====================================================
 
-function createDefaultPosition(
-  index = 0
+const DEFAULT_START_X = 40;
+
+const DEFAULT_START_Y = 20;
+
+const DEFAULT_LAYOUT_GAP = 12;
+
+const DEFAULT_CONTAINER_PADDING = 20;
+
+const DEFAULT_GRID_COLUMNS = 2;
+
+const DEFAULT_GRID_COLUMN_GAP = 20;
+
+const DEFAULT_GRID_ROW_GAP = 20;
+
+
+// =====================================================
+// NORMALISE LAYOUT
+// =====================================================
+
+function normaliseLayout(
+  value
 ) {
 
-  return {
+  if (
+    typeof value !== "string"
+  ) {
 
-    x: 50,
+    return "vertical";
 
-    y:
-      50 +
-      (
-        index *
-        150
-      ),
+  }
 
-  };
+
+  const layout =
+    value.toLowerCase();
+
+
+  if (
+    layout === "horizontal"
+  ) {
+
+    return "horizontal";
+
+  }
+
+
+  if (
+    layout === "grid"
+  ) {
+
+    return "grid";
+
+  }
+
+
+  return "vertical";
 
 }
 
 
 // =====================================================
-// GET SIZE
+// GET DEFAULT SIZE
 // =====================================================
 
 function getDefaultSize(
@@ -138,9 +205,7 @@ function getDefaultSize(
 ) {
 
   return (
-    DEFAULT_ELEMENT_SIZE[
-      type
-    ] ||
+    DEFAULT_ELEMENT_SIZE[type] ||
     DEFAULT_ELEMENT_SIZE.default
   );
 
@@ -148,13 +213,45 @@ function getDefaultSize(
 
 
 // =====================================================
-// CONVERT NODE
+// RESOLVE NODE SIZE
 // =====================================================
 
-function convertNode(
+function resolveSize(
+  node
+) {
+
+  const defaults =
+    getDefaultSize(
+      node?.type
+    );
+
+
+  return {
+
+    width:
+      node?.width ??
+      defaults.width,
+
+    height:
+      node?.height ??
+      defaults.height,
+
+  };
+
+}
+
+
+// =====================================================
+// CREATE ELEMENT
+// =====================================================
+
+function createElement(
   node,
-  index = 0,
-  parentId = null
+  {
+    x,
+    y,
+    parentId,
+  }
 ) {
 
   if (
@@ -167,15 +264,9 @@ function convertNode(
   }
 
 
-  const position =
-    createDefaultPosition(
-      index
-    );
-
-
   const size =
-    getDefaultSize(
-      node.type
+    resolveSize(
+      node
     );
 
 
@@ -187,7 +278,9 @@ function convertNode(
 
     id:
       node.id ||
-      `${node.type || "element"}_${index}`,
+      `${node.type || "element"}_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2)}`,
 
     // -------------------------------------------------
     // TYPE
@@ -207,26 +300,28 @@ function convertNode(
 
     // -------------------------------------------------
     // POSITION
+    //
+    // Explicit Confo/project coordinates win.
+    // Calculated coordinates are supplied by the
+    // layout engine.
     // -------------------------------------------------
 
     x:
       node.x ??
-      position.x,
+      x,
 
     y:
       node.y ??
-      position.y,
+      y,
 
     // -------------------------------------------------
     // SIZE
     // -------------------------------------------------
 
     width:
-      node.width ??
       size.width,
 
     height:
-      node.height ??
       size.height,
 
     // -------------------------------------------------
@@ -234,9 +329,7 @@ function convertNode(
     // -------------------------------------------------
 
     props: {
-
       ...(node.props || {}),
-
     },
 
     // -------------------------------------------------
@@ -257,7 +350,7 @@ function convertNode(
 
 
   // ---------------------------------------------------
-  // ROLE
+  // Preserve explicit role
   // ---------------------------------------------------
 
   if (
@@ -276,46 +369,415 @@ function convertNode(
 
 
 // =====================================================
-// FLATTEN TREE
+// POSITION HELPERS
 // =====================================================
 
-function flattenTree(
+function resolvePosition(
   node,
-  result = [],
-  parentId = null
+  fallback
 ) {
 
-  if (!node) {
+  return {
 
-    return result;
+    x:
+      node?.x ??
+      fallback.x,
+
+    y:
+      node?.y ??
+      fallback.y,
+
+  };
+
+}
+
+
+// =====================================================
+// LAYOUT CHILDREN
+// =====================================================
+
+function layoutChildren(
+  children,
+  {
+    parentId,
+    originX,
+    originY,
+    parentWidth,
+    parentLayout,
+    result,
+  }
+) {
+
+  if (
+    !Array.isArray(children) ||
+    children.length === 0
+  ) {
+
+    return;
+
+  }
+
+
+  const layout =
+    normaliseLayout(
+      parentLayout
+    );
+
+
+  const padding =
+    DEFAULT_CONTAINER_PADDING;
+
+
+  // ===================================================
+  // VERTICAL
+  // ===================================================
+
+  if (
+    layout === "vertical"
+  ) {
+
+    let currentY =
+      originY +
+      padding;
+
+
+    children.forEach(
+      child => {
+
+        if (
+          !child ||
+          typeof child !== "object"
+        ) {
+
+          return;
+
+        }
+
+
+        const childSize =
+          resolveSize(
+            child
+          );
+
+
+        const fallback =
+          {
+            x:
+              originX +
+              padding,
+
+            y:
+              currentY,
+
+          };
+
+
+        const position =
+          resolvePosition(
+            child,
+            fallback
+          );
+
+
+        processNode(
+          child,
+          {
+            parentId,
+
+            fallbackX:
+              position.x,
+
+            fallbackY:
+              position.y,
+
+            result,
+
+          }
+        );
+
+
+        const created =
+          result[
+            result.length - 1
+          ];
+
+
+        if (
+          created
+        ) {
+
+          currentY =
+            Math.max(
+              currentY,
+              created.y +
+              created.height +
+              DEFAULT_LAYOUT_GAP
+            );
+
+        }
+        else {
+
+          currentY +=
+            childSize.height +
+            DEFAULT_LAYOUT_GAP;
+
+        }
+
+      }
+    );
+
+    return;
 
   }
 
 
   // ===================================================
-  // ARRAY
+  // HORIZONTAL
   // ===================================================
 
   if (
-    Array.isArray(node)
+    layout === "horizontal"
   ) {
 
-    node.forEach(
+    let currentX =
+      originX +
+      padding;
+
+
+    let currentY =
+      originY +
+      padding;
+
+
+    children.forEach(
+      child => {
+
+        if (
+          !child ||
+          typeof child !== "object"
+        ) {
+
+          return;
+
+        }
+
+
+        const childSize =
+          resolveSize(
+            child
+          );
+
+
+        const fallback =
+          {
+            x:
+              currentX,
+
+            y:
+              currentY,
+
+          };
+
+
+        const position =
+          resolvePosition(
+            child,
+            fallback
+          );
+
+
+        processNode(
+          child,
+          {
+            parentId,
+
+            fallbackX:
+              position.x,
+
+            fallbackY:
+              position.y,
+
+            result,
+
+          }
+        );
+
+
+        const created =
+          result[
+            result.length - 1
+          ];
+
+
+        if (
+          created
+        ) {
+
+          currentX =
+            Math.max(
+              currentX,
+              created.x +
+              created.width +
+              DEFAULT_LAYOUT_GAP
+            );
+
+        }
+        else {
+
+          currentX +=
+            childSize.width +
+            DEFAULT_LAYOUT_GAP;
+
+        }
+
+      }
+    );
+
+    return;
+
+  }
+
+
+  // ===================================================
+  // GRID
+  // ===================================================
+
+  if (
+    layout === "grid"
+  ) {
+
+    const columns =
+      DEFAULT_GRID_COLUMNS;
+
+
+    const usableWidth =
+      Math.max(
+        parentWidth -
+          (
+            padding * 2
+          ) -
+          (
+            DEFAULT_GRID_COLUMN_GAP *
+            (columns - 1)
+          ),
+
+        200
+      );
+
+
+    const columnWidth =
+      usableWidth /
+      columns;
+
+
+    children.forEach(
       (
         child,
         index
       ) => {
 
-        flattenTree(
+        if (
+          !child ||
+          typeof child !== "object"
+        ) {
+
+          return;
+
+        }
+
+
+        const column =
+          index %
+          columns;
+
+
+        const row =
+          Math.floor(
+            index /
+            columns
+          );
+
+
+        const fallback =
+          {
+            x:
+              originX +
+              padding +
+              (
+                column *
+                (
+                  columnWidth +
+                  DEFAULT_GRID_COLUMN_GAP
+                )
+              ),
+
+            y:
+              originY +
+              padding +
+              (
+                row *
+                (
+                  resolveSize(
+                    child
+                  ).height +
+                  DEFAULT_GRID_ROW_GAP
+                )
+              ),
+
+          };
+
+
+        const position =
+          resolvePosition(
+            child,
+            fallback
+          );
+
+
+        processNode(
           child,
-          result,
-          parentId
+          {
+            parentId,
+
+            fallbackX:
+              position.x,
+
+            fallbackY:
+              position.y,
+
+            result,
+
+          }
         );
 
       }
     );
 
-    return result;
+  }
+
+}
+
+
+// =====================================================
+// PROCESS NODE
+// =====================================================
+
+function processNode(
+  node,
+  {
+    parentId = null,
+    fallbackX = DEFAULT_START_X,
+    fallbackY = DEFAULT_START_Y,
+    result,
+  }
+) {
+
+  if (
+    !node ||
+    typeof node !== "object"
+  ) {
+
+    return;
 
   }
 
@@ -324,82 +786,74 @@ function flattenTree(
   // APP ROOT
   // ===================================================
 
-  /*
-  -----------------------------------------------------
-  App is a logical project root.
+  if (
+    node.type === "App"
+  ) {
 
-  We deliberately do NOT create:
+    const rootLayout =
+      node.props?.layout ||
+      node.meta?.confoLayout ||
+      "vertical";
 
-  {
-    type: "App"
+
+    layoutChildren(
+      node.children,
+      {
+        parentId:
+          null,
+
+        originX:
+          fallbackX,
+
+        originY:
+          fallbackY,
+
+        parentWidth:
+          node.width ??
+          DEFAULT_ELEMENT_SIZE.App.width,
+
+        parentLayout:
+          rootLayout,
+
+        result,
+      }
+    );
+
+
+    return;
+
   }
-
-  as a Canvas element.
-  -----------------------------------------------------
-  */
-
-  const isApp =
-    node.type === "App";
-
-
-  // ===================================================
-  // CURRENT PARENT
-  // ===================================================
-
-  let currentParentId =
-    parentId;
 
 
   // ===================================================
   // REAL CANVAS ELEMENT
   // ===================================================
 
-  if (
-    !isApp
-  ) {
+  const element =
+    createElement(
+      node,
+      {
+        x:
+          fallbackX,
 
-    const element =
-      convertNode(
-        node,
-        result.length,
-        parentId
-      );
+        y:
+          fallbackY,
 
-
-    if (
-      element
-    ) {
-
-      result.push(
-        element
-      );
+        parentId,
+      }
+    );
 
 
-      /*
-      -------------------------------------------------
-      IMPORTANT
+  if (!element) {
 
-      Children now inherit this element's ID.
-
-      Therefore:
-
-      ControlPanel
-        ↓
-      ControlButton
-
-      becomes:
-
-      ControlPanel parentId:null
-      ControlButton parentId:ControlPanel.id
-      -------------------------------------------------
-      */
-
-      currentParentId =
-        element.id;
-
-    }
+    return;
 
   }
+
+
+  result.push(
+    element
+  );
 
 
   // ===================================================
@@ -409,22 +863,71 @@ function flattenTree(
   if (
     Array.isArray(
       node.children
-    )
+    ) &&
+    node.children.length > 0
   ) {
 
-    node.children.forEach(
-      child => {
+    const childLayout =
+      node.props?.layout ||
+      node.meta?.layout ||
+      "vertical";
 
-        flattenTree(
-          child,
-          result,
-          currentParentId
-        );
 
+    layoutChildren(
+      node.children,
+      {
+        parentId:
+          element.id,
+
+        originX:
+          element.x,
+
+        originY:
+          element.y,
+
+        parentWidth:
+          element.width,
+
+        parentLayout:
+          childLayout,
+
+        result,
       }
     );
 
   }
+
+}
+
+
+// =====================================================
+// FLATTEN TREE
+// =====================================================
+
+function flattenTree(
+  tree
+) {
+
+  const result =
+    [];
+
+
+  processNode(
+    tree,
+    {
+      parentId:
+        null,
+
+      fallbackX:
+        DEFAULT_START_X,
+
+      fallbackY:
+        DEFAULT_START_Y,
+
+      result,
+
+    }
+  );
 
 
   return result;
@@ -441,7 +944,8 @@ export function projectTreeToElements(
 ) {
 
   if (
-    !tree
+    !tree ||
+    typeof tree !== "object"
   ) {
 
     return [];

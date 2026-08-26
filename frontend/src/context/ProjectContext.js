@@ -1,3 +1,4 @@
+
 // src/context/ProjectContext.js
 
 import React, {
@@ -13,6 +14,11 @@ import {
 } from "../schema/gptSchema";
 
 import api from "../services/api";
+
+import {
+  useRuntimeState,
+} from "./RuntimeStateContext";
+
 
 export const ProjectContext =
   createContext(null);
@@ -66,6 +72,14 @@ export function ProjectProvider({
 }) {
 
   // ===================================================
+  // RUNTIME
+  // ===================================================
+
+  const runtime =
+    useRuntimeState();
+
+
+  // ===================================================
   // PROJECT STATE
   // ===================================================
 
@@ -80,19 +94,25 @@ export function ProjectProvider({
   const [
     viewMode,
     setViewMode,
-  ] = useState("preview");
+  ] = useState(
+    "preview"
+  );
 
 
   const [
     projectType,
     setProjectType,
-  ] = useState("single");
+  ] = useState(
+    "single"
+  );
 
 
   const [
     collapsed,
     setCollapsed,
-  ] = useState(false);
+  ] = useState(
+    false
+  );
 
 
   const [
@@ -110,19 +130,132 @@ export function ProjectProvider({
   const [
     projects,
     setProjects,
-  ] = useState([]);
+  ] = useState(
+    []
+  );
 
 
   const [
     activeProject,
-    setActiveProject,
-  ] = useState(null);
+    setActiveProjectState,
+  ] = useState(
+    null
+  );
 
 
   const [
     projectsLoading,
     setProjectsLoading,
-  ] = useState(true);
+  ] = useState(
+    true
+  );
+
+
+  // ===================================================
+  // SYNCHRONISE RUNTIME PROJECT
+  // ===================================================
+
+  const syncRuntimeProject =
+    useCallback(
+      (
+        projectId,
+        projectName = null
+      ) => {
+
+        runtime.patch(
+          "project",
+          {
+            id:
+              projectId ||
+              null,
+
+            name:
+              projectName ||
+              null,
+          }
+        );
+
+
+        console.log(
+          "[Projects] Runtime project synchronised",
+          {
+            projectId:
+              projectId ||
+              null,
+
+            projectName:
+              projectName ||
+              null,
+          }
+        );
+
+      },
+      [
+        runtime,
+      ]
+    );
+
+
+  // ===================================================
+  // CANONICAL ACTIVE PROJECT SETTER
+  // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // This must NOT depend on `projects`.
+  //
+  // Otherwise:
+  //
+  // projects changes
+  //   ↓
+  // setter identity changes
+  //   ↓
+  // loadProjects identity changes
+  //   ↓
+  // useEffect runs again
+  //
+  // ===================================================
+
+  const setActiveProject =
+    useCallback(
+      (
+        projectId,
+        projectName = null
+      ) => {
+
+        const nextId =
+          projectId ||
+          null;
+
+
+        setActiveProjectState(
+          nextId
+        );
+
+
+        syncRuntimeProject(
+          nextId,
+          projectName
+        );
+
+
+        console.log(
+          "[Projects] Active project changed",
+          {
+            projectId:
+              nextId,
+
+            projectName:
+              projectName ||
+              null,
+          }
+        );
+
+      },
+      [
+        syncRuntimeProject,
+      ]
+    );
 
 
   // ===================================================
@@ -135,7 +268,10 @@ export function ProjectProvider({
 
         try {
 
-          setProjectsLoading(true);
+          setProjectsLoading(
+            true
+          );
+
 
           console.log(
             "[Projects] Loading projects..."
@@ -146,14 +282,18 @@ export function ProjectProvider({
             await api.get(
               `${API_URL}/api/projects`,
               {
-                withCredentials: true,
+                withCredentials:
+                  true,
               }
             );
 
 
           const loadedProjects =
-            response.data?.projects ||
-            [];
+            Array.isArray(
+              response.data?.projects
+            )
+              ? response.data.projects
+              : [];
 
 
           console.log(
@@ -167,23 +307,40 @@ export function ProjectProvider({
           );
 
 
-        } catch (error) {
+        }
+        catch (
+          error
+        ) {
 
           console.error(
             "[Projects] Failed to load",
             error
           );
 
-          setProjects([]);
 
-        } finally {
+          setProjects(
+            []
+          );
 
-          setProjectsLoading(false);
+
+          setActiveProject(
+            null
+          );
+
+
+        }
+        finally {
+
+          setProjectsLoading(
+            false
+          );
 
         }
 
       },
-      []
+      [
+        setActiveProject,
+      ]
     );
 
 
@@ -191,114 +348,315 @@ export function ProjectProvider({
   // INITIAL PROJECT LOAD
   // ===================================================
 
-  useEffect(() => {
+  useEffect(
+    () => {
 
-    loadProjects();
+      loadProjects();
 
-  }, [
-    loadProjects,
-  ]);
-  
-
-  useEffect(() => {
-
-  if (
-    !activeProject ||
-    projectsLoading
-  ) {
-    return;
-  }
-
-  const exists =
-    projects.some(
-      project =>
-        project._id === activeProject
-    );
-
-  if (!exists) {
-
-    console.log(
-      "[Projects] Clearing stale active project:",
-      activeProject
-    );
-
-    setActiveProject(null);
-  }
-
-}, [
-  projects,
-  activeProject,
-  projectsLoading,
-]);
+    },
+    [
+      loadProjects,
+    ]
+  );
 
 
   // ===================================================
-  // CREATE PROJECT
+  // STALE ACTIVE PROJECT CHECK
   // ===================================================
 
-  const saveProject = useCallback(
-  async (name) => {
+  useEffect(
+    () => {
 
-    if (!name?.trim()) {
-      return;
-    }
+      if (
+        !activeProject ||
+        projectsLoading
+      ) {
 
-    const trimmedName = name.trim();
+        return;
 
-    // =====================================================
-    // EXISTING PROJECT
-    // =====================================================
+      }
 
-    if (activeProject) {
 
-      const currentProject =
-        projects.find(
+      const exists =
+        projects.some(
           project =>
-            project._id === activeProject
+            String(
+              project?._id
+            ) ===
+            String(
+              activeProject
+            )
         );
 
-      // ---------------------------------------------------
-      // Active project no longer belongs to this user
-      // ---------------------------------------------------
 
-      if (!currentProject) {
+      if (
+        !exists
+      ) {
 
-        console.warn(
-          "[Projects] Active project not found:",
+        console.log(
+          "[Projects] Clearing stale active project:",
           activeProject
         );
 
-        // Clear stale project selection.
-        setActiveProject(null);
 
-        // Treat this save as a NEW project.
-        // We deliberately continue below rather than return.
+        setActiveProject(
+          null
+        );
+
+
+        setProjectSchema(
+          makeEmptyProjectSchema()
+        );
+
+
+        setProjectType(
+          "single"
+        );
+
+
+        setBackgroundConfigs(
+          DEFAULT_BACKGROUND_CONFIGS
+        );
+
       }
 
-      // ---------------------------------------------------
-      // Existing project found
-      // ---------------------------------------------------
+    },
+    [
+      projects,
+      activeProject,
+      projectsLoading,
+      setActiveProject,
+    ]
+  );
 
-      else {
 
-        const confirmed =
-          window.confirm(
-            `Save changes to "${currentProject.name}"?\n\n` +
-            `This will overwrite the existing saved version of this project.`
+  // ===================================================
+  // CREATE / SAVE PROJECT
+  // ===================================================
+
+  const saveProject =
+    useCallback(
+      async (
+        name
+      ) => {
+
+        if (
+          !name?.trim()
+        ) {
+
+          return null;
+
+        }
+
+
+        const trimmedName =
+          name.trim();
+
+
+        // =================================================
+        // EXISTING PROJECT
+        // =================================================
+
+        if (
+          activeProject
+        ) {
+
+          const currentProject =
+            projects.find(
+              project =>
+                String(
+                  project?._id
+                ) ===
+                String(
+                  activeProject
+                )
+            );
+
+
+          // ------------------------------------------------
+          // Active project no longer exists locally.
+          // ------------------------------------------------
+
+          if (
+            !currentProject
+          ) {
+
+            console.warn(
+              "[Projects] Active project record unavailable:",
+              activeProject
+            );
+
+
+            setActiveProject(
+              null
+            );
+
+          }
+
+          // ------------------------------------------------
+          // Existing project
+          // ------------------------------------------------
+
+          else {
+
+            const confirmed =
+              window.confirm(
+                `Save changes to "${currentProject.name}"?\n\n` +
+                `This will overwrite the existing saved version of this project.`
+              );
+
+
+            if (
+              !confirmed
+            ) {
+
+              return null;
+
+            }
+
+
+            try {
+
+              const response =
+                await api.patch(
+                  `${API_URL}/api/projects/${activeProject}`,
+                  {
+
+                    name:
+                      currentProject.name,
+
+                    type:
+                      projectType,
+
+                    schema:
+                      projectSchema,
+
+                    backgroundConfigs:
+                      backgroundConfigs,
+
+                  },
+                  {
+                    withCredentials:
+                      true,
+                  }
+                );
+
+
+              const updatedProject =
+                response.data?.project;
+
+
+              if (
+                !updatedProject
+              ) {
+
+                throw new Error(
+                  "Server did not return updated project."
+                );
+
+              }
+
+
+              setProjects(
+                previous =>
+                  previous.map(
+                    project =>
+                      project._id ===
+                      activeProject
+
+                        ? updatedProject
+
+                        : project
+                  )
+              );
+
+
+              syncRuntimeProject(
+                activeProject,
+                updatedProject.name ||
+                  currentProject.name ||
+                  null
+              );
+
+
+              console.log(
+                "[Projects] Updated project:",
+                updatedProject
+              );
+
+
+              return activeProject;
+
+            }
+            catch (
+              error
+            ) {
+
+              console.error(
+                "[Projects] Update failed:",
+                error
+              );
+
+
+              alert(
+                error.response?.data?.error ||
+                error.response?.data?.message ||
+                "Failed to save project."
+              );
+
+
+              return null;
+
+            }
+
+          }
+
+        }
+
+
+        // =================================================
+        // NEW PROJECT
+        // =================================================
+
+        const duplicate =
+          projects.some(
+            project =>
+              project.name
+                ?.trim()
+                .toLowerCase() ===
+              trimmedName
+                .toLowerCase()
           );
 
-        if (!confirmed) {
-          return;
+
+        if (
+          duplicate
+        ) {
+
+          alert(
+            `A project named "${trimmedName}" already exists.\n\n` +
+            `Please choose a different project name.`
+          );
+
+
+          return null;
+
         }
+
+
+        // =================================================
+        // CREATE
+        // =================================================
 
         try {
 
           const response =
-            await api.patch(
-              `/projects/${activeProject}`,
+            await api.post(
+              `${API_URL}/api/projects`,
               {
+
                 name:
-                  currentProject.name,
+                  trimmedName,
 
                 type:
                   projectType,
@@ -306,150 +664,144 @@ export function ProjectProvider({
                 schema:
                   projectSchema,
 
-                backgroundConfigs,
+                backgroundConfigs:
+                  backgroundConfigs,
+
+              },
+              {
+                withCredentials:
+                  true,
               }
             );
 
-          const updatedProject =
+
+          const newProject =
             response.data?.project;
 
-          if (!updatedProject) {
+
+          if (
+            !newProject
+          ) {
+
             throw new Error(
-              "Server did not return updated project."
+              "Server did not return created project."
             );
+
           }
 
+
+          const newProjectId =
+            newProject._id ||
+            newProject.id;
+
+
+          if (
+            !newProjectId
+          ) {
+
+            throw new Error(
+              "Created project has no ID."
+            );
+
+          }
+
+
           setProjects(
-            prev =>
-              prev.map(
-                project =>
-                  project._id === activeProject
-                    ? updatedProject
-                    : project
-              )
+            previous => [
+              ...previous,
+              newProject,
+            ]
           );
+
+
+          setActiveProject(
+            newProjectId,
+            newProject.name ||
+              trimmedName
+          );
+
+
+          if (
+            newProject.schema
+          ) {
+
+            setProjectSchema(
+              newProject.schema
+            );
+
+          }
+
+
+          if (
+            newProject.type
+          ) {
+
+            setProjectType(
+              newProject.type
+            );
+
+          }
+
+
+          if (
+            newProject.backgroundConfigs
+          ) {
+
+            setBackgroundConfigs(
+              newProject.backgroundConfigs
+            );
+
+          }
+
 
           console.log(
-            "[Projects] Updated project:",
-            updatedProject
+            "[Projects] Created project:",
+            {
+              id:
+                newProjectId,
+
+              name:
+                newProject.name ||
+                trimmedName,
+            }
           );
 
-          return activeProject;
 
-        } catch (error) {
+          return newProjectId;
+
+        }
+        catch (
+          error
+        ) {
 
           console.error(
-            "[Projects] Update failed:",
+            "[Projects] Create failed:",
             error
           );
 
+
           alert(
             error.response?.data?.error ||
-            "Failed to save project."
+            error.response?.data?.message ||
+            "Failed to create project."
           );
 
-          return;
+
+          return null;
+
         }
-      }
-    }
 
-    // =====================================================
-    // NEW PROJECT
-    // =====================================================
-
-    const duplicate =
-      projects.some(
-        project =>
-          project.name?.trim().toLowerCase() ===
-          trimmedName.toLowerCase()
-      );
-
-    if (duplicate) {
-
-      alert(
-        `A project named "${trimmedName}" already exists.\n\n` +
-        `Please choose a different project name.`
-      );
-
-      return;
-    }
-
-    // =====================================================
-    // CREATE
-    // =====================================================
-
-    try {
-
-      const response =
-        await api.post(
-          "/projects",
-          {
-            name:
-              trimmedName,
-
-            type:
-              projectType,
-
-            schema:
-              projectSchema,
-
-            backgroundConfigs,
-          }
-        );
-
-      const newProject =
-        response.data?.project;
-
-      if (!newProject) {
-
-        throw new Error(
-          "Server did not return created project."
-        );
-
-      }
-
-      // IMPORTANT:
-      // projects is an ARRAY.
-      setProjects(
-        prev => [
-          ...prev,
-          newProject
-        ]
-      );
-
-      setActiveProject(
-        newProject._id
-      );
-
-      console.log(
-        "[Projects] Created project:",
-        newProject
-      );
-
-      return newProject._id;
-
-    } catch (error) {
-
-      console.error(
-        "[Projects] Create failed:",
-        error
-      );
-
-      alert(
-        error.response?.data?.error ||
-        "Failed to create project."
-      );
-    }
-
-  },
-  [
-    activeProject,
-    projects,
-    projectType,
-    projectSchema,
-    backgroundConfigs,
-  ]
-);
+      },
+      [
+        activeProject,
+        projects,
+        projectType,
+        projectSchema,
+        backgroundConfigs,
+        setActiveProject,
+        syncRuntimeProject,
+      ]
+    );
 
 
   // ===================================================
@@ -458,7 +810,20 @@ export function ProjectProvider({
 
   const loadProject =
     useCallback(
-      async (id) => {
+      async (
+        id
+      ) => {
+
+        if (
+          !id
+        ) {
+
+          throw new Error(
+            "Project ID is required."
+          );
+
+        }
+
 
         try {
 
@@ -470,14 +835,11 @@ export function ProjectProvider({
 
           const response =
             await api.get(
-
               `${API_URL}/api/projects/${id}`,
-
               {
                 withCredentials:
                   true,
-              }
-
+                }
             );
 
 
@@ -485,7 +847,9 @@ export function ProjectProvider({
             response.data?.project;
 
 
-          if (!project) {
+          if (
+            !project
+          ) {
 
             throw new Error(
               "Project not found."
@@ -494,57 +858,139 @@ export function ProjectProvider({
           }
 
 
+          const projectId =
+            project._id ||
+            project.id;
+
+
+          if (
+            !projectId
+          ) {
+
+            throw new Error(
+              "Loaded project has no ID."
+            );
+
+          }
+
+
+          // ------------------------------------------------
+          // Update local project list.
+          // ------------------------------------------------
+
+          setProjects(
+            previous => {
+
+              const exists =
+                previous.some(
+                  existing =>
+                    String(
+                      existing?._id
+                    ) ===
+                    String(
+                      projectId
+                    )
+                );
+
+
+              if (
+                exists
+              ) {
+
+                return previous.map(
+                  existing =>
+                    String(
+                      existing?._id
+                    ) ===
+                    String(
+                      projectId
+                    )
+
+                      ? project
+
+                      : existing
+                );
+
+              }
+
+
+              return [
+                ...previous,
+                project,
+              ];
+
+            }
+          );
+
+
+          // ------------------------------------------------
+          // Active project + runtime.
+          // ------------------------------------------------
+
           setActiveProject(
-            project._id
+            projectId,
+            project.name ||
+              null
           );
 
 
           setProjectType(
             project.type ||
-            "single"
+              "single"
           );
 
 
           setProjectSchema(
             project.schema ||
-            makeEmptyProjectSchema()
+              makeEmptyProjectSchema()
           );
 
 
           setBackgroundConfigs(
             project.backgroundConfigs ||
-            DEFAULT_BACKGROUND_CONFIGS
+              DEFAULT_BACKGROUND_CONFIGS
           );
 
 
           console.log(
             "[Projects] Loaded project",
-            project
+            {
+              id:
+                projectId,
+
+              name:
+                project.name ||
+                null,
+            }
           );
 
 
           return project;
 
-        } catch (error) {
+        }
+        catch (
+          error
+        ) {
 
           console.error(
             "[Projects] Load failed",
             error
           );
 
+
           throw error;
 
         }
 
       },
-      []
+      [
+        setActiveProject,
+      ]
     );
 
 
   // ===================================================
   // UPDATE PROJECT
-  //
-  // This is what we'll use when Canvas changes.
   // ===================================================
 
   const updateProject =
@@ -554,11 +1000,14 @@ export function ProjectProvider({
         updates
       ) => {
 
-        if (!id) {
+        if (
+          !id
+        ) {
 
           console.warn(
             "[Projects] No project ID."
           );
+
 
           return null;
 
@@ -569,16 +1018,12 @@ export function ProjectProvider({
 
           const response =
             await api.patch(
-
               `${API_URL}/api/projects/${id}`,
-
               updates,
-
               {
                 withCredentials:
                   true,
               }
-
             );
 
 
@@ -586,7 +1031,9 @@ export function ProjectProvider({
             response.data?.project;
 
 
-          if (!updatedProject) {
+          if (
+            !updatedProject
+          ) {
 
             throw new Error(
               "Server did not return updated project."
@@ -596,31 +1043,94 @@ export function ProjectProvider({
 
 
           setProjects(
-            prev =>
-              prev.map(
+            previous =>
+              previous.map(
                 project =>
-                  project._id === id
+                  project._id ===
+                  id
+
                     ? updatedProject
+
                     : project
               )
           );
 
 
+          if (
+            String(id) ===
+            String(activeProject)
+          ) {
+
+            syncRuntimeProject(
+              id,
+              updatedProject.name ||
+                null
+            );
+
+
+            if (
+              updatedProject.schema
+            ) {
+
+              setProjectSchema(
+                updatedProject.schema
+              );
+
+            }
+
+
+            if (
+              updatedProject.type
+            ) {
+
+              setProjectType(
+                updatedProject.type
+              );
+
+            }
+
+
+            if (
+              updatedProject.backgroundConfigs
+            ) {
+
+              setBackgroundConfigs(
+                updatedProject.backgroundConfigs
+              );
+
+            }
+
+          }
+
+
+          console.log(
+            "[Projects] Updated project:",
+            updatedProject
+          );
+
+
           return updatedProject;
 
-        } catch (error) {
+        }
+        catch (
+          error
+        ) {
 
           console.error(
             "[Projects] Update failed",
             error
           );
 
+
           throw error;
 
         }
 
       },
-      []
+      [
+        activeProject,
+        syncRuntimeProject,
+      ]
     );
 
 
@@ -630,57 +1140,96 @@ export function ProjectProvider({
 
   const deleteProject =
     useCallback(
-      async (id) => {
+      async (
+        id
+      ) => {
 
-        if (!id) {
-          return;
+        if (
+          !id
+        ) {
+
+          return false;
+
         }
 
 
         try {
 
           await api.delete(
-
             `${API_URL}/api/projects/${id}`,
-
             {
               withCredentials:
                 true,
             }
-
           );
 
 
           setProjects(
-            prev =>
-              prev.filter(
+            previous =>
+              previous.filter(
                 project =>
-                  project._id !== id
+                  project._id !==
+                  id
               )
           );
 
 
           if (
-            activeProject === id
+            String(id) ===
+            String(activeProject)
           ) {
 
             setActiveProject(
               null
             );
 
+
             setProjectSchema(
               makeEmptyProjectSchema()
+            );
+
+
+            setProjectType(
+              "single"
+            );
+
+
+            setBackgroundConfigs(
+              DEFAULT_BACKGROUND_CONFIGS
+            );
+
+
+            syncRuntimeProject(
+              null,
+              null
+            );
+
+
+            console.log(
+              "[Projects] Runtime project cleared"
             );
 
           }
 
 
-        } catch (error) {
+          console.log(
+            "[Projects] Deleted project:",
+            id
+          );
+
+
+          return true;
+
+        }
+        catch (
+          error
+        ) {
 
           console.error(
             "[Projects] Delete failed",
             error
           );
+
 
           throw error;
 
@@ -689,14 +1238,14 @@ export function ProjectProvider({
       },
       [
         activeProject,
+        setActiveProject,
+        syncRuntimeProject,
       ]
     );
 
 
   // ===================================================
   // SAVE CURRENT PROJECT
-  //
-  // Used by Canvas / autosave.
   // ===================================================
 
   const saveCurrentProject =
@@ -710,6 +1259,7 @@ export function ProjectProvider({
           console.warn(
             "[Projects] No active project."
           );
+
 
           return null;
 
@@ -726,7 +1276,8 @@ export function ProjectProvider({
             type:
               projectType,
 
-            backgroundConfigs,
+            backgroundConfigs:
+              backgroundConfigs,
 
           }
         );
@@ -750,39 +1301,38 @@ export function ProjectProvider({
     useMemo(
       () => ({
 
-        // Project schema
         projectSchema,
         setProjectSchema,
 
-        // View
         viewMode,
         setViewMode,
 
-        // Type
         projectType,
         setProjectType,
 
-        // Background
         backgroundConfigs,
         setBackgroundConfigs,
 
-        // Projects
         projects,
+
         activeProject,
+
         setActiveProject,
 
-        // API
         loadProjects,
+
         saveProject,
+
         loadProject,
+
         updateProject,
+
         deleteProject,
+
         saveCurrentProject,
 
-        // Loading
         projectsLoading,
 
-        // UI
         collapsed,
         setCollapsed,
 
@@ -794,6 +1344,7 @@ export function ProjectProvider({
         backgroundConfigs,
         projects,
         activeProject,
+        setActiveProject,
         loadProjects,
         saveProject,
         loadProject,
@@ -806,14 +1357,24 @@ export function ProjectProvider({
     );
 
 
+  // ===================================================
+  // PROVIDER
+  // ===================================================
+
   return (
+
     <ProjectContext.Provider
-      value={value}
+      value={
+        value
+      }
     >
 
-      {children}
+      {
+        children
+      }
 
     </ProjectContext.Provider>
+
   );
 
 }
@@ -843,3 +1404,4 @@ export function useProjectContext() {
   return ctx;
 
 }
+
