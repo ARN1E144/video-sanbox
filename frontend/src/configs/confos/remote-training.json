@@ -1,93 +1,259 @@
 {
-  "id": "confo.remote_training",
-  "name": "Remote Training",
-  "version": 1,
-  "type": "confo",
-  "description": "Host-led remote training with live video, controls and chat.",
-  "tree": {
-    "id": "root",
-    "type": "Container",
+"id": "confo.remote-training",
+"name": "Remote Training",
+"version": 4,
+"type": "confo",
+"description": "Host-led remote training with separate Host and Client experiences.",
+"capabilities": [
+"video",
+"audio",
+"realtime",
+"training",
+"multi-role"
+],
+"tree": {
+"id": "root",
+"type": "Container",
+"props": {
+"layout": "vertical",
+"backgroundColor": "#181818"
+},
+"children": [
+
+  {
+    "id": "training-host-header",
+    "type": "TextLabel",
+    "role": "host",
+    "x": 40,
+    "y": 30,
+    "width": 500,
+    "height": 40,
     "props": {
-      "layout": "vertical",
-      "backgroundColor": "#181818"
-    },
-    "children": [
-      {
-        "id": "training-header",
-        "type": "TextLabel",
-        "props": {
-          "label": "Remote Training",
-          "style": {
-            "color": "#FFFFFF",
-            "fontSize": "24px"
-          }
-        }
-      },
-      {
-        "id": "training-video",
-        "type": "AgoraFeed",
-        "props": {
-          "channel": "{{call.channel}}",
-          "autoJoin": true,
-          "publishLocal": true,
-          "muted": false,
-          "cameraOff": false,
-          "mirror": true,
-          "objectFit": "cover",
-          "borderRadius": 12,
-          "style": {
-            "backgroundColor": "#000000"
-          }
-        }
-      },
-      {
-        "id": "training-mic",
-        "type": "ControlButton",
-        "props": {
-          "label": "Toggle Mic",
-          "action": "call.toggleMic",
-          "targetId": "training-video"
-        }
-      },
-      {
-        "id": "training-video-toggle",
-        "type": "ControlButton",
-        "props": {
-          "label": "Toggle Camera",
-          "action": "call.toggleVideo",
-          "targetId": "training-video"
-        }
-      },
-     {
-        "id": "training-start",
-        "type": "ControlButton",
-        "props": {
-          "label": "Start Training",
-          "action": "call.startCall",
-          "targetId": "training-video"
-        }
-      },
-      {
-        "id": "end-training",
-        "type": "ControlButton",
-        "x": 980,
-        "y": 570,
-        "width": 180,
-        "height": 50,
-        "props": {
-          "label": "End Training",
-          "action": "call.endCall"
-        }
-      },
-      {
-        "id": "training-chat",
-        "type": "ChatPanel",
-        "x": 980,
-        "y": 100,
-        "width": 300,
-        "height": 400,
-        "props": {}
+      "label": "Remote Training",
+      "style": {
+        "color": "#FFFFFF",
+        "fontSize": "24px",
+        "fontWeight": "700"
       }
-    ]
+    }
+  },
+
+  {
+    "id": "training-host-video",
+    "type": "AgoraFeed",
+    "role": "host",
+    "x": 40,
+    "y": 90,
+    "width": 800,
+    "height": 450,
+    "props": {
+      "channel": "{{call.channel}}",
+      "autoJoin": true,
+      "publishLocal": true,
+      "muted": false,
+      "cameraOff": false,
+      "mirror": true,
+      "objectFit": "cover",
+      "borderRadius": 12,
+      "style": {
+        "backgroundColor": "#000000"
+      }
+    }
+  },
+
+  {
+    "id": "training-host-mic",
+    "type": "ControlButton",
+    "role": "host",
+    "x": 40,
+    "y": 570,
+    "width": 140,
+    "height": 44,
+    "props": {
+      "label": "Toggle Mic",
+      "action": "call.toggleMic",
+      "targetId": "training-host-video"
+    }
+  },
+
+  {
+    "id": "training-host-video-toggle",
+    "type": "ControlButton",
+    "role": "host",
+    "x": 190,
+    "y": 570,
+    "width": 140,
+    "height": 44,
+    "props": {
+      "label": "Toggle Camera",
+      "action": "call.toggleVideo",
+      "targetId": "training-host-video"
+    }
+  },
+
+  {
+    "id": "training-host-start",
+    "type": "ControlButton",
+    "role": "host",
+    "props": {
+      "label": "Start Training",
+      "action": "call.startCall",
+      "targetId": "training-host-video",
+      "params": {
+        "recipientId": "69534eb360f225184124e21c"
+
+      }
+    }
+  },
+
+  {
+    "id": "training-host-end",
+    "type": "ControlButton",
+    "role": "host",
+    "x": 510,
+    "y": 570,
+    "width": 140,
+    "height": 44,
+    "props": {
+      "label": "End Training",
+      "action": "call.endCall",
+      "targetId": "training-host-video"
+    }
+  },
+
+  {
+    "id": "training-client-header",
+    "type": "TextLabel",
+    "role": "client",
+    "x": 40,
+    "y": 30,
+    "width": 500,
+    "height": 40,
+    "props": {
+      "label": "Remote Training",
+      "style": {
+        "color": "#FFFFFF",
+        "fontSize": "24px",
+        "fontWeight": "700"
+      }
+    }
+  },
+
+  {
+    "id": "training-client-status",
+    "type": "TextLabel",
+    "role": "client",
+    "x": 40,
+    "y": 72,
+    "width": 600,
+    "height": 24,
+    "props": {
+      "label": "Waiting for your training session...",
+      "style": {
+        "color": "#AAAAAA",
+        "fontSize": "14px"
+      }
+    }
+  },
+
+  {
+    "id": "training-client-check",
+    "type": "ControlButton",
+    "role": "client",
+    "x": 40,
+    "y": 110,
+    "width": 180,
+    "height": 44,
+    "props": {
+      "label": "Check for Training",
+      "action": "call.fetchPendingCalls"
+    }
+  },
+
+  {
+    "id": "training-client-video",
+    "type": "AgoraFeed",
+    "role": "client",
+    "x": 40,
+    "y": 170,
+    "width": 800,
+    "height": 450,
+    "props": {
+      "channel": "{{call.channel}}",
+      "autoJoin": false,
+      "publishLocal": true,
+      "muted": false,
+      "cameraOff": false,
+      "mirror": true,
+      "objectFit": "cover",
+      "borderRadius": 12,
+      "style": {
+        "backgroundColor": "#000000"
+      }
+    }
+  },
+
+  {
+    "id": "training-client-join",
+    "type": "ControlButton",
+    "role": "client",
+    "x": 40,
+    "y": 640,
+    "width": 140,
+    "height": 44,
+    "props": {
+      "label": "Join Training",
+      "action": "call.joinInvitedCall",
+      "targetId": "training-client-video"
+    }
+  },
+
+  {
+    "id": "training-client-mic",
+    "type": "ControlButton",
+    "role": "client",
+    "x": 190,
+    "y": 640,
+    "width": 140,
+    "height": 44,
+    "props": {
+      "label": "Toggle Mic",
+      "action": "call.toggleMic",
+      "targetId": "training-client-video"
+    }
+  },
+
+  {
+    "id": "training-client-video-toggle",
+    "type": "ControlButton",
+    "role": "client",
+    "x": 340,
+    "y": 640,
+    "width": 140,
+    "height": 44,
+    "props": {
+      "label": "Toggle Camera",
+      "action": "call.toggleVideo",
+      "targetId": "training-client-video"
+    }
+  },
+
+  {
+    "id": "training-client-leave",
+    "type": "ControlButton",
+    "role": "client",
+    "x": 490,
+    "y": 640,
+    "width": 140,
+    "height": 44,
+    "props": {
+      "label": "Leave Training",
+      "action": "call.endCall",
+      "targetId": "training-client-video"
+    }
   }
+
+]
+
+}
 }

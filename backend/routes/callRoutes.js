@@ -1,3 +1,5 @@
+// backend/routes/calls.js
+
 import express from "express";
 import crypto from "crypto";
 import mongoose from "mongoose";
@@ -6,515 +8,1812 @@ import Call from "../models/call.js";
 import Membership from "../models/Membership.js";
 import User from "../models/User.js";
 
-import { requireAuth } from "../middleware/requireAuth.js";
+import {
+  requireAuth,
+} from "../middleware/requireAuth.js";
+
 import requireTenant from "../middleware/requireTenant.js";
 
-const router = express.Router();
 
-function isEmployeeRole(role) {
-  return role === "owner" || role === "admin" || role === "builder" || role === "operative";
-}
+const router =
+  express.Router();
 
-async function loadMembership(req) {
-  const { userId, tenantId } = req.user;
 
-  const membership = await Membership.findOne({
-    userId,
-    tenantId,
-  });
+// =====================================================
+// CALL POLICY
+// =====================================================
+//
+// Queue mode:
+//
+//   client creates call
+//        ↓
+//   waiting
+//        ↓
+//   employee sees /available
+//        ↓
+//   employee accepts
+//
+// Targeted mode:
+//
+//   caller creates call with recipientId
+//        ↓
+//   ringing
+//        ↓
+//   recipient sees /pending
+//        ↓
+//   recipient joins
+//
+// =====================================================
 
-  console.log("[LOAD MEMBERSHIP DEBUG]", {
-    userId,
-    tenantId,
-    membershipId: membership?._id,
-    role: membership?.role,
-    availability: membership?.availability,
-  });
-
-  return membership;
-}
-
-function makeChannelName({ tenantId, userId }) {
-  const short = crypto.randomBytes(6).toString("hex");
-  return `t_${String(tenantId).slice(-6)}_u_${String(userId).slice(-6)}_${short}`;
-}
-
-// ---- Call policy (Jan launch default) ----
-// "queue" = client creates waiting call; responder claims atomically
-// "room"  = creator makes a channel; others can join (no claim needed)
 const DEFAULT_CALL_POLICY = {
-  mode: "queue",
-  creators: ["member", "owner", "admin", "builder", "operative"], // who can create a call
-  responders: ["owner", "admin", "builder", "operative"], // who can accept/claim
+
+  mode:
+    "queue",
+
+  creators: [
+    "member",
+    "owner",
+    "admin",
+    "builder",
+    "operative",
+  ],
+
+  responders: [
+    "owner",
+    "admin",
+    "builder",
+    "operative",
+  ],
+
 };
 
-// role helpers using policy (NOT platform permissions)
-function canCreateCall(membership, policy = DEFAULT_CALL_POLICY) {
-  return !!membership?.role && policy.creators.includes(membership.role);
-}
 
-function canAcceptCall(membership, policy = DEFAULT_CALL_POLICY) {
-  return !!membership?.role && policy.responders.includes(membership.role);
-}
+// =====================================================
+// CONSTANTS
+// =====================================================
 
-/**
- * CLIENT: Create a call request (status=waiting)
- * POST /api/calls
- */
-router.post("/", requireAuth, requireTenant, async (req, res) => {
-  console.log("REQ USER:", req.user);
-    
-  try {
-    const membership = await loadMembership(req);
+const WAITING_CALL_EXPIRY_MINUTES =
+  5;
 
-    console.log("[CALLS AVAILABLE] Loaded membership:", {
-      id: membership?._id,
-      userId: membership?.userId,
-      tenantId: membership?.tenantId,
-      role: membership?.role,
-      availability: membership?.availability,
-    });
-    const callPolicy = DEFAULT_CALL_POLICY;
+const MAX_AVAILABLE_CALLS =
+  50;
 
-    if (!membership) return res.status(403).json({ error: "Not a member of this tenant" });
+const MAX_PENDING_CALLS =
+  10;
 
-    // Option A: "member" is client. (You can relax this later.)
-    if (!canCreateCall(membership, callPolicy)) {
-    return res.status(403).json({
-    error: `Not allowed to create calls (role=${membership.role})`,
-  });
-}
 
-    const channelName = makeChannelName({ tenantId: req.user.tenantId, userId: req.user.userId });
+// =====================================================
+// HELPERS
+// =====================================================
 
-    const call = await Call.create({
-      tenantId: req.user.tenantId,
-      clientUserId: req.user.userId,
-      channelName,
-      status: "waiting",
-    });
+function isValidObjectId(
+  value
+) {
 
-    return res.status(201).json({ ok: true, call });
-  } catch (err) {
-    console.error("POST /api/calls error:", err);
-    return res.status(500).json({ error: "Failed to create call" });
-  }
-});
-
-/**
- * EMPLOYEE: List available calls
- * GET /api/calls/available
- */
-router.get("/available", requireAuth, requireTenant, async (req, res) => {
-
-   console.log("🔥🔥🔥 AVAILABLE ROUTE HIT 🔥🔥🔥");
-  console.log(
-    "GET /api/calls/available called by user:",
-    req.user.userId
+  return mongoose.isValidObjectId(
+    value
   );
 
-  
+}
 
-  try {
-    
-    const membership = await loadMembership(req);
-    const callPolicy = DEFAULT_CALL_POLICY;
 
-    if (!membership) {
-      return res.status(403).json({
-        error: "Not a member of this tenant",
+function makeChannelName({
+  tenantId,
+  userId,
+}) {
+
+  const short =
+    crypto
+      .randomBytes(6)
+      .toString("hex");
+
+
+  return (
+    `t_${String(tenantId).slice(-6)}` +
+    `_u_${String(userId).slice(-6)}` +
+    `_${short}`
+  );
+
+}
+
+
+function canCreateCall(
+  membership,
+  policy = DEFAULT_CALL_POLICY
+) {
+
+  return Boolean(
+    membership?.role &&
+    policy.creators.includes(
+      membership.role
+    )
+  );
+
+}
+
+
+function canAcceptCall(
+  membership,
+  policy = DEFAULT_CALL_POLICY
+) {
+
+  return Boolean(
+    membership?.role &&
+    policy.responders.includes(
+      membership.role
+    )
+  );
+
+}
+
+
+// =====================================================
+// LOAD MEMBERSHIP
+// =====================================================
+
+async function loadMembership(
+  req
+) {
+
+  const {
+    userId,
+    tenantId,
+  } =
+    req.user;
+
+
+  return Membership.findOne({
+
+    userId,
+
+    tenantId,
+
+  });
+
+}
+
+
+// =====================================================
+// REQUIRE MEMBERSHIP
+// =====================================================
+
+async function requireMembership(
+  req,
+  res
+) {
+
+  const membership =
+    await loadMembership(
+      req
+    );
+
+
+  if (
+    !membership
+  ) {
+
+    res
+      .status(403)
+      .json({
+
+        error:
+          "Not a member of this tenant",
+
       });
-    }
 
-    if (!canAcceptCall(membership, callPolicy)) {
-      return res.status(403).json({
-        error: "Not allowed to view available calls",
-      });
-    }
 
-    // =====================================================
-    // AVAILABILITY GATE
-    // =====================================================
+    return null;
 
-    if (!membership.isAvailable) {
-      console.log(
-        "[CALLS AVAILABLE] User is unavailable:",
-        req.user.userId
-      );
+  }
 
-      return res.json({
-        ok: true,
-        calls: [],
-      });
-    }
 
-    // =====================================================
-    // FETCH WAITING CALLS
-    // =====================================================
+  return membership;
 
-    console.log("[CALLS AVAILABLE] Query:", {
-      tenantId: String(req.user.tenantId),
-      userId: String(req.user.userId),
-      isAvailable: membership.availability?.isAvailable,
-    });
+}
 
-    
-    async function expireWaitingCalls(tenantId) {
-      const CALL_EXPIRY_MINUTES = 5;
 
-      const expiryDate = new Date(
-        Date.now() - CALL_EXPIRY_MINUTES * 60 * 1000
-      );
+// =====================================================
+// EXPIRE WAITING CALLS
+// =====================================================
+//
+// Queue calls only.
+//
+// Targeted calls use "ringing" and therefore remain
+// outside this expiry process for now.
+//
+// =====================================================
 
-      const result = await Call.updateMany(
-        {
-          tenantId,
-          status: "waiting",
-          createdAt: { $lt: expiryDate },
+async function expireWaitingCalls(
+  tenantId
+) {
+
+  const expiryDate =
+    new Date(
+      Date.now() -
+      WAITING_CALL_EXPIRY_MINUTES *
+      60 *
+      1000
+    );
+
+
+  const result =
+    await Call.updateMany(
+
+      {
+
+        tenantId,
+
+        status:
+          "waiting",
+
+        createdAt: {
+          $lt:
+            expiryDate,
         },
+
+      },
+
+      {
+
+        $set: {
+
+          status:
+            "expired",
+
+          expiredAt:
+            new Date(),
+
+        },
+
+      }
+
+    );
+
+
+  if (
+    result.modifiedCount >
+    0
+  ) {
+
+    console.log(
+      "[Calls] Expired waiting calls",
+      {
+
+        tenantId:
+          String(
+            tenantId
+          ),
+
+        count:
+          result.modifiedCount,
+
+      }
+    );
+
+  }
+
+
+  return result.modifiedCount;
+
+}
+
+
+// =====================================================
+// ENRICH QUEUE CALLS WITH CLIENT USER
+// =====================================================
+
+async function enrichCallsWithClients(
+  calls
+) {
+
+  if (
+    !Array.isArray(calls) ||
+    calls.length === 0
+  ) {
+
+    return [];
+
+  }
+
+
+  const clientIds = [
+
+    ...new Set(
+
+      calls
+        .map(
+          call =>
+            call?.clientUserId
+              ? String(
+                  call.clientUserId
+                )
+              : null
+        )
+        .filter(Boolean)
+
+    ),
+
+  ];
+
+
+  if (
+    clientIds.length === 0
+  ) {
+
+    return calls;
+
+  }
+
+
+  const users =
+    await User.find({
+
+      _id: {
+        $in:
+          clientIds,
+      },
+
+    })
+      .select(
+        "email firstName lastName"
+      )
+      .lean();
+
+
+  const userMap =
+    new Map(
+
+      users.map(
+        user => [
+          String(
+            user._id
+          ),
+          user,
+        ]
+      )
+
+    );
+
+
+  return calls.map(
+    call => ({
+
+      ...call,
+
+      client:
+        userMap.get(
+          String(
+            call.clientUserId
+          )
+        ) ||
+        null,
+
+    })
+  );
+
+}
+
+
+// =====================================================
+// CREATE CALL
+// =====================================================
+//
+// POST /api/calls
+//
+// Queue:
+//
+//   { recipientId: null }
+//
+// Targeted:
+//
+//   { recipientId: "<User._id>" }
+//
+// =====================================================
+
+router.post(
+  "/",
+  requireAuth,
+  requireTenant,
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      // =================================================
+      // CALLER MEMBERSHIP
+      // =================================================
+
+      const membership =
+        await requireMembership(
+          req,
+          res
+        );
+
+
+      if (
+        !membership
+      ) {
+
+        return;
+
+      }
+
+
+      // =================================================
+      // CALLER PERMISSION
+      // =================================================
+
+      if (
+        !canCreateCall(
+          membership
+        )
+      ) {
+
+        return res
+          .status(403)
+          .json({
+
+            error:
+              `Not allowed to create calls (role=${membership.role})`,
+
+          });
+
+      }
+
+
+      // =================================================
+      // RECIPIENT
+      // =================================================
+
+      const recipientId =
+        req.body?.recipientId ||
+        null;
+
+
+      let recipientUserId =
+        null;
+
+
+      if (
+        recipientId
+      ) {
+
+        // -------------------------------------------------
+        // VALIDATE OBJECT ID
+        // -------------------------------------------------
+
+        if (
+          !isValidObjectId(
+            recipientId
+          )
+        ) {
+
+          return res
+            .status(400)
+            .json({
+
+              error:
+                "Invalid recipientId",
+
+            });
+
+        }
+
+
+        console.log(
+          "[Calls] Targeted recipient lookup",
+          {
+
+            recipientId,
+
+            callerUserId:
+              req.user.userId,
+
+            tenantId:
+              req.user.tenantId,
+
+          }
+        );
+
+
+        // -------------------------------------------------
+        // FIND USER
+        // -------------------------------------------------
+
+        const recipient =
+          await User.findById(
+            recipientId
+          )
+            .select(
+              "_id firstName lastName email"
+            )
+            .lean();
+
+
+        console.log(
+          "[Calls] Targeted recipient lookup result",
+          recipient
+        );
+
+
+        if (
+          !recipient
+        ) {
+
+          return res
+            .status(404)
+            .json({
+
+              error:
+                "Recipient user not found",
+
+            });
+
+        }
+
+
+        // -------------------------------------------------
+        // VERIFY TENANT MEMBERSHIP
+        // -------------------------------------------------
+
+        const recipientMembership =
+          await Membership.findOne({
+
+            userId:
+              recipient._id,
+
+            tenantId:
+              req.user.tenantId,
+
+          })
+            .select(
+              "_id userId tenantId role"
+            )
+            .lean();
+
+
+        if (
+          !recipientMembership
+        ) {
+
+          return res
+            .status(403)
+            .json({
+
+              error:
+                "Recipient is not a member of this tenant",
+
+            });
+
+        }
+
+
+        recipientUserId =
+          recipient._id;
+
+
+        console.log(
+          "[Calls] Targeted recipient verified",
+          {
+
+            recipientUserId:
+              String(
+                recipient._id
+              ),
+
+            recipientName:
+              `${recipient.firstName || ""} ${recipient.lastName || ""}`.trim(),
+
+            recipientEmail:
+              recipient.email,
+
+            recipientRole:
+              recipientMembership.role,
+
+            tenantId:
+              String(
+                req.user.tenantId
+              ),
+
+          }
+        );
+
+      }
+
+
+      // =================================================
+      // CHANNEL
+      // =================================================
+
+      const channelName =
+        makeChannelName({
+
+          tenantId:
+            req.user.tenantId,
+
+          userId:
+            req.user.userId,
+
+        });
+
+
+      // =================================================
+      // CREATE CALL
+      // =================================================
+
+      const call =
+        await Call.create({
+
+          tenantId:
+            req.user.tenantId,
+
+          clientUserId:
+            req.user.userId,
+
+          recipientUserId,
+
+          channelName,
+
+          status:
+            recipientUserId
+              ? "ringing"
+              : "waiting",
+
+        });
+
+
+      console.log(
+        "[Calls] Call created",
         {
-          $set: {
-            status: "expired",
-            expiredAt: new Date(),
-          },
+
+          callId:
+            String(
+              call._id
+            ),
+
+          clientUserId:
+            String(
+              call.clientUserId
+            ),
+
+          recipientUserId:
+            call.recipientUserId
+              ? String(
+                  call.recipientUserId
+                )
+              : null,
+
+          status:
+            call.status,
+
+          channelName:
+            call.channelName,
+
         }
       );
 
-      if (result.modifiedCount > 0) {
-        console.log(
-          "[CALL EXPIRY] Expired calls:",
-          result.modifiedCount
+
+      return res
+        .status(201)
+        .json({
+
+          ok:
+            true,
+
+          call,
+
+        });
+
+    }
+    catch (
+      error
+    ) {
+
+      console.error(
+        "[Calls] Create call failed",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          error:
+            "Failed to create call",
+
+        });
+
+    }
+
+  }
+);
+
+
+// =====================================================
+// GET AVAILABLE QUEUE CALLS
+// =====================================================
+//
+// GET /api/calls/available
+//
+// Targeted ringing calls never appear here.
+//
+// =====================================================
+
+router.get(
+  "/available",
+  requireAuth,
+  requireTenant,
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const membership =
+        await requireMembership(
+          req,
+          res
         );
+
+
+      if (
+        !membership
+      ) {
+
+        return;
+
       }
 
-      return result.modifiedCount;
-    }
 
-     await expireWaitingCalls(req.user.tenantId);
-    
+      if (
+        !canAcceptCall(
+          membership
+        )
+      ) {
 
-    const calls = await Call.find({
-      tenantId: req.user.tenantId,
-      status: "waiting",
-      claimedByUserId: null,
-    })
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .lean();
+        return res
+          .status(403)
+          .json({
 
+            error:
+              "Not allowed to view available calls",
 
-      console.log("[CALLS AVAILABLE] Loaded membership:", {
-        membershipId: membership?._id,
-        userId: membership?.userId,
-        tenantId: membership?.tenantId,
-        role: membership?.role,
-        availability: membership?.availability,
-      });
+          });
 
-    console.log(
-  "[CALLS AVAILABLE] Raw waiting calls:",
-    calls.map((c) => ({
-      id: c._id,
-      tenantId: c.tenantId,
-      status: c.status,
-      claimedByUserId: c.claimedByUserId,
-      clientUserId: c.clientUserId,
-      channelName: c.channelName,
-    }))
-  );
-
-    // =====================================================
-    // ENRICH CLIENT DATA
-    // =====================================================
-
-    const clientIds = [
-      ...new Set(
-        calls.map((c) => String(c.clientUserId))
-      ),
-    ];
-
-    const users = await User.find({
-      _id: { $in: clientIds },
-    })
-      .select("email firstName lastName")
-      .lean();
-
-    const userMap = new Map(
-      users.map((u) => [String(u._id), u])
-    );
-
-    const enriched = calls.map((c) => ({
-      ...c,
-      client:
-        userMap.get(String(c.clientUserId)) || null,
-    }));
-
-    console.log(
-      "[CALLS AVAILABLE] Returning calls:",
-      enriched.length
-    );
-
-    return res.json({
-      ok: true,
-      calls: enriched,
-    });
-
-  } catch (err) {
-    console.error(
-      "GET /api/calls/available error:",
-      err
-    );
-
-    return res.status(500).json({
-      error: "Failed to load available calls",
-    });
-  }
-});
-
-/**
- * EMPLOYEE: Accept/claim a call (atomic)
- * POST /api/calls/:callId/accept
- */
-router.post("/:callId/accept", requireAuth, requireTenant, async (req, res) => {
-
-  try {
-    const membership = await loadMembership(req);
-    const callPolicy = DEFAULT_CALL_POLICY;
-
-    if (!membership) return res.status(403).json({ error: "Not a member of this tenant" });
-
-    if (!canAcceptCall(membership, callPolicy)) {
-    return res.status(403).json({ error: "Not allowed to accept calls" });
-}
-
-    const { callId } = req.params;
-    if (!mongoose.isValidObjectId(callId)) {
-      return res.status(400).json({ error: "Invalid callId" });
-    }
-
-    // Atomic "claim"
-    const call = await Call.findOneAndUpdate(
-      {
-        _id: callId,
-        tenantId: req.user.tenantId,
-        status: "waiting",
-        claimedByUserId: null,
-      },
-      {
-        $set: {
-          status: "claimed",
-          claimedByUserId: req.user.userId,
-          claimedAt: new Date(),
-        },
-      },
-      { new: true }
-    );
-
-    if (!call) {
-      return res.status(409).json({
-        ok: false,
-        error: "CALL_NOT_AVAILABLE",
-        message: "This call is no longer available",
-      });
-    }
-
-    return res.json({ ok: true, call });
-  } catch (err) {
-    console.error("POST /api/calls/:callId/accept error:", err);
-    return res.status(500).json({ error: "Failed to accept call" });
-  }
-});
-
-/**
- * EMPLOYEE: Release a claimed call
- *
- * Used when an employee successfully claims a call
- * but cannot establish the Agora session.
- *
- * The call is returned to the waiting queue.
- */
-router.post("/:callId/release", requireAuth, requireTenant, async (req, res) => {
-
-  try {
-
-    const membership =
-      await loadMembership(req);
+      }
 
 
-    if (!membership) {
+      // =================================================
+      // AVAILABILITY
+      // =================================================
 
-      return res.status(403).json({
-        error: "Not a member of this tenant",
-      });
+      if (
+        !membership.isAvailable
+      ) {
 
-    }
+        return res.json({
 
+          ok:
+            true,
 
-    if (
-      !canAcceptCall(
-        membership,
-        DEFAULT_CALL_POLICY
-      )
-    ) {
+          calls: [],
 
-      return res.status(403).json({
-        error: "Not allowed to release calls",
-      });
+        });
 
-    }
+      }
 
 
-    const {
-      callId
-    } = req.params;
+      // =================================================
+      // EXPIRE OLD WAITING CALLS
+      // =================================================
+
+      await expireWaitingCalls(
+        req.user.tenantId
+      );
 
 
-    if (
-      !mongoose.isValidObjectId(callId)
-    ) {
+      // =================================================
+      // FETCH QUEUE
+      // =================================================
 
-      return res.status(400).json({
-        error: "Invalid callId",
-      });
+      const calls =
+        await Call.find({
 
-    }
+          tenantId:
+            req.user.tenantId,
+
+          status:
+            "waiting",
+
+          claimedByUserId:
+            null,
+
+        })
+          .sort({
+
+            createdAt:
+              -1,
+
+          })
+          .limit(
+            MAX_AVAILABLE_CALLS
+          )
+          .lean();
 
 
-    // =====================================================
-    // ATOMIC RELEASE
-    //
-    // Only the employee who claimed the call
-    // can release it.
-    // =====================================================
+      const enriched =
+        await enrichCallsWithClients(
+          calls
+        );
 
-    const call =
-      await Call.findOneAndUpdate(
 
+      console.log(
+        "[Calls] Available queue loaded",
         {
+
+          userId:
+            String(
+              req.user.userId
+            ),
+
+          count:
+            enriched.length,
+
+        }
+      );
+
+
+      return res.json({
+
+        ok:
+          true,
+
+        calls:
+          enriched,
+
+      });
+
+    }
+    catch (
+      error
+    ) {
+
+      console.error(
+        "[Calls] Get available calls failed",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          error:
+            "Failed to load available calls",
+
+        });
+
+    }
+
+  }
+);
+
+
+// =====================================================
+// GET TARGETED CALL INVITATIONS
+// =====================================================
+//
+// GET /api/calls/pending
+//
+// Only calls specifically addressed to the authenticated
+// user are returned.
+//
+// =====================================================
+
+router.get(
+  "/pending",
+  requireAuth,
+  requireTenant,
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const calls =
+        await Call.find({
+
+          tenantId:
+            req.user.tenantId,
+
+          recipientUserId:
+            req.user.userId,
+
+          status:
+            "ringing",
+
+        })
+          .sort({
+
+            createdAt:
+              -1,
+
+          })
+          .limit(
+            MAX_PENDING_CALLS
+          )
+          .lean();
+
+
+      console.log(
+        "[Calls] Pending invitations loaded",
+        {
+
+          userId:
+            String(
+              req.user.userId
+            ),
+
+          count:
+            calls.length,
+
+        }
+      );
+
+
+      return res.json({
+
+        ok:
+          true,
+
+        calls,
+
+      });
+
+    }
+    catch (
+      error
+    ) {
+
+      console.error(
+        "[Calls] Get pending calls failed",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          error:
+            "Failed to load pending calls",
+
+        });
+
+    }
+
+  }
+);
+
+
+// =====================================================
+// JOIN TARGETED CALL
+// =====================================================
+//
+// POST /api/calls/:callId/join
+//
+// Only the designated recipient can perform this action.
+//
+// =====================================================
+
+router.post(
+  "/:callId/join",
+  requireAuth,
+  requireTenant,
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const {
+        callId,
+      } =
+        req.params;
+
+
+      if (
+        !isValidObjectId(
+          callId
+        )
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            error:
+              "Invalid callId",
+
+          });
+
+      }
+
+
+      // =================================================
+      // FIND TARGETED INVITATION
+      // =================================================
+
+      const call =
+        await Call.findOne({
+
           _id:
             callId,
 
           tenantId:
             req.user.tenantId,
 
-          status:
-            "claimed",
-
-          claimedByUserId:
+          recipientUserId:
             req.user.userId,
-        },
 
+          status:
+            "ringing",
+
+        });
+
+
+      if (
+        !call
+      ) {
+
+        return res
+          .status(409)
+          .json({
+
+            ok:
+              false,
+
+            error:
+              "CALL_NOT_AVAILABLE",
+
+            message:
+              "This training invitation is no longer available.",
+
+          });
+
+      }
+
+
+      // =================================================
+      // ACTIVATE TARGETED CALL
+      // =================================================
+
+      call.status =
+        "active";
+
+
+      call.claimedByUserId =
+        req.user.userId;
+
+
+      call.claimedAt =
+        new Date();
+
+
+      await call.save();
+
+
+      console.log(
+        "[Calls] Targeted call joined",
         {
-          $set: {
-            status:
-              "waiting",
-          },
 
-          $unset: {
-            claimedByUserId: "",
-            claimedAt: "",
-          },
-        },
+          callId:
+            String(
+              call._id
+            ),
 
-        {
-          new: true,
+          recipientUserId:
+            String(
+              req.user.userId
+            ),
+
+          channel:
+            call.channelName,
+
         }
-
       );
 
 
-    if (!call) {
+      return res.json({
 
-      return res.status(409).json({
-        error:
-          "Call is no longer claimed by this user",
+        ok:
+          true,
+
+        call,
+
       });
 
     }
+    catch (
+      error
+    ) {
+
+      console.error(
+        "[Calls] Join targeted call failed",
+        error
+      );
 
 
-    console.log(
-      "[CALL RELEASED]",
-      {
-        callId:
-          call._id,
+      return res
+        .status(500)
+        .json({
 
-        releasedBy:
-          req.user.userId,
+          error:
+            "Failed to join training invitation",
 
-        status:
-          call.status,
+        });
 
-        claimedByUserId:
-          call.claimedByUserId,
+    }
+
+  }
+);
+
+
+// =====================================================
+// ACCEPT QUEUE CALL
+// =====================================================
+//
+// POST /api/calls/:callId/accept
+//
+// Atomic claim of a waiting queue call.
+//
+// Targeted ringing calls cannot be accepted here.
+//
+// =====================================================
+
+router.post(
+  "/:callId/accept",
+  requireAuth,
+  requireTenant,
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const membership =
+        await requireMembership(
+          req,
+          res
+        );
+
+
+      if (
+        !membership
+      ) {
+
+        return;
 
       }
-    );
 
 
-    return res.json({
+      if (
+        !canAcceptCall(
+          membership
+        )
+      ) {
 
-      ok:
-        true,
+        return res
+          .status(403)
+          .json({
 
-      call,
+            error:
+              "Not allowed to accept calls",
 
-    });
+          });
 
-
-  } catch (err) {
-
-    console.error(
-      "POST /api/calls/:callId/release error:",
-      err
-    );
+      }
 
 
-    return res.status(500).json({
+      const {
+        callId,
+      } =
+        req.params;
 
-      error:
-        "Failed to release call",
 
-    });
+      if (
+        !isValidObjectId(
+          callId
+        )
+      ) {
 
-  }
+        return res
+          .status(400)
+          .json({
 
-});
+            error:
+              "Invalid callId",
 
-/**
- * END a call (client who created OR employee who claimed OR admin/owner)
- * POST /api/calls/:callId/end
- */
-router.post("/:callId/end", requireAuth, requireTenant, async (req, res) => {
-  try {
-    const membership = await loadMembership(req);
-    if (!membership) return res.status(403).json({ error: "Not a member of this tenant" });
+          });
 
-    const { callId } = req.params;
-    if (!mongoose.isValidObjectId(callId)) {
-      return res.status(400).json({ error: "Invalid callId" });
+      }
+
+
+      // =================================================
+      // ATOMIC CLAIM
+      // =================================================
+
+      const call =
+        await Call.findOneAndUpdate(
+
+          {
+
+            _id:
+              callId,
+
+            tenantId:
+              req.user.tenantId,
+
+            status:
+              "waiting",
+
+            claimedByUserId:
+              null,
+
+          },
+
+          {
+
+            $set: {
+
+              status:
+                "claimed",
+
+              claimedByUserId:
+                req.user.userId,
+
+              claimedAt:
+                new Date(),
+
+            },
+
+          },
+
+          {
+
+            new:
+              true,
+
+          }
+
+        );
+
+
+      if (
+        !call
+      ) {
+
+        return res
+          .status(409)
+          .json({
+
+            ok:
+              false,
+
+            error:
+              "CALL_NOT_AVAILABLE",
+
+            message:
+              "This call is no longer available",
+
+          });
+
+      }
+
+
+      console.log(
+        "[Calls] Queue call accepted",
+        {
+
+          callId:
+            String(
+              call._id
+            ),
+
+          acceptedBy:
+            String(
+              req.user.userId
+            ),
+
+          channel:
+            call.channelName,
+
+        }
+      );
+
+
+      return res.json({
+
+        ok:
+          true,
+
+        call,
+
+      });
+
+    }
+    catch (
+      error
+    ) {
+
+      console.error(
+        "[Calls] Accept call failed",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          error:
+            "Failed to accept call",
+
+        });
+
     }
 
-    const call = await Call.findOne({ _id: callId, tenantId: req.user.tenantId });
-    if (!call) return res.status(404).json({ error: "Call not found" });
+  }
+);
 
-    const isOwnerAdmin = membership.role === "owner" || membership.role === "admin";
-    const isClientCreator = String(call.clientUserId) === String(req.user.userId);
-    const isClaimedEmployee = call.claimedByUserId && String(call.claimedByUserId) === String(req.user.userId);
 
-    if (!isOwnerAdmin && !isClientCreator && !isClaimedEmployee) {
-      return res.status(403).json({ error: "Not allowed to end this call" });
+// =====================================================
+// RELEASE CLAIMED QUEUE CALL
+// =====================================================
+//
+// POST /api/calls/:callId/release
+//
+// =====================================================
+
+router.post(
+  "/:callId/release",
+  requireAuth,
+  requireTenant,
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const membership =
+        await requireMembership(
+          req,
+          res
+        );
+
+
+      if (
+        !membership
+      ) {
+
+        return;
+
+      }
+
+
+      if (
+        !canAcceptCall(
+          membership
+        )
+      ) {
+
+        return res
+          .status(403)
+          .json({
+
+            error:
+              "Not allowed to release calls",
+
+          });
+
+      }
+
+
+      const {
+        callId,
+      } =
+        req.params;
+
+
+      if (
+        !isValidObjectId(
+          callId
+        )
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            error:
+              "Invalid callId",
+
+          });
+
+      }
+
+
+      // =================================================
+      // ATOMIC RELEASE
+      // =================================================
+
+      const call =
+        await Call.findOneAndUpdate(
+
+          {
+
+            _id:
+              callId,
+
+            tenantId:
+              req.user.tenantId,
+
+            status:
+              "claimed",
+
+            claimedByUserId:
+              req.user.userId,
+
+          },
+
+          {
+
+            $set: {
+
+              status:
+                "waiting",
+
+            },
+
+            $unset: {
+
+              claimedByUserId:
+                "",
+
+              claimedAt:
+                "",
+
+            },
+
+          },
+
+          {
+
+            new:
+              true,
+
+          }
+
+        );
+
+
+      if (
+        !call
+      ) {
+
+        return res
+          .status(409)
+          .json({
+
+            error:
+              "Call is no longer claimed by this user",
+
+          });
+
+      }
+
+
+      console.log(
+        "[Calls] Queue call released",
+        {
+
+          callId:
+            String(
+              call._id
+            ),
+
+          releasedBy:
+            String(
+              req.user.userId
+            ),
+
+        }
+      );
+
+
+      return res.json({
+
+        ok:
+          true,
+
+        call,
+
+      });
+
+    }
+    catch (
+      error
+    ) {
+
+      console.error(
+        "[Calls] Release call failed",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          error:
+            "Failed to release call",
+
+        });
+
     }
 
-    call.status = "ended";
-    call.endedAt = new Date();
-    await call.save();
-
-    return res.json({ ok: true, call });
-  } catch (err) {
-    console.error("POST /api/calls/:callId/end error:", err);
-    return res.status(500).json({ error: "Failed to end call" });
   }
-});
+);
+
+
+// =====================================================
+// END CALL
+// =====================================================
+//
+// POST /api/calls/:callId/end
+//
+// Allowed:
+//
+// - owner/admin
+// - original creator
+// - claimed queue employee
+// - targeted recipient
+//
+// =====================================================
+
+router.post(
+  "/:callId/end",
+  requireAuth,
+  requireTenant,
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const membership =
+        await requireMembership(
+          req,
+          res
+        );
+
+
+      if (
+        !membership
+      ) {
+
+        return;
+
+      }
+
+
+      const {
+        callId,
+      } =
+        req.params;
+
+
+      if (
+        !isValidObjectId(
+          callId
+        )
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            error:
+              "Invalid callId",
+
+          });
+
+      }
+
+
+      const call =
+        await Call.findOne({
+
+          _id:
+            callId,
+
+          tenantId:
+            req.user.tenantId,
+
+        });
+
+
+      if (
+        !call
+      ) {
+
+        return res
+          .status(404)
+          .json({
+
+            error:
+              "Call not found",
+
+          });
+
+      }
+
+
+      const isOwnerAdmin =
+        membership.role === "owner" ||
+        membership.role === "admin";
+
+
+      const isClientCreator =
+        String(
+          call.clientUserId
+        ) ===
+        String(
+          req.user.userId
+        );
+
+
+      const isClaimedEmployee =
+        Boolean(
+          call.claimedByUserId
+        ) &&
+        String(
+          call.claimedByUserId
+        ) ===
+        String(
+          req.user.userId
+        );
+
+
+      const isTargetedRecipient =
+        Boolean(
+          call.recipientUserId
+        ) &&
+        String(
+          call.recipientUserId
+        ) ===
+        String(
+          req.user.userId
+        );
+
+
+      const allowed =
+        isOwnerAdmin ||
+        isClientCreator ||
+        isClaimedEmployee ||
+        isTargetedRecipient;
+
+
+      if (
+        !allowed
+      ) {
+
+        return res
+          .status(403)
+          .json({
+
+            error:
+              "Not allowed to end this call",
+
+          });
+
+      }
+
+
+      // =================================================
+      // ALREADY ENDED
+      // =================================================
+
+      if (
+        call.status === "ended"
+      ) {
+
+        return res.json({
+
+          ok:
+            true,
+
+          call,
+
+          alreadyEnded:
+            true,
+
+        });
+
+      }
+
+
+      call.status =
+        "ended";
+
+
+      call.endedAt =
+        new Date();
+
+
+      await call.save();
+
+
+      console.log(
+        "[Calls] Call ended",
+        {
+
+          callId:
+            String(
+              call._id
+            ),
+
+          endedBy:
+            String(
+              req.user.userId
+            ),
+
+        }
+      );
+
+
+      return res.json({
+
+        ok:
+          true,
+
+        call,
+
+      });
+
+    }
+    catch (
+      error
+    ) {
+
+      console.error(
+        "[Calls] End call failed",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          error:
+            "Failed to end call",
+
+        });
+
+    }
+
+  }
+);
+
 
 export default router;

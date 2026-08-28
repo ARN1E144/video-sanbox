@@ -757,11 +757,12 @@ export default function MainApp() {
                       }}
                     >
                       <Canvas
-                        role="host"
-
+                        role={previewView}
 
                         onSelectedIdChange={
-                          handleHostSelect
+                          previewView === "client"
+                            ? handleClientSelect
+                            : handleHostSelect
                         }
 
                         onRequestBackground={

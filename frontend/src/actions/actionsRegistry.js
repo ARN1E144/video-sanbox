@@ -1,4 +1,3 @@
-
 // src/actions/actionsRegistry.js
 
 import startStream
@@ -44,6 +43,9 @@ import endCall
 import joinCall
   from "./call/joinCall";
 
+import joinInvitedCall
+  from "./call/joinInvitedCall";
+
 import fetchAvailableCalls
   from "./call/fetchAvailableCalls";
 
@@ -75,8 +77,11 @@ import evaluateInterview
 import uploadRecording
   from "./video/uploadRecording";
 
-import completeInterview 
+import completeInterview
   from "./interview/completeInterview";
+
+import fetchPendingCalls
+  from "./call/fetchPendingCalls";
 
 
 import {
@@ -104,6 +109,9 @@ export const ACTIONS = {
   CALL_JOIN:
     "call.joinCall",
 
+  CALL_JOIN_INVITED:
+    "call.joinInvitedCall",
+
   CALL_LEAVE:
     "call.leaveCall",
 
@@ -112,6 +120,9 @@ export const ACTIONS = {
 
   CALL_FETCH:
     "call.fetchAvailableCalls",
+
+  CALL_FETCH_PENDING:
+    "call.fetchPendingCalls",
 
   CALL_SPOTLIGHT:
     "call.spotlightUser",
@@ -122,8 +133,6 @@ export const ACTIONS = {
 
   // =======================================================
   // CALL MEDIA
-  //
-  // Used by AgoraFeed / real-time calls.
   // =======================================================
 
   CALL_TOGGLE_MIC:
@@ -135,8 +144,6 @@ export const ACTIONS = {
 
   // =======================================================
   // LOCAL / VIDEO SYSTEM
-  //
-  // Used by VideoFeed / local media.
   // =======================================================
 
   VIDEO_START_STREAM:
@@ -165,9 +172,9 @@ export const ACTIONS = {
 
   VIDEO_STOP_RECORDING:
     "video.stopRecording",
-  
+
   VIDEO_UPLOAD_RECORDING:
-  "video.uploadRecording",
+    "video.uploadRecording",
 
 
   // =======================================================
@@ -187,7 +194,7 @@ export const ACTIONS = {
     "interview.evaluate",
 
   INTERVIEW_COMPLETE:
-  "interview.complete",
+    "interview.complete",
 
 
   // =======================================================
@@ -237,41 +244,6 @@ const createAction = ({
 });
 
 
-const requireCallJoined = (
-  ctx,
-  label
-) => {
-
-  if (
-    !ctx?.get?.("call.joined")
-  ) {
-
-    ctx?.notify?.(
-      `${label} requires active call`
-    );
-
-    return false;
-  }
-
-  return true;
-};
-
-
-const safeAgora = (ctx) => {
-
-  if (!ctx?.agora) {
-
-    ctx?.notify?.(
-      "Agora engine unavailable"
-    );
-
-    return null;
-  }
-
-  return ctx.agora;
-};
-
-
 // =========================================================
 // ACTION REGISTRY
 // =========================================================
@@ -283,6 +255,10 @@ export const actionRegistry = {
   // =======================================================
 
   call: {
+
+    // ---------------------------------------------------
+    // START CALL
+    // ---------------------------------------------------
 
     startCall: createAction({
 
@@ -306,6 +282,10 @@ export const actionRegistry = {
     }),
 
 
+    // ---------------------------------------------------
+    // ACCEPT QUEUE CALL
+    // ---------------------------------------------------
+
     acceptCall: createAction({
 
       value:
@@ -328,6 +308,10 @@ export const actionRegistry = {
     }),
 
 
+    // ---------------------------------------------------
+    // JOIN EXISTING CALL
+    // ---------------------------------------------------
+
     joinCall: createAction({
 
       value:
@@ -348,6 +332,36 @@ export const actionRegistry = {
 
     }),
 
+
+    // ---------------------------------------------------
+    // JOIN TARGETED INVITATION
+    // ---------------------------------------------------
+
+    joinInvitedCall: createAction({
+
+      value:
+        ACTIONS.CALL_JOIN_INVITED,
+
+      label:
+        "Join Invited Call",
+
+      category:
+        "call",
+
+      run:
+        joinInvitedCall,
+
+      targets: [
+        "AgoraFeed",
+        "CallPanel",
+      ],
+
+    }),
+
+
+    // ---------------------------------------------------
+    // LEAVE CALL
+    // ---------------------------------------------------
 
     leaveCall: createAction({
 
@@ -370,6 +384,10 @@ export const actionRegistry = {
     }),
 
 
+    // ---------------------------------------------------
+    // END CALL
+    // ---------------------------------------------------
+
     endCall: createAction({
 
       value:
@@ -386,10 +404,15 @@ export const actionRegistry = {
 
       targets: [
         "CallPanel",
+        "AgoraFeed",
       ],
 
     }),
 
+
+    // ---------------------------------------------------
+    // FETCH QUEUE CALLS
+    // ---------------------------------------------------
 
     fetchAvailableCalls: createAction({
 
@@ -411,6 +434,36 @@ export const actionRegistry = {
 
     }),
 
+    // ---------------------------------------------------
+    // FETCH PENDING CALLS
+    // ---------------------------------------------------
+
+
+
+    fetchPendingCalls: createAction({
+
+      value:
+        ACTIONS.CALL_FETCH_PENDING,
+
+      label:
+        "Fetch Pending Calls",
+
+      category:
+        "call",
+
+      run:
+        fetchPendingCalls,
+
+      targets: [
+        "CallPanel",
+      ],
+
+    }),
+
+
+    // ---------------------------------------------------
+    // SPOTLIGHT
+    // ---------------------------------------------------
 
     spotlightUser: createAction({
 
@@ -433,6 +486,10 @@ export const actionRegistry = {
     }),
 
 
+    // ---------------------------------------------------
+    // TOGGLE MIC
+    // ---------------------------------------------------
+
     toggleMic: createAction({
 
       value:
@@ -454,6 +511,10 @@ export const actionRegistry = {
     }),
 
 
+    // ---------------------------------------------------
+    // TOGGLE VIDEO
+    // ---------------------------------------------------
+
     toggleVideo: createAction({
 
       value:
@@ -474,6 +535,10 @@ export const actionRegistry = {
 
     }),
 
+
+    // ---------------------------------------------------
+    // AVAILABILITY
+    // ---------------------------------------------------
 
     setAvailability: createAction({
 
@@ -609,10 +674,6 @@ export const actionRegistry = {
     }),
 
 
-    // -------------------------------------------------------
-    // LOCAL MICROPHONE
-    // -------------------------------------------------------
-
     toggleMic: createAction({
 
       value:
@@ -634,10 +695,6 @@ export const actionRegistry = {
     }),
 
 
-    // -------------------------------------------------------
-    // LOCAL CAMERA
-    // -------------------------------------------------------
-
     toggleVideo: createAction({
 
       value:
@@ -658,10 +715,6 @@ export const actionRegistry = {
 
     }),
 
-
-    // -------------------------------------------------------
-    // LOCAL RECORDING
-    // -------------------------------------------------------
 
     startRecording: createAction({
 
@@ -703,6 +756,7 @@ export const actionRegistry = {
       ],
 
     }),
+
 
     uploadRecording: createAction({
 
@@ -795,23 +849,26 @@ export const actionRegistry = {
 
     }),
 
-     complete: createAction({
-        value:
-          ACTIONS.INTERVIEW_COMPLETE,
 
-        label:
-          "Complete Interview",
+    complete: createAction({
 
-        category:
-          "interview",
+      value:
+        ACTIONS.INTERVIEW_COMPLETE,
 
-        run:
-          completeInterview,
+      label:
+        "Complete Interview",
 
-        targets: [
-          "InterviewPanel",
-        ],
-      }),
+      category:
+        "interview",
+
+      run:
+        completeInterview,
+
+      targets: [
+        "InterviewPanel",
+      ],
+
+    }),
 
 
     evaluate: createAction({
@@ -934,6 +991,11 @@ export const getAllActions = () => {
 console.log(
   "[ACTIONS REGISTRY LOADED]",
   {
+    callActions:
+      Object.keys(
+        actionRegistry.call || {}
+      ),
+
     videoActions:
       Object.keys(
         actionRegistry.video || {}
@@ -948,8 +1010,23 @@ console.log(
 
 
 console.log(
+  "[CALL TARGETED ACTION DEBUG]",
+  {
+
+    joinInvitedCall:
+      actionRegistry.call?.joinInvitedCall,
+
+    joinInvitedCallRun:
+      typeof actionRegistry.call?.joinInvitedCall?.run,
+
+  }
+);
+
+
+console.log(
   "[VIDEO RECORDING ACTION DEBUG]",
   {
+
     startRecording:
       actionRegistry.video?.startRecording,
 
@@ -967,6 +1044,6 @@ console.log(
 
     uploadRecordingRun:
       typeof actionRegistry.video?.uploadRecording?.run,
+
   }
 );
-

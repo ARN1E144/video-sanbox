@@ -32,6 +32,8 @@ export const ROLE_PERMISSIONS = {
     "call.spotlightUser",
     "call.fetchAvailableCalls",
     "call.setAvailability",
+    "call.fetchPendingCalls",
+    "call.joinInvitedCall",
 
     // AI INTERVIEW
     "interview.start",
