@@ -1,6 +1,7 @@
 // src/components/elements/VideoFeed.js
 
 import React, {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -19,13 +20,56 @@ import {
 } from "../../hooks/useRuntimeValue";
 
 
+// =========================================================
+// VideoFeed
+// =========================================================
+//
+// Responsibilities:
+//
+// 1. Render video.
+// 2. Manage local camera/microphone.
+// 3. Manage remote/HLS media.
+// 4. Own MediaRecorder.
+// 5. Create recording Blob.
+// 6. Preserve recording-session identity.
+// 7. Publish recording state through bindings.
+// 8. Request video.uploadRecording when required.
+//
+// NOT responsible for:
+//
+// - Completing interviews.
+// - Persisting interview state.
+// - Generating S3 URLs.
+// - Uploading directly to S3.
+//
+// Recording lifecycle:
+//
+// idle
+//   ↓
+// recording
+//   ↓
+// stopping
+//   ↓
+// ready
+//   ↓
+// uploading
+//   ↓
+// uploaded
+//
+// Any recording stage may transition to:
+//
+// failed
+//
+// =========================================================
+
+
 export default function VideoFeed(
   props
 ) {
 
-  // =====================================================
+  // =======================================================
   // PROPS
-  // =====================================================
+  // =======================================================
 
   const {
     id,
@@ -33,10 +77,6 @@ export default function VideoFeed(
     meta = {},
 
     style = {},
-
-    // ---------------------------------------------------
-    // COMPONENT PROPS
-    // ---------------------------------------------------
 
     enabled:
       _enabled,
@@ -77,83 +117,32 @@ export default function VideoFeed(
     autoUploadRecording:
       _autoUploadRecording,
 
-    // Everything else is passed to the wrapper.
     ...restProps
 
   } = props;
 
 
-  // =====================================================
+  // =======================================================
   // ACTION CONTEXT
-  // =====================================================
+  // =======================================================
 
   const actionCtx =
-    useActionContext();
+    useActionContext() || {};
 
 
   const {
     bindings = {},
+    updateBinding,
+    runAction,
+    resolveRecordingCompletion,
+    rejectRecordingCompletion,
   } =
-    actionCtx || {};
+    actionCtx;
 
 
-  // =====================================================
-  // CANONICAL RUNTIME VALUES
-  // =====================================================
-  //
-  // IMPORTANT:
-  //
-  // These values come from the runtime state hook rather
-  // than attempting to reconstruct runtime state through
-  // ActionContext later.
-  //
-  // =====================================================
-
-  const runtimeInterview =
-    useRuntimeValue(
-      "interview"
-    );
-
-    console.log(
-    "[VideoFeed] RAW RUNTIME INTERVIEW",
-    {
-      value: runtimeInterview,
-
-      type:
-        typeof runtimeInterview,
-
-      keys:
-        runtimeInterview &&
-        typeof runtimeInterview === "object"
-          ? Object.keys(runtimeInterview)
-          : [],
-
-      id:
-        runtimeInterview?.id,
-
-      _id:
-        runtimeInterview?._id,
-
-      interviewId:
-        runtimeInterview?.interviewId,
-
-      interview_id:
-        runtimeInterview?.interview_id,
-
-      projectId:
-        runtimeInterview?.projectId,
-
-      state:
-        runtimeInterview?.state,
-
-      data:
-        runtimeInterview?.data,
-
-      interview:
-        runtimeInterview?.interview,
-    }
-  );
-
+  // =======================================================
+  // RUNTIME VALUES
+  // =======================================================
 
   const runtimeProject =
     useRuntimeValue(
@@ -161,47 +150,65 @@ export default function VideoFeed(
     );
 
 
-  // =====================================================
-  // RUNTIME IDENTITY VALUES
-  // =====================================================
-
-  const runtimeProjectId =
-    runtimeProject?.id ||
-    runtimeProject?._id ||
-    runtimeProject?.projectId ||
-    runtimeInterview?.projectId ||
-    null;
+  const runtimeInterview =
+    useRuntimeValue(
+      "interview"
+    );
 
 
-  const runtimeInterviewId =
-    runtimeInterview?.id ||
-    runtimeInterview?._id ||
-    runtimeInterview?.interviewId ||
-    runtimeInterview?.interview_id ||
-    null;
+  // =======================================================
+  // RUNTIME IDENTITY HELPERS
+  // =======================================================
+
+  const getProjectId =
+    useCallback(
+      (
+        project,
+        interview
+      ) => {
+
+        return (
+          project?.id ||
+          project?._id ||
+          project?.projectId ||
+          interview?.projectId ||
+          null
+        );
+
+      },
+      []
+    );
 
 
-  // =====================================================
+  const getInterviewId =
+    useCallback(
+      interview => {
+
+        return (
+          interview?.id ||
+          interview?._id ||
+          interview?.interviewId ||
+          interview?.interview_id ||
+          null
+        );
+
+      },
+      []
+    );
+
+
+  // =======================================================
   // SOURCE ID
-  // =====================================================
+  // =======================================================
 
   const sourceId =
     meta?.sourceId ||
     null;
 
 
-  // =====================================================
-  // LIVE RUNTIME IDENTITY REFS
-  // =====================================================
-  //
-  // MediaRecorder callbacks are asynchronous.
-  //
-  // A callback can run after React has rendered again.
-  // These refs are continuously kept in sync with the
-  // latest runtime values so onstop can read the latest
-  // known project/interview.
-  //
-  // =====================================================
+  // =======================================================
+  // LIVE RUNTIME REFS
+  // =======================================================
 
   const runtimeProjectRef =
     useRef(null);
@@ -215,55 +222,82 @@ export default function VideoFeed(
     () => {
 
       runtimeProjectRef.current =
-        runtimeProject || null;
-
-
-      runtimeInterviewRef.current =
-        runtimeInterview || null;
-
-
-      console.log(
-        "[VideoFeed] LIVE RUNTIME IDENTITY",
-        {
-
-          id,
-
-          sourceId,
-
-          runtimeProject,
-
-          runtimeInterview,
-
-          projectId:
-            runtimeProject?.id ||
-            runtimeProject?._id ||
-            runtimeProject?.projectId ||
-            runtimeInterview?.projectId ||
-            null,
-
-          interviewId:
-            runtimeInterview?.id ||
-            runtimeInterview?._id ||
-            runtimeInterview?.interviewId ||
-            runtimeInterview?.interview_id ||
-            null,
-
-        }
-      );
+        runtimeProject ||
+        null;
 
     },
     [
-      id,
-      sourceId,
       runtimeProject,
+    ]
+  );
+
+
+  useEffect(
+    () => {
+
+      runtimeInterviewRef.current =
+        runtimeInterview ||
+        null;
+
+    },
+    [
       runtimeInterview,
     ]
   );
 
 
-  // =====================================================
+  // =======================================================
+  // UNSTABLE ACTION REFS
+  // =======================================================
+  //
+  // ActionContext's executeAction can change when bindings
+  // change.
+  //
+  // MediaRecorder callbacks must not capture an obsolete
+  // version of the action function.
+  //
+  // Keeping the latest functions in refs prevents the media
+  // lifecycle from depending on the changing ActionContext.
+  //
+  // =======================================================
+
+  const updateBindingRef =
+    useRef(updateBinding);
+
+
+  const runActionRef =
+    useRef(runAction);
+
+
+  useEffect(
+    () => {
+
+      updateBindingRef.current =
+        updateBinding;
+
+    },
+    [
+      updateBinding,
+    ]
+  );
+
+
+  useEffect(
+    () => {
+
+      runActionRef.current =
+        runAction;
+
+    },
+    [
+      runAction,
+    ]
+  );
+
+
+  // =======================================================
   // BINDINGS
-  // =====================================================
+  // =======================================================
 
   const sourceBinding =
     sourceId
@@ -283,15 +317,6 @@ export default function VideoFeed(
       : {};
 
 
-  /*
-  -------------------------------------------------------
-  Both the stable Confo source identity and generated
-  Canvas identity can have binding state.
-
-  Installed binding takes precedence.
-  -------------------------------------------------------
-  */
-
   const binding = {
 
     ...sourceBinding,
@@ -301,18 +326,18 @@ export default function VideoFeed(
   };
 
 
-  // =====================================================
+  // =======================================================
   // DEFAULTS
-  // =====================================================
+  // =======================================================
 
   const defaults =
     meta?.editableProps ||
     {};
 
 
-  // =====================================================
+  // =======================================================
   // RESOLVED PROPERTIES
-  // =====================================================
+  // =======================================================
 
   const mode =
     binding.mode ??
@@ -370,9 +395,9 @@ export default function VideoFeed(
     12;
 
 
-  // =====================================================
+  // =======================================================
   // MEDIA STATE
-  // =====================================================
+  // =======================================================
 
   const micEnabled =
     binding.micEnabled ??
@@ -386,32 +411,138 @@ export default function VideoFeed(
     true;
 
 
-  // =====================================================
+  // =======================================================
   // RECORDING STATE
-  // =====================================================
+  // =======================================================
 
-  const recording =
-    binding.recording ??
-    _recording ??
-    false;
+  // =======================================================
+// RECORDING STATE
+// =======================================================
+//
+// Recording is special because the stable Confo source
+// binding can contain an explicit runtime command:
+//
+//   recording: false
+//
+// The generated Canvas binding may still contain the
+// original design-time value:
+//
+//   recording: true
+//
+// For recording state, an explicit source value must
+// therefore override the installed Canvas value.
+//
+// =======================================================
+
+const hasSourceRecording =
+  Object.prototype.hasOwnProperty.call(
+    sourceBinding,
+    "recording"
+  );
+
+
+const hasInstalledRecording =
+  Object.prototype.hasOwnProperty.call(
+    installedBinding,
+    "recording"
+  );
+
+
+const hasRuntimeRecording =
+  hasSourceRecording ||
+  hasInstalledRecording;
+
+  
+
+
+const resolvedRecording =
+  hasSourceRecording
+    ? sourceBinding.recording
+    : installedBinding.recording;
+
+
+const recording =
+  hasRuntimeRecording
+    ? Boolean(
+        resolvedRecording
+      )
+    : Boolean(
+        _recording ??
+        false
+      );
+
+  const hasSourceRecordingStatus =
+    Object.prototype.hasOwnProperty.call(
+      sourceBinding,
+      "recordingStatus"
+    );
+
+
+  const hasInstalledRecordingStatus =
+    Object.prototype.hasOwnProperty.call(
+      installedBinding,
+      "recordingStatus"
+    );
+
+
+  const hasRuntimeRecordingStatus =
+    hasSourceRecordingStatus ||
+    hasInstalledRecordingStatus;
+
+
+  const resolvedRecordingStatus =
+    hasSourceRecordingStatus
+      ? sourceBinding.recordingStatus
+      : installedBinding.recordingStatus;
 
 
   const recordingStatus =
-    binding.recordingStatus ??
-    _recordingStatus ??
-    "idle";
+    hasRuntimeRecordingStatus
+      ? (
+          resolvedRecordingStatus ||
+          "idle"
+        )
+      : (
+          _recordingStatus ||
+          "idle"
+        );
+
+
+  const hasRuntimeAutoUpload =
+    Object.prototype.hasOwnProperty.call(
+      binding,
+      "autoUploadRecording"
+    );
 
 
   const autoUploadRecording =
-    binding.autoUploadRecording ??
-    _autoUploadRecording ??
-    defaults.autoUploadRecording?.default ??
-    false;
+    hasRuntimeAutoUpload
+      ? Boolean(
+          binding.autoUploadRecording
+        )
+      : Boolean(
+          _autoUploadRecording ??
+          defaults.autoUploadRecording?.default ??
+          false
+        );
+
+  // =======================================================
+  // EXPLICIT RECORDING UPLOAD REQUEST
+  // =======================================================
+  //
+  // This is a one-shot runtime instruction.
+  //
+  // It is different from autoUploadRecording.
+  //
+  // =======================================================
+
+  const recordingUploadRequested =
+    binding.recordingUploadRequested === true;
 
 
-  // =====================================================
+  // =======================================================
   // COMPONENT STATE
-  // =====================================================
+  // =======================================================
 
   const [
     isLoading,
@@ -431,9 +562,9 @@ export default function VideoFeed(
   ] = useState(false);
 
 
-  // =====================================================
+  // =======================================================
   // MEDIA REFS
-  // =====================================================
+  // =======================================================
 
   const videoRef =
     useRef(null);
@@ -447,9 +578,9 @@ export default function VideoFeed(
     useRef(null);
 
 
-  // =====================================================
+  // =======================================================
   // RECORDING REFS
-  // =====================================================
+  // =======================================================
 
   const mediaRecorderRef =
     useRef(null);
@@ -465,17 +596,108 @@ export default function VideoFeed(
 
   const recordingStartedAtRef =
     useRef(null);
+  
+  const recordingStartInProgressRef =
+    useRef(false);
+
+  const resolveRecordingCompletionRef =
+    useRef(
+    resolveRecordingCompletion
+    );
+
+    const rejectRecordingCompletionRef =
+    useRef(
+    rejectRecordingCompletion
+    );
+
+  useEffect(
+() => {
+
+resolveRecordingCompletionRef.current =
+  resolveRecordingCompletion;
+
+},
+[
+resolveRecordingCompletion,
+]
+);
+
+useEffect(
+() => {
+
+rejectRecordingCompletionRef.current =
+  rejectRecordingCompletion;
 
 
-  // =====================================================
+},
+[
+rejectRecordingCompletion,
+]
+);
+
+
+
+
+
+  // =======================================================
+  // AUTOMATIC UPLOAD CONFIGURATION
+  // =======================================================
+  //
+  // This represents the component's normal automatic upload
+  // configuration.
+  //
+  // =======================================================
+
+  const recordingAutoUploadRef =
+    useRef(false);
+
+
+  
+
+
+  useEffect(
+    () => {
+
+      recordingAutoUploadRef.current =
+        autoUploadRecording ===
+        true;
+
+    },
+    [
+      autoUploadRecording,
+    ]
+  );
+
+
+  // =======================================================
+  // EXPLICIT UPLOAD REQUEST
+  // =======================================================
+  //
+  // This is different from autoUploadRecording.
+  //
+  // Example:
+  //
+  // Complete Interview
+  //      ↓
+  // video.stopRecording
+  //      ↓
+  // requestUpload = true
+  //
+  // The recorder may have started with:
+  //
+  // autoUploadRecording = false
+  //
+  // but this particular recording should still upload.
+  //
+  // =======================================================
+
+  const recordingUploadRequestedRef =
+    useRef(false);
+
+
+  // =======================================================
   // RECORDING SESSION IDENTITY
-  // =====================================================
-  //
-  // These values belong to the specific recording session.
-  //
-  // They are captured when recording starts.
-  //
-  // =====================================================
+  // =======================================================
 
   const recordingProjectIdRef =
     useRef(null);
@@ -485,9 +707,9 @@ export default function VideoFeed(
     useRef(null);
 
 
-  // =====================================================
+  // =======================================================
   // ACTION HANDLERS
-  // =====================================================
+  // =======================================================
 
   const actionHandlers =
     bindActions(
@@ -497,373 +719,313 @@ export default function VideoFeed(
     );
 
 
-  // =====================================================
-  // DEBUG CONFIG
-  // =====================================================
-
-  useEffect(
-    () => {
-
-      console.log(
-        "[VideoFeed] CONFIG",
-        {
-
-          id,
-
-          sourceId,
-
-          mode,
-
-          enabled,
-
-          recording,
-
-          recordingStatus,
-
-          autoUploadRecording,
-
-        }
-      );
-
-    },
-    [
-      id,
-      sourceId,
-      mode,
-      enabled,
-      recording,
-      recordingStatus,
-      autoUploadRecording,
-    ]
-  );
-
-
-  // =====================================================
-  // HLS HELPER
-  // =====================================================
+  // =======================================================
+  // HLS
+  // =======================================================
 
   const isHlsUrl =
-    (
-      url
-    ) =>
-      typeof url === "string" &&
-      /\.m3u8(\?.*)?$/i.test(
-        url.trim()
-      );
+    useCallback(
+      url => {
 
-
-  // =====================================================
-  // RECORDING MIME TYPE
-  // =====================================================
-
-  const getRecordingMimeType =
-    () => {
-
-      if (
-        typeof MediaRecorder ===
-        "undefined"
-      ) {
-
-        return null;
-
-      }
-
-
-      const candidates = [
-
-        "video/webm;codecs=vp9,opus",
-
-        "video/webm;codecs=vp8,opus",
-
-        "video/webm",
-
-      ];
-
-
-      return (
-
-        candidates.find(
-          type =>
-            MediaRecorder.isTypeSupported(
-              type
-            )
-        ) ||
-        null
-
-      );
-
-    };
-
-
-  // =====================================================
-  // OBJECT URL CLEANUP
-  // =====================================================
-
-  const revokeRecordingObjectUrl =
-    () => {
-
-      if (
-        recordingObjectUrlRef.current
-      ) {
-
-        URL.revokeObjectURL(
-          recordingObjectUrlRef.current
+        return (
+          typeof url === "string" &&
+          /\.m3u8(\?.*)?$/i.test(
+            url.trim()
+          )
         );
 
+      },
+      []
+    );
 
-        recordingObjectUrlRef.current =
-          null;
-
-      }
-
-    };
-
-
-  // =====================================================
-  // HLS CLEANUP
-  // =====================================================
 
   const destroyHls =
-    () => {
+    useCallback(
+      () => {
 
-      if (
-        !hlsRef.current
-      ) {
+        const hls =
+          hlsRef.current;
 
-        return;
 
-      }
-
-
-      try {
-
-        hlsRef.current.destroy();
-
-      }
-      catch {
-
-        // Ignore cleanup errors.
-
-      }
-
-
-      hlsRef.current =
-        null;
-
-    };
-
-
-  // =====================================================
-  // UPDATE BINDING
-  // =====================================================
-
-  const updateFeedBinding =
-    (
-      patchData = {}
-    ) => {
-
-      if (
-        typeof actionCtx?.updateBinding !==
-        "function"
-      ) {
-
-        console.warn(
-          "[VideoFeed] updateBinding unavailable",
-          {
-
-            id,
-
-            sourceId,
-
-          }
-        );
-
-        return;
-
-      }
-
-
-      // -------------------------------------------------
-      // Stable Confo source ID
-      // -------------------------------------------------
-
-      if (
-        sourceId
-      ) {
-
-        actionCtx.updateBinding(
-          sourceId,
-          patchData
-        );
-
-      }
-
-
-      // -------------------------------------------------
-      // Generated Canvas ID
-      // -------------------------------------------------
-
-      if (
-        id &&
-        id !== sourceId
-      ) {
-
-        actionCtx.updateBinding(
-          id,
-          patchData
-        );
-
-      }
-
-    };
-
-
-  // =====================================================
-  // STOP LOCAL STREAM
-  // =====================================================
-
-  const stopLocalStream =
-    () => {
-
-      const stream =
-        streamRef.current;
-
-
-      if (
-        !stream
-      ) {
-
-        setStreamReady(
-          false
-        );
-
-        return;
-
-      }
-
-
-      stream
-        .getTracks()
-        .forEach(
-          track => {
-
-            try {
-
-              track.stop();
-
-            }
-            catch {
-
-              // Ignore individual track errors.
-
-            }
-
-          }
-        );
-
-
-      streamRef.current =
-        null;
-
-
-      setStreamReady(
-        false
-      );
-
-    };
-
-
-  // =====================================================
-  // STOP RECORDING INTERNAL
-  // =====================================================
-
-  const stopRecordingInternal =
-    ({
-      discard = false,
-    } = {}) => {
-
-      const recorder =
-        mediaRecorderRef.current;
-
-
-      // -------------------------------------------------
-      // No recorder
-      // -------------------------------------------------
-
-      if (
-        !recorder
-      ) {
-
-        if (
-          discard
-        ) {
-
-          recordingChunksRef.current =
-            [];
-
-          recordingStartedAtRef.current =
-            null;
-
-          recordingProjectIdRef.current =
-            null;
-
-          recordingInterviewIdRef.current =
-            null;
-
-          revokeRecordingObjectUrl();
-
+        if (!hls) {
+          return;
         }
 
-
-        return {
-
-          ok:
-            true,
-
-          recording:
-            false,
-
-          hadRecorder:
-            false,
-
-        };
-
-      }
-
-
-      // -------------------------------------------------
-      // DISCARD
-      // -------------------------------------------------
-
-      if (
-        discard
-      ) {
 
         try {
 
-          recorder.ondataavailable =
-            null;
-
-          recorder.onstop =
-            null;
-
-          recorder.onerror =
-            null;
-
-
-          if (
-            recorder.state !==
-            "inactive"
-          ) {
-
-            recorder.stop();
-
-          }
+          hls.destroy();
 
         }
         catch {
 
           // Ignore cleanup errors.
+
+        }
+
+
+        hlsRef.current =
+          null;
+
+      },
+      []
+    );
+
+
+  // =======================================================
+  // MIME TYPE
+  // =======================================================
+
+  const getRecordingMimeType =
+    useCallback(
+      () => {
+
+        if (
+          typeof MediaRecorder ===
+          "undefined"
+        ) {
+
+          return null;
+
+        }
+
+
+        const candidates = [
+
+          "video/webm;codecs=vp9,opus",
+
+          "video/webm;codecs=vp8,opus",
+
+          "video/webm",
+
+        ];
+
+
+        return (
+          candidates.find(
+            type =>
+              MediaRecorder.isTypeSupported(
+                type
+              )
+          ) ||
+          null
+        );
+
+      },
+      []
+    );
+
+
+  // =======================================================
+  // OBJECT URL CLEANUP
+  // =======================================================
+
+  const revokeRecordingObjectUrl =
+    useCallback(
+      () => {
+
+        const objectUrl =
+          recordingObjectUrlRef.current;
+
+
+        if (!objectUrl) {
+          return;
+        }
+
+
+        try {
+
+          URL.revokeObjectURL(
+            objectUrl
+          );
+
+        }
+        catch {
+
+          // Ignore.
+
+        }
+
+
+        recordingObjectUrlRef.current =
+          null;
+
+      },
+      []
+    );
+
+
+  // =======================================================
+  // UPDATE BINDING
+  // =======================================================
+
+  const updateFeedBinding =
+    useCallback(
+      (
+        patchData = {}
+      ) => {
+
+        const update =
+          updateBindingRef.current;
+
+
+        if (
+          typeof update !==
+          "function"
+        ) {
+
+          console.warn(
+            "[VideoFeed] updateBinding unavailable",
+            {
+              id,
+              sourceId,
+              patchData,
+            }
+          );
+
+
+          return;
+
+        }
+
+
+        // -------------------------------------------------
+        // Stable Confo source ID
+        // -------------------------------------------------
+
+        if (
+          sourceId
+        ) {
+
+          update(
+            sourceId,
+            patchData
+          );
+
+        }
+
+
+        // -------------------------------------------------
+        // Generated Canvas ID
+        // -------------------------------------------------
+
+        if (
+          id &&
+          id !== sourceId
+        ) {
+
+          update(
+            id,
+            patchData
+          );
+
+        }
+
+      },
+      [
+        id,
+        sourceId,
+      ]
+    );
+
+
+  // =======================================================
+  // STOP LOCAL STREAM
+  // =======================================================
+
+  const stopLocalStream =
+    useCallback(
+      () => {
+
+        const stream =
+          streamRef.current;
+
+
+        if (!stream) {
+
+          setStreamReady(
+            false
+          );
+
+          return;
+
+        }
+
+
+        stream
+          .getTracks()
+          .forEach(
+            track => {
+
+              try {
+
+                track.stop();
+
+              }
+              catch {
+
+                // Ignore individual track errors.
+
+              }
+
+            }
+          );
+
+
+        streamRef.current =
+          null;
+
+
+        setStreamReady(
+          false
+        );
+
+      },
+      []
+    );
+
+
+  // =======================================================
+  // DISCARD RECORDING
+  // =======================================================
+
+  const discardRecording =
+    useCallback(
+      () => {
+
+        const recorder =
+          mediaRecorderRef.current;
+
+
+        if (recorder) {
+
+          try {
+
+            recorder.ondataavailable =
+              null;
+
+            recorder.onstop =
+              null;
+
+            recorder.onerror =
+              null;
+
+
+            if (
+              recorder.state !==
+              "inactive"
+            ) {
+
+              recorder.stop();
+
+            }
+
+          }
+          catch {
+
+            // Ignore cleanup errors.
+
+          }
 
         }
 
@@ -888,6 +1050,10 @@ export default function VideoFeed(
           null;
 
 
+        recordingUploadRequestedRef.current =
+          false;
+
+
         revokeRecordingObjectUrl();
 
 
@@ -905,491 +1071,112 @@ export default function VideoFeed(
           recordingUrl:
             null,
 
+          recordingUploadRequested:
+            false,
+
         });
 
+      },
+      [
+        revokeRecordingObjectUrl,
+        updateFeedBinding,
+      ]
+    );
 
-        return {
 
-          ok:
-            true,
+  // =======================================================
+  // STOP RECORDING INTERNAL
+  // =======================================================
+  //
+  // requestUpload is the important addition.
+  //
+  // It records the intent BEFORE MediaRecorder.stop().
+  //
+  // MediaRecorder.onstop executes asynchronously and reads
+  // this ref later.
+  //
+  // =======================================================
 
-          recording:
-            false,
+  const stopRecordingInternal =
+    useCallback(
+      ({
+        discard = false,
+        requestUpload = false,
+      } = {}) => {
 
-          discarded:
-            true,
+        const recorder =
+          mediaRecorderRef.current;
 
-        };
 
-      }
+        // -------------------------------------------------
+        // DISCARD
+        // -------------------------------------------------
 
+        if (
+          discard
+        ) {
 
-      // -------------------------------------------------
-      // NORMAL STOP
-      // -------------------------------------------------
+          discardRecording();
 
-      if (
-        recorder.state ===
-        "recording"
-      ) {
 
-        console.log(
-          "[VideoFeed] Stopping MediaRecorder",
-          {
+          return {
 
-            id,
+            ok:
+              true,
 
-            sourceId,
+            recording:
+              false,
 
-          }
-        );
+            discarded:
+              true,
 
-
-        recorder.stop();
-
-
-        return {
-
-          ok:
-            true,
-
-          recording:
-            false,
-
-          stopping:
-            true,
-
-        };
-
-      }
-
-
-      return {
-
-        ok:
-          true,
-
-        recording:
-          false,
-
-      };
-
-    };
-
-
-  // =====================================================
-  // RESET VIDEO ELEMENT
-  // =====================================================
-
-  const resetVideoElement =
-    ({
-      discardRecording =
-        false,
-    } = {}) => {
-
-      const video =
-        videoRef.current;
-
-
-      if (
-        !video
-      ) {
-
-        return;
-
-      }
-
-
-      if (
-        discardRecording
-      ) {
-
-        stopRecordingInternal({
-          discard:
-            true,
-        });
-
-      }
-
-
-      destroyHls();
-
-
-      stopLocalStream();
-
-
-      try {
-
-        video.pause();
-
-      }
-      catch {
-
-        // Ignore.
-
-      }
-
-
-      video.srcObject =
-        null;
-
-
-      video.removeAttribute(
-        "src"
-      );
-
-
-      video.load();
-
-    };
-
-
-  // =====================================================
-  // START RECORDING INTERNAL
-  // =====================================================
-
-  const startRecordingInternal =
-    () => {
-
-      if (
-        mode !==
-        "local"
-      ) {
-
-        console.warn(
-          "[VideoFeed] Recording requires local mode"
-        );
-
-
-        return {
-
-          ok:
-            false,
-
-          error:
-            "RECORDING_REQUIRES_LOCAL_MODE",
-
-        };
-
-      }
-
-
-      const stream =
-        streamRef.current;
-
-
-      if (
-        !stream
-      ) {
-
-        console.warn(
-          "[VideoFeed] Cannot record without local media"
-        );
-
-
-        return {
-
-          ok:
-            false,
-
-          error:
-            "NO_LOCAL_MEDIA_STREAM",
-
-        };
-
-      }
-
-
-      if (
-        !streamReady
-      ) {
-
-        console.warn(
-          "[VideoFeed] Cannot record before stream ready"
-        );
-
-
-        return {
-
-          ok:
-            false,
-
-          error:
-            "MEDIA_STREAM_NOT_READY",
-
-        };
-
-      }
-
-
-      if (
-        typeof MediaRecorder ===
-        "undefined"
-      ) {
-
-        return {
-
-          ok:
-            false,
-
-          error:
-            "MEDIA_RECORDER_UNSUPPORTED",
-
-        };
-
-      }
-
-
-      if (
-        mediaRecorderRef.current
-      ) {
-
-        return {
-
-          ok:
-            true,
-
-          recording:
-            true,
-
-          alreadyRecording:
-            true,
-
-        };
-
-      }
-
-
-      const mimeType =
-        getRecordingMimeType();
-
-
-      if (
-        !mimeType
-      ) {
-
-        return {
-
-          ok:
-            false,
-
-          error:
-            "NO_SUPPORTED_RECORDING_FORMAT",
-
-        };
-
-      }
-
-
-      // =================================================
-      // CURRENT RUNTIME IDENTITY
-      // =================================================
-      //
-      // Read from the LIVE refs, not ActionContext.
-      //
-      // =================================================
-
-      const currentProject =
-        runtimeProjectRef.current ||
-        runtimeProject ||
-        {};
-
-
-      const currentInterview =
-        runtimeInterviewRef.current ||
-        runtimeInterview ||
-        {};
-
-
-      const projectId =
-        currentProject?.id ||
-        currentProject?._id ||
-        currentProject?.projectId ||
-        currentInterview?.projectId ||
-        null;
-
-
-      const interviewId =
-        currentInterview?.id ||
-        currentInterview?._id ||
-        currentInterview?.interviewId ||
-        currentInterview?.interview_id ||
-        null;
-
-
-      // =================================================
-      // STORE SESSION IDENTITY
-      // =================================================
-
-      recordingProjectIdRef.current =
-        projectId;
-
-
-      recordingInterviewIdRef.current =
-        interviewId;
-
-
-      console.log(
-        "[VideoFeed] RECORDING IDENTITY CAPTURE",
-        {
-
-          id,
-
-          sourceId,
-
-          projectId,
-
-          interviewId,
-
-          currentProject,
-
-          currentInterview,
+          };
 
         }
-      );
 
 
-      // =================================================
-      // PREPARE RECORDER
-      // =================================================
+        // -------------------------------------------------
+        // NO ACTIVE RECORDER
+        // -------------------------------------------------
 
-      recordingChunksRef.current =
-        [];
+        if (!recorder) {
 
+          return {
 
-      revokeRecordingObjectUrl();
+            ok:
+              true,
 
+            recording:
+              false,
 
-      let recorder;
+            hadRecorder:
+              false,
 
-
-      try {
-
-        recorder =
-          new MediaRecorder(
-            stream,
-            {
-              mimeType,
-            }
-          );
-
-      }
-      catch (
-        err
-      ) {
-
-        console.error(
-          "[VideoFeed] MediaRecorder creation failed",
-          err
-        );
-
-
-        recordingProjectIdRef.current =
-          null;
-
-
-        recordingInterviewIdRef.current =
-          null;
-
-
-        return {
-
-          ok:
-            false,
-
-          error:
-            "RECORDING_INITIALISATION_FAILED",
-
-        };
-
-      }
-
-
-      mediaRecorderRef.current =
-        recorder;
-
-
-      recordingStartedAtRef.current =
-        Date.now();
-
-
-      console.log(
-        "[VideoFeed] Creating MediaRecorder",
-        {
-
-          id,
-
-          sourceId,
-
-          mimeType,
-
-          streamReady,
-
-          projectId,
-
-          interviewId,
-
-          tracks:
-            stream
-              .getTracks()
-              .map(
-                track => ({
-
-                  kind:
-                    track.kind,
-
-                  enabled:
-                    track.enabled,
-
-                  readyState:
-                    track.readyState,
-
-                })
-              ),
+          };
 
         }
-      );
 
 
-      // =================================================
-      // DATA
-      // =================================================
+        // -------------------------------------------------
+        // NORMAL STOP
+        // -------------------------------------------------
 
-      recorder.ondataavailable =
-        event => {
+        if (
+          recorder.state ===
+          "recording"
+        ) {
 
-          if (
-            event?.data?.size > 0
-          ) {
+          // ------------------------------------------------
+          // CRITICAL:
+          //
+          // Capture upload intent BEFORE calling stop().
+          //
+          // onstop is asynchronous.
+          // ------------------------------------------------
 
-            recordingChunksRef.current.push(
-              event.data
-            );
-
-          }
-
-        };
-
-
-      // =================================================
-      // ERROR
-      // =================================================
-
-      recorder.onerror =
-        event => {
-
-          console.error(
-            "[VideoFeed] Recording error",
-            {
-
-              id,
-
-              sourceId,
-
-              event,
-
-            }
-          );
+          recordingUploadRequestedRef.current =
+            requestUpload ===
+            true;
 
 
           updateFeedBinding({
@@ -1398,397 +1185,34 @@ export default function VideoFeed(
               false,
 
             recordingStatus:
-              "failed",
+              "stopping",
+
+            recordingUploadRequested:
+              requestUpload ===
+              true,
 
           });
 
-        };
-
-
-      // =================================================
-      // START
-      // =================================================
-
-      recorder.onstart =
-        () => {
 
           console.log(
-            "[VideoFeed] Recording started",
+            "[VideoFeed] Stopping MediaRecorder",
             {
 
               id,
 
               sourceId,
 
-              mimeType,
-
-              projectId,
-
-              interviewId,
+              requestUpload:
+                requestUpload ===
+                true,
 
             }
           );
 
 
-          updateFeedBinding({
-
-            recording:
-              true,
-
-            recordingStatus:
-              "recording",
-
-            recordingStartedAt:
-              recordingStartedAtRef.current,
-
-            recordingMimeType:
-              mimeType,
-
-          });
-
-        };
-
-
-      // =================================================
-      // STOP
-      // =================================================
-
-      recorder.onstop =
-        async () => {
-
           try {
 
-            const stoppedAt =
-              Date.now();
-
-
-            const startedAt =
-              recordingStartedAtRef.current;
-
-
-            const durationSeconds =
-              startedAt
-
-                ? Math.max(
-                    0,
-                    (
-                      stoppedAt -
-                      startedAt
-                    ) / 1000
-                  )
-
-                : 0;
-
-
-            // -------------------------------------------
-            // CREATE BLOB
-            // -------------------------------------------
-
-            const blob =
-              new Blob(
-                recordingChunksRef.current,
-                {
-
-                  type:
-                    recorder.mimeType ||
-                    mimeType,
-
-                }
-              );
-
-
-            // -------------------------------------------
-            // SESSION IDENTITY
-            // -------------------------------------------
-
-            const capturedProjectId =
-              recordingProjectIdRef.current;
-
-
-            const capturedInterviewId =
-              recordingInterviewIdRef.current;
-
-
-            // -------------------------------------------
-            // LIVE RUNTIME FALLBACK
-            // -------------------------------------------
-
-            const liveProject =
-              runtimeProjectRef.current ||
-              {};
-
-
-            const liveInterview =
-              runtimeInterviewRef.current ||
-              {};
-
-
-            const liveProjectId =
-              liveProject?.id ||
-              liveProject?._id ||
-              liveProject?.projectId ||
-              liveInterview?.projectId ||
-              null;
-
-
-            const liveInterviewId =
-              liveInterview?.id ||
-              liveInterview?._id ||
-              liveInterview?.interviewId ||
-              liveInterview?.interview_id ||
-              null;
-
-
-            // -------------------------------------------
-            // FINAL IDENTITY
-            // -------------------------------------------
-
-            const finalProjectId =
-              capturedProjectId ||
-              liveProjectId ||
-              null;
-
-
-            const finalInterviewId =
-              capturedInterviewId ||
-              liveInterviewId ||
-              null;
-
-
-            console.log(
-              "[VideoFeed] FINAL RECORDING IDENTITY",
-              {
-
-                id,
-
-                sourceId,
-
-                capturedProjectId,
-
-                capturedInterviewId,
-
-                liveProjectId,
-
-                liveInterviewId,
-
-                finalProjectId,
-
-                finalInterviewId,
-
-              }
-            );
-
-
-            // -------------------------------------------
-            // CLEAR RECORDER REFS
-            // -------------------------------------------
-
-            recordingChunksRef.current =
-              [];
-
-
-            recordingStartedAtRef.current =
-              null;
-
-
-            mediaRecorderRef.current =
-              null;
-
-
-            // -------------------------------------------
-            // LOCAL OBJECT URL
-            // -------------------------------------------
-
-            const objectUrl =
-              URL.createObjectURL(
-                blob
-              );
-
-
-            recordingObjectUrlRef.current =
-              objectUrl;
-
-
-            // -------------------------------------------
-            // RECORDING COMPLETE
-            // -------------------------------------------
-
-            console.log(
-              "[VideoFeed] Recording complete",
-              {
-
-                id,
-
-                sourceId,
-
-                sizeBytes:
-                  blob.size,
-
-                durationSeconds,
-
-                mimeType:
-                  blob.type ||
-                  mimeType,
-
-              }
-            );
-
-
-            // -------------------------------------------
-            // STORE RECORDING STATE
-            // -------------------------------------------
-
-            updateFeedBinding({
-
-              recording:
-                false,
-
-              recordingStatus:
-                "ready",
-
-              recordingBlob:
-                blob,
-
-              recordingUrl:
-                objectUrl,
-
-              recordingMimeType:
-                blob.type ||
-                mimeType,
-
-              recordingSizeBytes:
-                blob.size,
-
-              recordingDurationSeconds:
-                durationSeconds,
-
-              recordingCompletedAt:
-                stoppedAt,
-
-            });
-
-
-            // -------------------------------------------
-            // AUTOMATIC UPLOAD DISABLED
-            // -------------------------------------------
-
-            if (
-              !autoUploadRecording
-            ) {
-
-              return;
-
-            }
-
-
-            // -------------------------------------------
-            // AUTOMATIC UPLOAD
-            // -------------------------------------------
-
-            console.log(
-              "[VideoFeed] Starting automatic recording upload",
-              {
-
-                id,
-
-                sourceId,
-
-              }
-            );
-
-
-            if (
-              typeof actionCtx?.runAction !==
-              "function"
-            ) {
-
-              throw new Error(
-                "RUNTIME_RUN_ACTION_UNAVAILABLE"
-              );
-
-            }
-
-
-            // -------------------------------------------
-            // IMPORTANT
-            //
-            // Do not reject here because identity might
-            // still be recoverable inside uploadRecording.
-            // -------------------------------------------
-
-            const uploadResult =
-              await actionCtx.runAction(
-                "video.uploadRecording",
-                {
-
-                  id,
-
-                  targetId:
-                    id,
-
-                  sourceId,
-
-
-                  // -------------------------------------
-                  // Explicit recording identity
-                  // -------------------------------------
-
-                  projectId:
-                    finalProjectId,
-
-                  interviewId:
-                    finalInterviewId,
-
-
-                  // -------------------------------------
-                  // Authoritative recording
-                  // -------------------------------------
-
-                  recordingBlob:
-                    blob,
-
-                  recordingMimeType:
-                    blob.type ||
-                    mimeType,
-
-                  recordingSizeBytes:
-                    blob.size,
-
-                  recordingDurationSeconds:
-                    durationSeconds,
-
-                  recordingCompletedAt:
-                    stoppedAt,
-
-                }
-              );
-
-
-            console.log(
-              "[VideoFeed] Automatic recording upload result",
-              {
-
-                id,
-
-                sourceId,
-
-                uploadResult,
-
-              }
-            );
-
-
-            if (
-              uploadResult?.ok ===
-              false
-            ) {
-
-              console.error(
-                "[VideoFeed] Recording upload failed",
-                uploadResult
-              );
-
-            }
+            recorder.stop();
 
           }
           catch (
@@ -1796,14 +1220,410 @@ export default function VideoFeed(
           ) {
 
             console.error(
-              "[VideoFeed] Recording completion/upload failed",
+              "[VideoFeed] MediaRecorder.stop failed",
+              error
+            );
+
+
+            recordingUploadRequestedRef.current =
+              false;
+
+
+            updateFeedBinding({
+
+              recording:
+                false,
+
+              recordingStatus:
+                "failed",
+
+              recordingUploadRequested:
+                false,
+
+            });
+
+
+            return {
+
+              ok:
+                false,
+
+              error:
+                "RECORDING_STOP_FAILED",
+
+            };
+
+          }
+
+
+          return {
+
+            ok:
+              true,
+
+            recording:
+              true,
+
+            stopping:
+              true,
+
+            uploadPending:
+              requestUpload ===
+              true,
+
+          };
+
+        }
+
+
+        // -------------------------------------------------
+        // ALREADY STOPPING / INACTIVE
+        // -------------------------------------------------
+
+        return {
+
+          ok:
+            true,
+
+          recording:
+            false,
+
+          alreadyStopping:
+            recorder.state !==
+            "recording",
+
+        };
+
+      },
+      [
+        discardRecording,
+        id,
+        sourceId,
+        updateFeedBinding,
+      ]
+    );
+
+
+  // =======================================================
+  // START RECORDING
+  // =======================================================
+
+  const startRecordingInternal =
+    useCallback(
+      () => {
+
+        // -------------------------------------------------
+        // LOCAL MODE
+        // -------------------------------------------------
+
+        if (
+          mode !==
+          "local"
+        ) {
+
+          console.warn(
+            "[VideoFeed] Recording requires local mode"
+          );
+
+
+          return {
+
+            ok:
+              false,
+
+            error:
+              "RECORDING_REQUIRES_LOCAL_MODE",
+
+          };
+
+        }
+
+
+        // -------------------------------------------------
+        // STREAM
+        // -------------------------------------------------
+
+        const stream =
+          streamRef.current;
+
+
+        if (!stream) {
+
+          return {
+
+            ok:
+              false,
+
+            error:
+              "NO_LOCAL_MEDIA_STREAM",
+
+          };
+
+        }
+
+
+        // -------------------------------------------------
+        // READY
+        // -------------------------------------------------
+
+        if (
+          !streamReady
+        ) {
+
+          return {
+
+            ok:
+              false,
+
+            error:
+              "MEDIA_STREAM_NOT_READY",
+
+          };
+
+        }
+
+
+        // -------------------------------------------------
+        // SUPPORT
+        // -------------------------------------------------
+
+        if (
+          typeof MediaRecorder ===
+          "undefined"
+        ) {
+
+          return {
+
+            ok:
+              false,
+
+            error:
+              "MEDIA_RECORDER_UNSUPPORTED",
+
+          };
+
+        }
+
+
+        // -------------------------------------------------
+        // ALREADY RECORDING
+        // -------------------------------------------------
+
+        if (
+          mediaRecorderRef.current
+        ) {
+
+          return {
+
+            ok:
+              true,
+
+            recording:
+              true,
+
+            alreadyRecording:
+              true,
+
+          };
+
+        }
+
+
+        // -------------------------------------------------
+        // MIME
+        // -------------------------------------------------
+
+        const mimeType =
+          getRecordingMimeType();
+
+
+        if (!mimeType) {
+
+          return {
+
+            ok:
+              false,
+
+            error:
+              "NO_SUPPORTED_RECORDING_FORMAT",
+
+          };
+
+        }
+
+
+        // =================================================
+        // CAPTURE RUNTIME IDENTITY
+        // =================================================
+
+        const currentProject =
+          runtimeProjectRef.current ||
+          {};
+
+
+        const currentInterview =
+          runtimeInterviewRef.current ||
+          {};
+
+
+        const projectId =
+          getProjectId(
+            currentProject,
+            currentInterview
+          );
+
+
+        const interviewId =
+          getInterviewId(
+            currentInterview
+          );
+
+
+        recordingProjectIdRef.current =
+          projectId;
+
+
+        recordingInterviewIdRef.current =
+          interviewId;
+
+
+        recordingAutoUploadRef.current =
+          autoUploadRecording ===
+          true;
+
+
+        recordingUploadRequestedRef.current =
+          false;
+
+
+        console.log(
+          "[VideoFeed] Recording session captured",
+          {
+
+            id,
+
+            sourceId,
+
+            projectId,
+
+            interviewId,
+
+            autoUploadRecording:
+              recordingAutoUploadRef.current,
+
+          }
+        );
+
+
+        // =================================================
+        // RESET CHUNKS
+        // =================================================
+
+        recordingChunksRef.current =
+          [];
+
+
+        revokeRecordingObjectUrl();
+
+
+        // =================================================
+        // CREATE MEDIA RECORDER
+        // =================================================
+        
+        recordingStartInProgressRef.current =
+          true;
+        
+        
+        let recorder;
+
+
+        try {
+
+          recorder =
+            new MediaRecorder(
+              stream,
+              {
+                mimeType,
+              }
+            );
+
+        }
+        catch (
+          error
+        ) {
+
+          console.error(
+            "[VideoFeed] MediaRecorder creation failed",
+            error
+          );
+
+
+          recordingProjectIdRef.current =
+            null;
+
+
+          recordingInterviewIdRef.current =
+            null;
+
+
+          return {
+
+            ok:
+              false,
+
+            error:
+              "RECORDING_INITIALISATION_FAILED",
+
+          };
+
+        }
+
+
+        mediaRecorderRef.current =
+          recorder;
+
+
+        recordingStartedAtRef.current =
+          Date.now();
+
+
+        // =================================================
+        // DATA
+        // =================================================
+
+        recorder.ondataavailable =
+          event => {
+
+            if (
+              event?.data?.size >
+              0
+            ) {
+
+              recordingChunksRef.current.push(
+                event.data
+              );
+
+            }
+
+          };
+
+
+        // =================================================
+        // ERROR
+        // =================================================
+
+        recorder.onerror =
+          event => {
+
+            console.error(
+              "[VideoFeed] MediaRecorder error",
               {
 
                 id,
 
                 sourceId,
 
-                error,
+                event,
 
               }
             );
@@ -1819,214 +1639,1122 @@ export default function VideoFeed(
 
             });
 
-          }
-          finally {
-
-            // ------------------------------------------------
-            // Clear identity only after upload attempt.
-            // ------------------------------------------------
-
-            recordingProjectIdRef.current =
-              null;
+          };
 
 
-            recordingInterviewIdRef.current =
-              null;
+        // =================================================
+        // START
+        // =================================================
 
-          }
+        recorder.onstart =
+() => {
 
-        };
+// -----------------------------------------------
+// The recorder is now genuinely running.
+// Allow the recording effect to process a stop.
+// -----------------------------------------------
+
+recordingStartInProgressRef.current =
+  false;
 
 
-      // =================================================
-      // START MEDIA RECORDER
-      // =================================================
+updateFeedBinding({
 
-      try {
+  recording:
+    true,
 
-        recorder.start(
-          1000
-        );
+  recordingStatus:
+    "recording",
+
+  recordingStartedAt:
+    recordingStartedAtRef.current,
+
+  recordingMimeType:
+    mimeType,
+
+});
+
+
+console.log(
+  "[VideoFeed] Recording started",
+  {
+    id,
+    sourceId,
+    projectId,
+    interviewId,
+    mimeType,
+
+    recordingStartInProgress:
+      recordingStartInProgressRef.current,
+
+  }
+);
+
+};
+
+
+        // =================================================
+// STOP
+// =================================================
+//
+// MediaRecorder.stop() is asynchronous.
+//
+// This handler owns:
+//
+// MediaRecorder.onstop
+//      ↓
+// Blob creation
+//      ↓
+// recording state = ready
+//      ↓
+// optional video.uploadRecording
+//      ↓
+// recording completion handshake
+//
+// =================================================
+
+recorder.onstop =
+async () => {
+console.log(
+  "[VideoFeed] MEDIARECORDER ONSTOP FIRED",
+  {
+    id,
+    sourceId,
+
+    recorderState:
+      recorder.state,
+
+    chunkCount:
+      recordingChunksRef.current.length,
+
+    uploadRequested:
+      recordingUploadRequestedRef.current,
+
+    autoUpload:
+      recordingAutoUploadRef.current,
+
+  }
+);
+
+
+const stoppedAt =
+  Date.now();
+
+
+const startedAt =
+  recordingStartedAtRef.current;
+
+
+const durationSeconds =
+  startedAt
+    ? Math.max(
+        0,
+        (
+          stoppedAt -
+          startedAt
+        ) / 1000
+      )
+    : 0;
+
+
+// -------------------------------------------------
+// CAPTURE SESSION IDENTITY BEFORE CLEARING REFS
+// -------------------------------------------------
+
+const capturedProjectId =
+  recordingProjectIdRef.current;
+
+
+const capturedInterviewId =
+  recordingInterviewIdRef.current;
+
+
+const capturedAutoUpload =
+  recordingAutoUploadRef.current;
+
+
+const capturedUploadRequest =
+  recordingUploadRequestedRef.current;
+
+
+console.log(
+  "[VideoFeed] RECORDING STOP CAPTURE",
+  {
+    id,
+    sourceId,
+
+    capturedProjectId,
+    capturedInterviewId,
+
+    capturedAutoUpload,
+    capturedUploadRequest,
+
+    durationSeconds,
+
+  }
+);
+
+
+try {
+
+  // ===============================================
+  // CREATE BLOB
+  // ===============================================
+
+  const blob =
+    new Blob(
+      recordingChunksRef.current,
+      {
+        type:
+          recorder.mimeType ||
+          mimeType,
+      }
+    );
+
+
+  console.log(
+    "[VideoFeed] RECORDING BLOB CREATED",
+    {
+      id,
+      sourceId,
+
+      sizeBytes:
+        blob.size,
+
+      mimeType:
+        blob.type,
+
+      durationSeconds,
+
+    }
+  );
+
+
+  if (
+    !blob.size
+  ) {
+
+    throw new Error(
+      "RECORDING_BLOB_EMPTY"
+    );
+
+  }
+
+
+  // ===============================================
+  // CLEAR ACTIVE RECORDER STATE
+  // ===============================================
+
+  recordingChunksRef.current =
+    [];
+
+  recordingStartedAtRef.current =
+    null;
+
+  mediaRecorderRef.current =
+    null;
+
+
+  recordingStartInProgressRef.current =
+    false;
+
+
+  // ===============================================
+  // LOCAL PREVIEW
+  // ===============================================
+
+  revokeRecordingObjectUrl();
+
+
+  const objectUrl =
+    URL.createObjectURL(
+      blob
+    );
+
+
+  recordingObjectUrlRef.current =
+    objectUrl;
+
+
+  // ===============================================
+  // RECORDING READY
+  // ===============================================
+
+  updateFeedBinding({
+
+    recording:
+      false,
+
+    recordingStatus:
+      "ready",
+
+    recordingBlob:
+      blob,
+
+    recordingUrl:
+      objectUrl,
+
+    recordingMimeType:
+      blob.type ||
+      mimeType,
+
+    recordingSizeBytes:
+      blob.size,
+
+    recordingDurationSeconds:
+      durationSeconds,
+
+    recordingCompletedAt:
+      stoppedAt,
+
+    recordingProjectId:
+      capturedProjectId,
+
+    recordingInterviewId:
+      capturedInterviewId,
+
+    recordingUploadRequested:
+      capturedUploadRequest,
+
+  });
+
+
+  console.log(
+    "[VideoFeed] Recording ready",
+    {
+      id,
+      sourceId,
+
+      projectId:
+        capturedProjectId,
+
+      interviewId:
+        capturedInterviewId,
+
+      sizeBytes:
+        blob.size,
+
+    }
+  );
+
+
+  // ===============================================
+  // SHOULD UPLOAD?
+  // ===============================================
+
+  const shouldUpload =
+    capturedAutoUpload ||
+    capturedUploadRequest;
+
+
+  console.log(
+    "[VideoFeed] RECORDING UPLOAD DECISION",
+    {
+      id,
+      sourceId,
+
+      capturedAutoUpload,
+      capturedUploadRequest,
+
+      shouldUpload,
+
+    }
+  );
+
+
+  if (
+    !shouldUpload
+  ) {
+
+    console.log(
+      "[VideoFeed] Recording upload not requested",
+      {
+        id,
+        sourceId,
+      }
+    );
+
+
+    return;
+
+  }
+
+
+  // ===============================================
+  // RUNTIME ACTION REQUIRED
+  // ===============================================
+
+  const run =
+    runActionRef.current;
+
+
+  if (
+    typeof run !==
+    "function"
+  ) {
+
+    throw new Error(
+      "RUNTIME_RUN_ACTION_UNAVAILABLE"
+    );
+
+  }
+
+
+  // ===============================================
+  // UPLOADING
+  // ===============================================
+
+  updateFeedBinding({
+
+    recording:
+      false,
+
+    recordingStatus:
+      "uploading",
+
+  });
+
+
+  console.log(
+    "[VideoFeed] Starting recording upload",
+    {
+      id,
+      sourceId,
+
+      projectId:
+        capturedProjectId,
+
+      interviewId:
+        capturedInterviewId,
+
+    }
+  );
+
+
+  // ===============================================
+  // VIDEO UPLOAD ACTION
+  // ===============================================
+
+  const uploadResult =
+    await run(
+      "video.uploadRecording",
+      {
+
+        id,
+
+        targetId:
+          id,
+
+        sourceId,
+
+
+        projectId:
+          capturedProjectId,
+
+        interviewId:
+          capturedInterviewId,
+
+
+        recordingBlob:
+          blob,
+
+        recordingMimeType:
+          blob.type ||
+          mimeType,
+
+        recordingSizeBytes:
+          blob.size,
+
+        recordingDurationSeconds:
+          durationSeconds,
+
+        recordingCompletedAt:
+          stoppedAt,
 
       }
-      catch (
-        err
-      ) {
-
-        console.error(
-          "[VideoFeed] MediaRecorder.start() failed",
-          err
-        );
+    );
 
 
-        mediaRecorderRef.current =
-          null;
+  console.log(
+    "[VideoFeed] RECORDING UPLOAD RESULT",
+    {
+      id,
+      sourceId,
+
+      uploadResult,
+
+    }
+  );
 
 
-        recordingStartedAtRef.current =
-          null;
+  // ===============================================
+  // UPLOAD FAILURE
+  // ===============================================
+
+  if (
+    uploadResult?.ok !==
+    true
+  ) {
+
+    updateFeedBinding({
+
+      recording:
+        false,
+
+      recordingStatus:
+        "failed",
+
+      recordingError:
+        uploadResult?.error ||
+        "RECORDING_UPLOAD_FAILED",
+
+    });
 
 
-        recordingProjectIdRef.current =
-          null;
+    rejectRecordingCompletionRef
+      .current
+      ?.(
+        sourceId ||
+        id,
+
+        new Error(
+          uploadResult?.error ||
+          "RECORDING_UPLOAD_FAILED"
+        )
+      );
 
 
-        recordingInterviewIdRef.current =
-          null;
+    return;
+
+  }
+
+
+  // ===============================================
+  // UPLOADED
+  // ===============================================
+
+  updateFeedBinding({
+
+    recording:
+      false,
+
+    recordingStatus:
+      "uploaded",
+
+    recordingUploadRequested:
+      false,
+
+    recordingUploadResult:
+      uploadResult,
+
+  });
+
+
+  console.log(
+    "[VideoFeed] RECORDING UPLOAD SUCCESSFUL",
+    {
+      id,
+      sourceId,
+
+      projectId:
+        capturedProjectId,
+
+      interviewId:
+        capturedInterviewId,
+
+      uploadResult,
+
+    }
+  );
+
+
+  // ===============================================
+  // COMPLETE RECORDING HANDSHAKE
+  // ===============================================
+
+  const resolve =
+    resolveRecordingCompletionRef
+      .current;
+
+
+  console.log(
+    "[VideoFeed] HANDSHAKE RESOLUTION ATTEMPT",
+    {
+      id,
+      sourceId,
+
+      hasResolver:
+        typeof resolve ===
+        "function",
+
+      handshakeId:
+        sourceId ||
+        id,
+
+    }
+  );
+
+
+  if (
+    typeof resolve ===
+    "function"
+  ) {
+
+    const handshakeId =
+      sourceId ||
+      id;
+
+
+    const resolved =
+      resolve(
+        handshakeId,
+        uploadResult
+      );
+
+
+    console.log(
+      "[VideoFeed] HANDSHAKE RESOLUTION RESULT",
+      {
+        handshakeId,
+        resolved,
+      }
+    );
+
+  }
+  else {
+
+    console.error(
+      "[VideoFeed] RECORDING HANDSHAKE RESOLVER UNAVAILABLE",
+      {
+        id,
+        sourceId,
+      }
+    );
+
+  }
+
+}
+catch (
+error
+) {
+
+console.error(
+"[VideoFeed] MediaRecorder creation failed",
+error
+);
+
+recordingStartInProgressRef.current =
+false;
+
+recordingProjectIdRef.current =
+null;
+
+recordingInterviewIdRef.current =
+null;
+
+return {
+
+ok:
+  false,
+
+error:
+  "RECORDING_INITIALISATION_FAILED",
+
+};
+
+}
+
+finally {
+
+  recordingProjectIdRef.current =
+    null;
+
+
+  recordingInterviewIdRef.current =
+    null;
+
+
+  recordingUploadRequestedRef.current =
+    false;
+
+}
+
+};
+
+
+
+
+        // =================================================
+        // START MEDIA RECORDER
+        // =================================================
+
+        try {
+
+          recorder.start(
+            1000
+          );
+
+        }
+        catch (
+          error
+        ) {
+
+          console.error(
+            "[VideoFeed] MediaRecorder.start failed",
+            error
+          );
+
+
+          mediaRecorderRef.current =
+            null;
+
+
+          recordingChunksRef.current =
+            [];
+
+
+          recordingStartedAtRef.current =
+            null;
+
+
+          recordingProjectIdRef.current =
+            null;
+
+
+          recordingInterviewIdRef.current =
+            null;
+
+
+          recordingUploadRequestedRef.current =
+            false;
+
+
+          updateFeedBinding({
+
+            recording:
+              false,
+
+            recordingStatus:
+              "failed",
+
+          });
+
+
+          return {
+
+            ok:
+              false,
+
+            error:
+              "RECORDING_START_FAILED",
+
+          };
+
+        }
 
 
         return {
 
           ok:
-            false,
+            true,
 
-          error:
-            "RECORDING_START_FAILED",
+          recording:
+            true,
 
         };
 
-      }
+      },
+      [
+        autoUploadRecording,
+        getInterviewId,
+        getProjectId,
+        getRecordingMimeType,
+        mode,
+        revokeRecordingObjectUrl,
+        streamReady,
+        updateFeedBinding,
+      ]
+    );
 
 
-      console.log(
-        "[VideoFeed] MediaRecorder.start() called",
-        {
-
-          id,
-
-          sourceId,
-
-          state:
-            recorder.state,
-
-          projectId:
-            recordingProjectIdRef.current,
-
-          interviewId:
-            recordingInterviewIdRef.current,
-
-        }
-      );
-
-
-      return {
-
-        ok:
-          true,
-
-        recording:
-          true,
-
-      };
-
-    };
-
-
-  // =====================================================
-  // LOCAL CAMERA + MICROPHONE
-  // =====================================================
+  // =======================================================
+  // LOCAL CAMERA
+  // =======================================================
 
   const attachLocalCamera =
-    async () => {
+    useCallback(
+      async () => {
 
-      const video =
-        videoRef.current;
-
-
-      if (
-        !video ||
-        streamRef.current
-      ) {
-
-        return;
-
-      }
+        const video =
+          videoRef.current;
 
 
-      resetVideoElement({
+        if (
+          !video ||
+          streamRef.current
+        ) {
 
-        discardRecording:
-          false,
+          return;
 
-      });
-
-
-      setIsLoading(
-        true
-      );
+        }
 
 
-      setError(
-        null
-      );
-
-
-      try {
-
-        const stream =
-          await navigator.mediaDevices.getUserMedia({
-
-            video:
-              true,
-
-            audio:
-              true,
-
-          });
-
-
-        streamRef.current =
-          stream;
-
-
-        // Initial camera state.
-
-        stream
-          .getVideoTracks()
-          .forEach(
-            track => {
-
-              track.enabled =
-                videoEnabled;
-
-            }
-          );
-
-
-        // Initial microphone state.
-
-        stream
-          .getAudioTracks()
-          .forEach(
-            track => {
-
-              track.enabled =
-                micEnabled;
-
-            }
-          );
-
-
-        // Attach stream.
-
-        video.srcObject =
-          stream;
-
-
-        video.muted =
-          true;
-
-
-        await video
-          .play()
-          ?.catch(
-            () => {}
-          );
-
-
-        setStreamReady(
+        setIsLoading(
           true
         );
+
+
+        setError(
+          null
+        );
+
+
+        try {
+
+          const stream =
+            await navigator.mediaDevices.getUserMedia({
+
+              video:
+                true,
+
+              audio:
+                true,
+
+            });
+
+
+          streamRef.current =
+            stream;
+
+
+          stream
+            .getVideoTracks()
+            .forEach(
+              track => {
+
+                track.enabled =
+                  videoEnabled;
+
+              }
+            );
+
+
+          stream
+            .getAudioTracks()
+            .forEach(
+              track => {
+
+                track.enabled =
+                  micEnabled;
+
+              }
+            );
+
+
+          video.srcObject =
+            stream;
+
+
+          video.muted =
+            true;
+
+
+          await video
+            .play()
+            ?.catch(
+              () => {}
+            );
+
+
+          setStreamReady(
+            true
+          );
+
+
+          setIsLoading(
+            false
+          );
+
+
+          setError(
+            null
+          );
+
+
+          console.log(
+            "[VideoFeed] Local media ready",
+            {
+
+              id,
+
+              sourceId,
+
+              videoTracks:
+                stream
+                  .getVideoTracks()
+                  .length,
+
+              audioTracks:
+                stream
+                  .getAudioTracks()
+                  .length,
+
+            }
+          );
+
+        }
+        catch (
+          error
+        ) {
+
+          console.error(
+            "[VideoFeed] Local media error",
+            error
+          );
+
+
+          streamRef.current =
+            null;
+
+
+          setStreamReady(
+            false
+          );
+
+
+          setIsLoading(
+            false
+          );
+
+
+          setError(
+            "Camera or microphone unavailable"
+          );
+
+        }
+
+      },
+      [
+        id,
+        micEnabled,
+        sourceId,
+        videoEnabled,
+      ]
+    );
+
+
+  // =======================================================
+  // REMOTE STREAM
+  // =======================================================
+
+  const attachRemote =
+    useCallback(
+      async url => {
+
+        const video =
+          videoRef.current;
+
+
+        if (
+          !video ||
+          !url
+        ) {
+
+          return;
+
+        }
+
+
+        setIsLoading(
+          true
+        );
+
+
+        setError(
+          null
+        );
+
+
+        resetVideoElementForRemote();
+
+
+        // =================================================
+        // HLS
+        // =================================================
+
+        if (
+          isHlsUrl(url)
+        ) {
+
+          try {
+
+            const mod =
+              await import(
+                "hls.js"
+              );
+
+
+            const Hls =
+              mod.default ||
+              mod;
+
+
+            if (
+              !Hls.isSupported()
+            ) {
+
+              setError(
+                "HLS not supported"
+              );
+
+
+              setIsLoading(
+                false
+              );
+
+
+              return;
+
+            }
+
+
+            const hls =
+              new Hls();
+
+
+            hlsRef.current =
+              hls;
+
+
+            hls.attachMedia(
+              video
+            );
+
+
+            hls.on(
+              Hls.Events.MEDIA_ATTACHED,
+              () => {
+
+                hls.loadSource(
+                  url
+                );
+
+              }
+            );
+
+
+            hls.on(
+              Hls.Events.MANIFEST_PARSED,
+              () => {
+
+                setIsLoading(
+                  false
+                );
+
+
+                setError(
+                  null
+                );
+
+
+                if (
+                  playing
+                ) {
+
+                  video
+                    .play()
+                    ?.catch(
+                      () => {}
+                    );
+
+                }
+
+              }
+            );
+
+
+            hls.on(
+              Hls.Events.ERROR,
+              (
+                _event,
+                data
+              ) => {
+
+                if (
+                  data?.fatal
+                ) {
+
+                  setError(
+                    "Stream error"
+                  );
+
+
+                  setIsLoading(
+                    false
+                  );
+
+                }
+
+              }
+            );
+
+          }
+          catch (
+            error
+          ) {
+
+            console.error(
+              "[VideoFeed] HLS load error",
+              error
+            );
+
+
+            setError(
+              "Stream load failed"
+            );
+
+
+            setIsLoading(
+              false
+            );
+
+          }
+
+
+          return;
+
+        }
+
+
+        // =================================================
+        // NORMAL REMOTE VIDEO
+        // =================================================
+
+        destroyHls();
+
+
+        video.srcObject =
+          null;
+
+
+        video.src =
+          url;
+
+
+        video.load();
+
+
+        if (
+          playing
+        ) {
+
+          video
+            .play()
+            ?.catch(
+              () => {}
+            );
+
+        }
 
 
         setIsLoading(
@@ -2038,136 +2766,97 @@ export default function VideoFeed(
           null
         );
 
-
-        console.log(
-          "[VideoFeed] Local media ready",
-          {
-
-            id,
-
-            sourceId,
-
-            videoTracks:
-              stream.getVideoTracks()
-                .length,
-
-            audioTracks:
-              stream.getAudioTracks()
-                .length,
-
-          }
-        );
-
-      }
-      catch (
-        err
-      ) {
-
-        console.error(
-          "[VideoFeed] local media error",
-          err
-        );
+      },
+      [
+        destroyHls,
+        isHlsUrl,
+        playing,
+      ]
+    );
 
 
-        streamRef.current =
-          null;
+  // =======================================================
+  // REMOTE RESET HELPER
+  // =======================================================
+
+  const resetVideoElementForRemote =
+    useCallback(
+      () => {
+
+        destroyHls();
 
 
-        setStreamReady(
-          false
-        );
+        stopLocalStream();
 
 
-        setError(
-          "Camera or microphone unavailable"
-        );
+        const video =
+          videoRef.current;
 
 
-        setIsLoading(
-          false
-        );
+        if (!video) {
+          return;
+        }
 
-      }
-
-    };
-
-
-  // =====================================================
-  // REMOTE STREAM
-  // =====================================================
-
-  const attachRemote =
-    async (
-      url
-    ) => {
-
-      const video =
-        videoRef.current;
-
-
-      if (
-        !video ||
-        !url
-      ) {
-
-        return;
-
-      }
-
-
-      resetVideoElement({
-
-        discardRecording:
-          true,
-
-      });
-
-
-      setIsLoading(
-        true
-      );
-
-
-      setError(
-        null
-      );
-
-
-      // =================================================
-      // HLS
-      // =================================================
-
-      if (
-        isHlsUrl(
-          url
-        )
-      ) {
 
         try {
 
-          const mod =
-            await import(
-              "hls.js"
-            );
+          video.pause();
+
+        }
+        catch {
+
+          // Ignore.
+
+        }
 
 
-          const Hls =
-            mod.default ||
-            mod;
+        video.srcObject =
+          null;
+
+
+        video.removeAttribute(
+          "src"
+        );
+
+
+        video.load();
+
+      },
+      [
+        destroyHls,
+        stopLocalStream,
+      ]
+    );
+
+
+  // =======================================================
+  // MEDIA LIFECYCLE
+  // =======================================================
+
+  useEffect(
+    () => {
+
+      let cancelled =
+        false;
+
+
+      const initialise =
+        async () => {
+
+          if (
+            cancelled
+          ) {
+
+            return;
+
+          }
 
 
           if (
-            !Hls.isSupported()
+            !enabled
           ) {
 
-            setError(
-              "HLS not supported"
-            );
-
-
-            setIsLoading(
-              false
-            );
+            discardRecording();
 
 
             return;
@@ -2175,209 +2864,51 @@ export default function VideoFeed(
           }
 
 
-          const hls =
-            new Hls();
+          if (
+            mode ===
+            "local"
+          ) {
 
+            await attachLocalCamera();
 
-          hlsRef.current =
-            hls;
+            return;
 
+          }
 
-          hls.attachMedia(
-            video
-          );
 
+          if (
+            mode ===
+            "remote" &&
+            src
+          ) {
 
-          hls.on(
-            Hls.Events.MEDIA_ATTACHED,
-            () => {
+            await attachRemote(
+              src
+            );
 
-              hls.loadSource(
-                url
-              );
+          }
 
-            }
-          );
+        };
 
 
-          hls.on(
-            Hls.Events.MANIFEST_PARSED,
-            () => {
-
-              setIsLoading(
-                false
-              );
-
-
-              setError(
-                null
-              );
-
-
-              if (
-                playing
-              ) {
-
-                video
-                  .play()
-                  ?.catch(
-                    () => {}
-                  );
-
-              }
-
-            }
-          );
-
-
-          hls.on(
-            Hls.Events.ERROR,
-            (
-              _event,
-              data
-            ) => {
-
-              if (
-                data?.fatal
-              ) {
-
-                setError(
-                  "Stream error"
-                );
-
-
-                setIsLoading(
-                  false
-                );
-
-              }
-
-            }
-          );
-
-        }
-        catch (
-          err
-        ) {
-
-          console.error(
-            "[VideoFeed] HLS load error",
-            err
-          );
-
-
-          setError(
-            "Stream load failed"
-          );
-
-
-          setIsLoading(
-            false
-          );
-
-        }
-
-
-        return;
-
-      }
-
-
-      // =================================================
-      // NORMAL REMOTE VIDEO
-      // =================================================
-
-      video.srcObject =
-        null;
-
-
-      video.src =
-        url;
-
-
-      video.load();
-
-
-      if (
-        playing
-      ) {
-
-        video
-          .play()
-          ?.catch(
-            () => {}
-          );
-
-      }
-
-
-      setIsLoading(
-        false
-      );
-
-
-      setError(
-        null
-      );
-
-    };
-
-
-  // =====================================================
-  // MEDIA LIFECYCLE
-  // =====================================================
-
-  useEffect(
-    () => {
-
-      if (
-        !enabled
-      ) {
-
-        resetVideoElement({
-
-          discardRecording:
-            true,
-
-        });
-
-
-        return;
-
-      }
-
-
-      if (
-        mode ===
-        "local"
-      ) {
-
-        attachLocalCamera();
-
-      }
-
-
-      if (
-        mode ===
-        "remote" &&
-        src
-      ) {
-
-        attachRemote(
-          src
-        );
-
-      }
+      initialise();
 
 
       return () => {
 
-        stopRecordingInternal({
+        cancelled =
+          true;
 
-          discard:
-            true,
 
-        });
+        // -------------------------------------------------
+        // Media/source lifecycle cleanup.
+        //
+        // An ordinary recording stop does NOT use this
+        // path. It uses stopRecordingInternal({discard:false}).
+        //
+        // -------------------------------------------------
+
+        discardRecording();
 
 
         destroyHls();
@@ -2389,16 +2920,21 @@ export default function VideoFeed(
 
     },
     [
+      attachLocalCamera,
+      attachRemote,
+      discardRecording,
+      destroyHls,
+      enabled,
       mode,
       src,
-      enabled,
+      stopLocalStream,
     ]
   );
 
 
-  // =====================================================
+  // =======================================================
   // VIDEO TRACK BINDING
-  // =====================================================
+  // =======================================================
 
   useEffect(
     () => {
@@ -2407,12 +2943,8 @@ export default function VideoFeed(
         streamRef.current;
 
 
-      if (
-        !stream
-      ) {
-
+      if (!stream) {
         return;
-
       }
 
 
@@ -2427,32 +2959,16 @@ export default function VideoFeed(
           }
         );
 
-
-      console.log(
-        "[VideoFeed] Video track binding applied",
-        {
-
-          id,
-
-          sourceId,
-
-          videoEnabled,
-
-        }
-      );
-
     },
     [
       videoEnabled,
-      id,
-      sourceId,
     ]
   );
 
 
-  // =====================================================
+  // =======================================================
   // AUDIO TRACK BINDING
-  // =====================================================
+  // =======================================================
 
   useEffect(
     () => {
@@ -2461,12 +2977,8 @@ export default function VideoFeed(
         streamRef.current;
 
 
-      if (
-        !stream
-      ) {
-
+      if (!stream) {
         return;
-
       }
 
 
@@ -2481,124 +2993,272 @@ export default function VideoFeed(
           }
         );
 
-
-      console.log(
-        "[VideoFeed] Audio track binding applied",
-        {
-
-          id,
-
-          sourceId,
-
-          micEnabled,
-
-        }
-      );
-
     },
     [
       micEnabled,
-      id,
-      sourceId,
     ]
   );
 
 
-  // =====================================================
+  // =======================================================
   // RECORDING BINDING
-  // =====================================================
+  // =======================================================
 
-  useEffect(
-    () => {
+   useEffect(
+() => {
 
-      if (
-        mode !==
-        "local"
-      ) {
+console.log(
+  "%c[VideoFeed] RECORDING EFFECT FIRED%c",
+  "color: #D946EF; font-weight: bold;", // Magenta text tag
+  "",
+  {
+    id,
+    sourceId,
+    recording,
+    recordingStatus,
+    hasRuntimeRecording,
+    sourceRecording: sourceBinding?.recording,
+    installedRecording: installedBinding?.recording,
+    recordingUploadRequested,
+    autoUploadRecording,
+    recorderExists: Boolean(mediaRecorderRef.current),
+    recorderState: mediaRecorderRef.current?.state || "none",
+    recordingStartInProgress: recordingStartInProgressRef.current,
+  }
+);
 
-        return;
+if (
+  mode !==
+  "local"
+) {
 
-      }
-
-
-      // -------------------------------------------------
-      // START
-      // -------------------------------------------------
-
-      if (
-        recording &&
-        streamReady &&
-        !mediaRecorderRef.current
-      ) {
-
-        console.log(
-          "[VideoFeed] Recording binding detected - starting",
-          {
-
-            id,
-
-            sourceId,
-
-          }
-        );
-
-
-        startRecordingInternal();
-
-        return;
-
-      }
-
-
-      // -------------------------------------------------
-      // STOP
-      // -------------------------------------------------
-
-      if (
-        !recording &&
-        mediaRecorderRef.current
-      ) {
-
-        console.log(
-          "[VideoFeed] Recording binding detected - stopping",
-          {
-
-            id,
-
-            sourceId,
-
-          }
-        );
-
-
-        stopRecordingInternal();
-
-      }
-
-    },
-    [
-      recording,
-      streamReady,
-      mode,
+  console.log(
+    "[VideoFeed] RECORDING EFFECT SKIPPED - NOT LOCAL",
+    {
       id,
       sourceId,
-    ]
+      mode,
+    }
+  );
+
+  return;
+
+}
+
+
+const recorder =
+  mediaRecorderRef.current;
+
+
+const shouldStartRecorder =
+  recording &&
+  streamReady &&
+  !recorder &&
+  !recordingStartInProgressRef.current;
+
+
+const shouldStopRecorder =
+  hasRuntimeRecording &&
+  recording === false &&
+  recorder?.state === "recording" &&
+  !recordingStartInProgressRef.current;
+
+
+console.log(
+  "[VideoFeed] RECORDING STOP DECISION",
+  {
+    id,
+    sourceId,
+
+    shouldStopRecorder,
+
+    recording,
+
+    hasRuntimeRecording,
+
+    recorderState:
+      recorder?.state ||
+      "none",
+
+    recordingStartInProgress:
+      recordingStartInProgressRef.current,
+
+    recordingUploadRequested,
+
+    autoUploadRecording,
+
+  }
+);
+
+
+// ===================================================
+// START
+// ===================================================
+
+if (
+  shouldStartRecorder
+) {
+
+  console.log(
+    "[VideoFeed] Recording effect -> START",
+    {
+      id,
+      sourceId,
+    }
   );
 
 
-  // =====================================================
-  // FINAL CLEANUP
-  // =====================================================
+  startRecordingInternal();
+
+
+  return;
+
+}
+
+
+// ===================================================
+// STOP
+// ===================================================
+
+if (
+  shouldStopRecorder
+) {
+
+  const shouldUpload =
+    autoUploadRecording === true ||
+    recordingUploadRequested === true;
+
+
+  console.log(
+    "[VideoFeed] Recording binding detected - stopping",
+    {
+      id,
+      sourceId,
+
+      shouldUpload,
+
+      automaticUpload:
+        autoUploadRecording === true,
+
+      requestUpload:
+        recordingUploadRequested === true,
+
+      recorderState:
+        recorder?.state,
+    }
+  );
+
+
+  stopRecordingInternal({
+    requestUpload:
+      shouldUpload,
+  });
+
+}
+
+},
+[
+autoUploadRecording,
+
+hasRuntimeRecording,
+
+id,
+
+mode,
+
+recording,
+
+recordingStatus,
+
+recordingUploadRequested,
+
+sourceId,
+
+sourceBinding?.recording,
+sourceBinding?.recordingUploadRequested,
+
+installedBinding?.recording,
+installedBinding?.recordingUploadRequested,
+
+startRecordingInternal,
+
+stopRecordingInternal,
+
+streamReady,
+
+]
+);
+
+
+
+  // =======================================================
+  // FINAL UNMOUNT CLEANUP
+  // =======================================================
 
   useEffect(
     () => {
 
       return () => {
 
-        stopRecordingInternal({
-          discard:
-            true,
-        });
+        const recorder =
+          mediaRecorderRef.current;
+
+
+        if (recorder) {
+
+          try {
+
+            recorder.ondataavailable =
+              null;
+
+            recorder.onstop =
+              null;
+
+            recorder.onerror =
+              null;
+
+
+            if (
+              recorder.state !==
+              "inactive"
+            ) {
+
+              recorder.stop();
+
+            }
+
+          }
+          catch {
+
+            // Ignore cleanup errors.
+
+          }
+
+        }
+
+
+        mediaRecorderRef.current =
+          null;
+
+
+        recordingChunksRef.current =
+          [];
+
+
+        recordingStartedAtRef.current =
+          null;
+
+
+        recordingProjectIdRef.current =
+          null;
+
+
+        recordingInterviewIdRef.current =
+          null;
+
+
+        recordingUploadRequestedRef.current =
+          false;
 
 
         destroyHls();
@@ -2612,13 +3272,17 @@ export default function VideoFeed(
       };
 
     },
-    []
+    [
+      destroyHls,
+      revokeRecordingObjectUrl,
+      stopLocalStream,
+    ]
   );
 
 
-  // =====================================================
+  // =======================================================
   // RENDER
-  // =====================================================
+  // =======================================================
 
   return (
 
@@ -2679,9 +3343,7 @@ export default function VideoFeed(
           transform:
             mirror &&
             mode === "local"
-
               ? "scaleX(-1)"
-
               : "none",
 
         }}
@@ -2689,12 +3351,16 @@ export default function VideoFeed(
       />
 
 
-      {/* =================================================
+      {/* ===================================================
           RECORDING
-      ================================================= */}
+          =================================================== */}
 
-      {recordingStatus ===
-        "recording" && (
+      {(
+        recordingStatus ===
+        "recording" ||
+        recordingStatus ===
+        "stopping"
+      ) && (
 
         <div
           style={{
@@ -2759,16 +3425,21 @@ export default function VideoFeed(
             }}
           />
 
-          Recording
+          {
+            recordingStatus ===
+            "stopping"
+              ? "Finishing recording…"
+              : "Recording"
+          }
 
         </div>
 
       )}
 
 
-      {/* =================================================
+      {/* ===================================================
           READY
-      ================================================= */}
+          =================================================== */}
 
       {recordingStatus ===
         "ready" && (
@@ -2816,9 +3487,9 @@ export default function VideoFeed(
       )}
 
 
-      {/* =================================================
+      {/* ===================================================
           UPLOADING
-      ================================================= */}
+          =================================================== */}
 
       {recordingStatus ===
         "uploading" && (
@@ -2866,9 +3537,9 @@ export default function VideoFeed(
       )}
 
 
-      {/* =================================================
+      {/* ===================================================
           UPLOADED
-      ================================================= */}
+          =================================================== */}
 
       {recordingStatus ===
         "uploaded" && (
@@ -2916,9 +3587,9 @@ export default function VideoFeed(
       )}
 
 
-      {/* =================================================
+      {/* ===================================================
           FAILED
-      ================================================= */}
+          =================================================== */}
 
       {recordingStatus ===
         "failed" && (
@@ -2966,9 +3637,9 @@ export default function VideoFeed(
       )}
 
 
-      {/* =================================================
+      {/* ===================================================
           LOADING
-      ================================================= */}
+          =================================================== */}
 
       {isLoading && (
 
@@ -2988,7 +3659,6 @@ export default function VideoFeed(
             zIndex:
               20,
           }}
-
         >
 
           Loading…
@@ -2998,9 +3668,9 @@ export default function VideoFeed(
       )}
 
 
-      {/* =================================================
+      {/* ===================================================
           ERROR
-      ================================================= */}
+          =================================================== */}
 
       {error && (
 
@@ -3022,12 +3692,9 @@ export default function VideoFeed(
             zIndex:
               30,
           }}
-
         >
 
-          {
-            error
-          }
+          {error}
 
         </div>
 

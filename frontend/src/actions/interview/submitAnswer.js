@@ -1,22 +1,364 @@
-
 // src/actions/interview/submitAnswer.js
 
 import api from "../../services/api";
 
 
 // =====================================================
+// OBJECT / ID HELPERS
+// =====================================================
+
+function getId(
+  value
+) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    typeof value ===
+    "string"
+  ) {
+
+    const trimmed =
+      value.trim();
+
+    return trimmed ||
+      null;
+
+  }
+
+
+  if (
+    typeof value ===
+    "object"
+  ) {
+
+    return (
+      value?.id ||
+      value?._id ||
+      value?.interviewId ||
+      value?.interview_id ||
+      null
+    );
+
+  }
+
+
+  return null;
+
+}
+
+
+// =====================================================
+// RESOLVE INTERVIEW ID
+// =====================================================
+//
+// Canonical runtime:
+//
+// interview.id
+//
+// Defensive fallbacks:
+//
+// interview._id
+// interview.interviewId
+// interview.interview_id
+//
+// =====================================================
+
+function resolveInterviewId(
+  interview,
+  params = {},
+  ctx
+) {
+
+  return (
+
+    getId(
+      interview
+    ) ||
+
+    getId(
+      params?.interviewId
+    ) ||
+
+    getId(
+      params?.id
+    ) ||
+
+    getId(
+      ctx?.get?.(
+        "interview.id"
+      )
+    ) ||
+
+    getId(
+      ctx?.get?.(
+        "interview._id"
+      )
+    ) ||
+
+    getId(
+      ctx?.get?.(
+        "interview.interviewId"
+      )
+    ) ||
+
+    getId(
+      ctx?.get?.(
+        "interview.interview_id"
+      )
+    ) ||
+
+    null
+
+  );
+
+}
+
+
+// =====================================================
+// RESOLVE PROJECT ID
+// =====================================================
+//
+// Priority:
+//
+// 1. interview.projectId
+// 2. explicit params.projectId
+// 3. runtime.project.id
+// 4. runtime project fallback fields
+//
+// =====================================================
+
+function resolveProjectId(
+  interview,
+  params = {},
+  ctx
+) {
+
+  const runtimeProject =
+    ctx?.get?.(
+      "project"
+    ) || {};
+
+
+  return (
+
+    getId(
+      interview?.projectId
+    ) ||
+
+    getId(
+      interview?.project?._id
+    ) ||
+
+    getId(
+      interview?.project?.id
+    ) ||
+
+    getId(
+      params?.projectId
+    ) ||
+
+    getId(
+      runtimeProject?.id
+    ) ||
+
+    getId(
+      runtimeProject?._id
+    ) ||
+
+    getId(
+      runtimeProject?.projectId
+    ) ||
+
+    getId(
+      ctx?.get?.(
+        "project.id"
+      )
+    ) ||
+
+    getId(
+      ctx?.get?.(
+        "project._id"
+      )
+    ) ||
+
+    getId(
+      ctx?.get?.(
+        "project.projectId"
+      )
+    ) ||
+
+    getId(
+      ctx?.get?.(
+        "projectId"
+      )
+    ) ||
+
+    null
+
+  );
+
+}
+
+
+// =====================================================
+// NORMALISE ANSWER ARRAY
+// =====================================================
+
+function normaliseAnswers(
+  answers
+) {
+
+  if (
+    !Array.isArray(
+      answers
+    )
+  ) {
+
+    return [];
+
+  }
+
+
+  return answers
+    .filter(
+      Boolean
+    )
+    .map(
+      answer => ({
+
+        ...answer,
+
+        questionIndex:
+          Number(
+            answer?.questionIndex ??
+            0
+          ),
+
+        question:
+          String(
+            answer?.question ||
+            ""
+          ),
+
+        text:
+          String(
+            answer?.text ||
+            ""
+          ),
+
+        transcript:
+          String(
+            answer?.transcript ||
+            ""
+          ),
+
+        startedAt:
+          answer?.startedAt ||
+          null,
+
+        completedAt:
+          answer?.completedAt ||
+          null,
+
+      })
+    );
+
+}
+
+
+// =====================================================
+// MERGE PERSISTED ANSWER
+// =====================================================
+//
+// Used only when the backend does not return the full
+// interview document.
+//
+// =====================================================
+
+function mergeAnswer(
+  existingAnswers,
+  persistedAnswer,
+  questionIndex
+) {
+
+  const answers =
+    normaliseAnswers(
+      existingAnswers
+    );
+
+
+  const existingIndex =
+    answers.findIndex(
+      answer =>
+        Number(
+          answer?.questionIndex
+        ) ===
+        Number(
+          questionIndex
+        )
+    );
+
+
+  if (
+    existingIndex >= 0
+  ) {
+
+    answers[
+      existingIndex
+    ] =
+      persistedAnswer;
+
+
+    return answers;
+
+  }
+
+
+  return [
+
+    ...answers,
+
+    persistedAnswer,
+
+  ];
+
+}
+
+
+// =====================================================
 // SUBMIT ANSWER
 // =====================================================
 //
-// Runtime:
-// interview.answer.text
+// Runtime input:
+//
+// interview
+//   .id
+//   .projectId
+//   .status
+//   .currentQuestionIndex
+//   .currentQuestion
+//   .answer.text
+//   .answer.startedAt
 //
 // Persistent:
+//
 // Interview.answers[]
 //
+// IMPORTANT:
+//
 // The database is updated first.
-// Runtime state is only cleared after persistence
-// succeeds.
+// Runtime answer state is only cleared after the
+// persistence request succeeds.
+//
 // =====================================================
 
 export default async function submitAnswer(
@@ -40,18 +382,94 @@ export default async function submitAnswer(
   try {
 
     // =================================================
-    // GET CURRENT INTERVIEW
+    // RUNTIME INTERVIEW
     // =================================================
 
     const interview =
-      ctx.get?.(
+      ctx?.get?.(
         "interview"
       ) || {};
 
 
+    // =================================================
+    // RUNTIME PROJECT
+    // =================================================
+
+    const runtimeProject =
+      ctx?.get?.(
+        "project"
+      ) || {};
+
+
     console.log(
-      "[submitAnswer] CURRENT INTERVIEW",
-      interview
+      "[submitAnswer] CURRENT RUNTIME",
+      {
+
+        interview,
+
+        runtimeProject,
+
+      }
+    );
+
+
+    // =================================================
+    // RESOLVE INTERVIEW ID
+    // =================================================
+
+    const interviewId =
+      resolveInterviewId(
+        interview,
+        params,
+        ctx
+      );
+
+
+    // =================================================
+    // RESOLVE PROJECT ID
+    // =================================================
+
+    const projectId =
+      resolveProjectId(
+        interview,
+        params,
+        ctx
+      );
+
+
+    console.log(
+      "[submitAnswer] IDENTITY RESOLUTION",
+      {
+
+        interviewId,
+
+        projectId,
+
+        runtimeInterviewId:
+          getId(
+            interview
+          ),
+
+        runtimeInterviewProjectId:
+          getId(
+            interview?.projectId
+          ),
+
+        runtimeProjectId:
+          getId(
+            runtimeProject
+          ),
+
+        paramInterviewId:
+          params?.interviewId ||
+          params?.id ||
+          null,
+
+        paramProjectId:
+          params?.projectId ||
+          null,
+
+      }
     );
 
 
@@ -60,19 +478,53 @@ export default async function submitAnswer(
     // =================================================
 
     if (
-      !interview.id ||
-      interview.status !==
-        "active"
+      !interviewId
     ) {
 
       console.warn(
-        "[submitAnswer] No active interview"
+        "[submitAnswer] Missing interview ID",
+        {
+          interview,
+          params,
+        }
       );
 
 
       return {
 
-        ok: false,
+        ok:
+          false,
+
+        error:
+          "INTERVIEW_ID_REQUIRED",
+
+      };
+
+    }
+
+
+    if (
+      interview?.status !==
+      "active"
+    ) {
+
+      console.warn(
+        "[submitAnswer] Interview is not active",
+        {
+
+          interviewId,
+
+          status:
+            interview?.status,
+
+        }
+      );
+
+
+      return {
+
+        ok:
+          false,
 
         error:
           "INTERVIEW_NOT_ACTIVE",
@@ -83,32 +535,33 @@ export default async function submitAnswer(
 
 
     // =================================================
-    // RESOLVE PROJECT ID
+    // VALIDATE PROJECT
     // =================================================
 
-    const projectId =
-      interview.projectId ||
-      params?.projectId ||
-      ctx.get?.(
-        "project.id"
-      ) ||
-      null;
+    if (
+      !projectId
+    ) {
 
-
-    if (!projectId) {
-
-      console.error(
-        "[submitAnswer] Missing projectId",
+      console.warn(
+        "[submitAnswer] Missing project ID",
         {
-          interviewId:
-            interview.id,
+
+          interviewId,
+
+          interview,
+
+          runtimeProject,
+
+          params,
+
         }
       );
 
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "PROJECT_ID_REQUIRED",
@@ -119,7 +572,103 @@ export default async function submitAnswer(
 
 
     // =================================================
-    // GET ANSWER TEXT
+    // QUESTION INDEX
+    // =================================================
+
+    const questionIndex =
+      Number(
+        params?.questionIndex ??
+        interview?.currentQuestionIndex ??
+        0
+      );
+
+
+    if (
+      !Number.isInteger(
+        questionIndex
+      ) ||
+      questionIndex < 0
+    ) {
+
+      console.warn(
+        "[submitAnswer] Invalid question index",
+        {
+
+          interviewId,
+
+          questionIndex,
+
+        }
+      );
+
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          "INVALID_QUESTION_INDEX",
+
+      };
+
+    }
+
+
+    // =================================================
+    // CURRENT QUESTION
+    // =================================================
+
+    const question =
+      String(
+        params?.question ??
+        interview?.currentQuestion ??
+        interview?.questions?.[
+          questionIndex
+        ] ??
+        ""
+      ).trim();
+
+
+    if (
+      !question
+    ) {
+
+      console.warn(
+        "[submitAnswer] No active question",
+        {
+
+          interviewId,
+
+          questionIndex,
+
+        }
+      );
+
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          "NO_ACTIVE_QUESTION",
+
+      };
+
+    }
+
+
+    // =================================================
+    // ANSWER TEXT
+    // =================================================
+    //
+    // Explicit params value wins over runtime value.
+    //
+    // IMPORTANT:
+    //
+    // We do not mutate runtime state before the request.
+    //
     // =================================================
 
     const answerText =
@@ -134,16 +683,26 @@ export default async function submitAnswer(
       ).trim();
 
 
-    if (!trimmedAnswer) {
+    if (
+      !trimmedAnswer
+    ) {
 
       console.warn(
-        "[submitAnswer] Empty answer"
+        "[submitAnswer] Empty answer",
+        {
+
+          interviewId,
+
+          questionIndex,
+
+        }
       );
 
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "ANSWER_EMPTY",
@@ -154,71 +713,34 @@ export default async function submitAnswer(
 
 
     // =================================================
-    // CURRENT QUESTION
+    // TRANSCRIPT
     // =================================================
 
-    const questionIndex =
-      Number(
-        interview.currentQuestionIndex ??
-        0
+    const transcript =
+      String(
+        params?.transcript ??
+        interview?.answer?.transcript ??
+        ""
       );
 
 
-    const question =
-      interview.currentQuestion ??
-      interview.questions?.[
-        questionIndex
-      ] ??
-      null;
-
-
-    if (!question) {
-
-      console.warn(
-        "[submitAnswer] No active question"
-      );
-
-
-      return {
-
-        ok: false,
-
-        error:
-          "NO_ACTIVE_QUESTION",
-
-      };
-
-    }
-
-
     // =================================================
-    // START / COMPLETE TIMES
+    // ANSWER TIMES
     // =================================================
 
     const startedAt =
+      params?.startedAt ??
       interview?.answer?.startedAt ??
       null;
 
 
     const completedAt =
-      Date.now();
+      params?.completedAt ??
+      new Date().toISOString();
 
 
     // =================================================
-    // BUILD ANSWER
-    // =================================================
-    //
-    // IMPORTANT:
-    //
-    // This matches the Mongo Interview schema:
-    //
-    // questionIndex
-    // question
-    // text
-    // transcript
-    // startedAt
-    // completedAt
-    //
+    // ANSWER RECORD
     // =================================================
 
     const answerRecord = {
@@ -230,20 +752,19 @@ export default async function submitAnswer(
       text:
         trimmedAnswer,
 
-      transcript:
-        "",
+      transcript,
 
       startedAt:
         startedAt
           ? new Date(
               startedAt
-            )
+            ).toISOString()
           : null,
 
       completedAt:
         new Date(
           completedAt
-        ),
+        ).toISOString(),
 
     };
 
@@ -253,12 +774,12 @@ export default async function submitAnswer(
     // =================================================
 
     console.log(
-      "[submitAnswer] Persisting answer",
+      "[submitAnswer] PERSISTING ANSWER",
       {
+
         projectId,
 
-        interviewId:
-          interview.id,
+        interviewId,
 
         questionIndex,
 
@@ -266,67 +787,98 @@ export default async function submitAnswer(
 
         text:
           trimmedAnswer,
+
+        hasTranscript:
+          Boolean(
+            transcript
+          ),
+
+        startedAt:
+          answerRecord.startedAt,
+
+        completedAt:
+          answerRecord.completedAt,
+
       }
     );
 
 
     // =================================================
-    // PERSIST ANSWER
+    // PERSIST
     // =================================================
     //
-    // The backend route replaces an existing answer for
-    // the same questionIndex, making this safe to retry.
+    // Backend route:
+    //
+    // PATCH
+    // /projects/:projectId/interviews/:interviewId/
+    // answers/:questionIndex
     //
     // =================================================
 
     const response =
       await api.patch(
-        `/projects/${projectId}/interviews/${interview.id}/answers/${questionIndex}`,
+
+        `/projects/${projectId}/interviews/${interviewId}/answers/${questionIndex}`,
+
         {
 
           text:
             trimmedAnswer,
 
-          transcript:
-            params?.transcript ||
-            "",
+          transcript,
 
-          startedAt,
+          startedAt:
+            answerRecord.startedAt,
 
-          completedAt,
+          completedAt:
+            answerRecord.completedAt,
 
         }
+
       );
 
 
     console.log(
       "[submitAnswer] API RESPONSE",
       {
+
         status:
-          response.status,
+          response?.status,
 
         data:
-          response.data,
+          response?.data,
+
       }
     );
 
 
+    // =================================================
+    // SERVER ANSWER
+    // =================================================
+
     const persistedAnswer =
-      response.data?.answer ||
+      response?.data?.answer ||
       answerRecord;
 
 
+    // =================================================
+    // SERVER INTERVIEW
+    // =================================================
+
     const persistedInterview =
-      response.data?.interview ||
+      response?.data?.interview ||
       null;
 
 
     // =================================================
-    // BUILD RUNTIME ANSWERS
+    // RESOLVE CANONICAL ANSWERS
     // =================================================
     //
-    // Prefer the server response because it represents
-    // the canonical persisted state.
+    // Prefer the server's complete answers array.
+    //
+    // Otherwise merge the persisted answer into the
+    // current runtime array.
+    //
     // =================================================
 
     const answers =
@@ -334,85 +886,108 @@ export default async function submitAnswer(
         persistedInterview?.answers
       )
 
-        ? persistedInterview.answers
+        ? normaliseAnswers(
+            persistedInterview.answers
+          )
 
-        : (() => {
+        : mergeAnswer(
 
-            const existingAnswers =
-              Array.isArray(
-                interview.answers
-              )
-                ? interview.answers
-                : [];
+            interview?.answers,
 
+            persistedAnswer,
 
-            const existingIndex =
-              existingAnswers.findIndex(
-                existing =>
-                  Number(
-                    existing.questionIndex
-                  ) ===
-                  questionIndex
-              );
+            questionIndex
+
+          );
 
 
-            const nextAnswers = [
-              ...existingAnswers,
-            ];
+    // =================================================
+    // RESOLVE NEXT INTERVIEW STATE
+    // =================================================
+
+    const nextInterviewPatch = {
+
+      answers,
+
+      answer: {
+
+        ...(interview?.answer || {}),
+
+        text:
+          "",
+
+        transcript:
+          "",
+
+        startedAt:
+          null,
+
+        completedAt:
+          null,
+
+      },
+
+    };
 
 
-            if (
-              existingIndex >= 0
-            ) {
+    // =================================================
+    // OPTIONAL SERVER STATE
+    // =================================================
+    //
+    // The backend currently returns the full Interview.
+    // When it does, preserve any useful canonical fields
+    // without allowing an incomplete response to wipe
+    // runtime values.
+    //
+    // =================================================
 
-              nextAnswers[
-                existingIndex
-              ] =
-                persistedAnswer;
+    if (
+      persistedInterview
+    ) {
 
-            }
-            else {
+      if (
+        persistedInterview.status
+      ) {
 
-              nextAnswers.push(
-                persistedAnswer
-              );
+        nextInterviewPatch.status =
+          persistedInterview.status;
 
-            }
+      }
 
 
-            return nextAnswers;
+      if (
+        persistedInterview.projectId
+      ) {
 
-          })();
+        nextInterviewPatch.projectId =
+          persistedInterview.projectId;
+
+      }
+
+
+      if (
+        persistedInterview.questions
+      ) {
+
+        nextInterviewPatch.questions =
+          persistedInterview.questions;
+
+      }
+
+    }
 
 
     // =================================================
     // UPDATE RUNTIME
     // =================================================
     //
-    // Only clear the answer AFTER the database write
-    // has succeeded.
+    // ONLY after persistence succeeded.
+    //
     // =================================================
 
-    ctx.patch?.(
+    ctx?.patch?.(
       "interview",
-      {
-
-        answers,
-
-        answer: {
-
-          text:
-            "",
-
-          startedAt:
-            null,
-
-          completedAt:
-            null,
-
-        },
-
-      }
+      nextInterviewPatch
     );
 
 
@@ -423,15 +998,18 @@ export default async function submitAnswer(
     console.log(
       "[submitAnswer] ANSWER SUBMITTED",
       {
-        interviewId:
-          interview.id,
 
         projectId,
+
+        interviewId,
 
         questionIndex,
 
         answer:
           persistedAnswer,
+
+        answerCount:
+          answers.length,
 
       }
     );
@@ -439,7 +1017,8 @@ export default async function submitAnswer(
 
     return {
 
-      ok: true,
+      ok:
+        true,
 
       result: {
 
@@ -448,55 +1027,68 @@ export default async function submitAnswer(
 
         answers,
 
-        interviewId:
-          interview.id,
+        interviewId,
 
         projectId,
+
+        questionIndex,
+
+        question,
 
       },
 
     };
 
-
   }
   catch (
-    err
+    error
   ) {
+
+    // =================================================
+    // FAILURE
+    // =================================================
 
     console.error(
       "[submitAnswer] FAILED",
       {
-        error:
-          err,
+
+        name:
+          error?.name,
+
+        message:
+          error?.message,
 
         response:
-          err?.response?.data,
+          error?.response?.data ||
+          null,
+
+        status:
+          error?.response?.status ||
+          null,
 
       }
     );
 
 
-    /*
-    ---------------------------------------------------
-    IMPORTANT
-
-    We deliberately DO NOT clear interview.answer.text
-    when persistence fails.
-
-    The candidate can therefore retry rather than losing
-    their answer.
-    ---------------------------------------------------
-    */
-
+    // =================================================
+    // IMPORTANT
+    // =================================================
+    //
+    // DO NOT clear interview.answer.text here.
+    //
+    // The candidate can retry their answer.
+    //
+    // =================================================
 
     return {
 
-      ok: false,
+      ok:
+        false,
 
       error:
-        err?.response?.data?.error ||
-        err?.response?.data?.message ||
-        err?.message ||
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
         "SUBMIT_ANSWER_FAILED",
 
     };
@@ -504,4 +1096,3 @@ export default async function submitAnswer(
   }
 
 }
-

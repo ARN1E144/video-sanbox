@@ -11,6 +11,7 @@ import ControlPanel from "../components/elements/ControlPanel";
 import TextLabel from "../components/elements/TextLabel.js";
 import FetchCallsDebug from "../components/elements/FetchCallsDebug.js";
 import AvailabilityButton from "../components/elements/AvailabilityButton.js";
+import InterviewPanel from "../components/elements/InterviewPanel";
 
 
 import videoContract
@@ -52,6 +53,9 @@ import fetchCallsDebug
 import availabilityButtonContract
   from "../runtime/contracts/components/AvailabilityButton.contract.js";
 
+import interviewPanelContract 
+  from "../runtime/contracts/components/InterviewPanel.contract.js";
+
 export const componentRegistry = {
 
   VideoFeed: {
@@ -67,6 +71,11 @@ export const componentRegistry = {
   ChatPanel: {
     component: ChatPanel,
     contract: chatContract
+  },
+
+  InterviewPanel: {
+    component: InterviewPanel,
+    contract: interviewPanelContract,
   },
 
   TextBox: {

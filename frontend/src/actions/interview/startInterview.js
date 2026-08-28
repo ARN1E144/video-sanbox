@@ -7,15 +7,16 @@ import api from "../../services/api";
 // TEMPORARY DEFAULT QUESTIONS
 // =====================================================
 //
-// These are fallback questions until project-level
-// interview configuration is implemented.
+// Final fallback only.
 //
-// Eventually these can come from:
+// Normal priority:
 //
-// - project configuration
-// - custom questions
-// - AI-generated questions
-// - interview templates
+// 1. Explicit params.questions
+// 2. Explicit params.questionSetId
+// 3. Current project's activeQuestionSetId
+// 4. Current project's first Question Set
+// 5. Existing runtime interview questions
+// 6. Temporary default questions
 //
 // =====================================================
 
@@ -31,14 +32,103 @@ const DEFAULT_QUESTIONS = [
 
 
 // =====================================================
-// RESOLVE PROJECT ID
+// DEFAULT INTERVIEW CONFIG
+// =====================================================
+
+const DEFAULT_INTERVIEW_CONFIG = {
+
+  activeQuestionSetId:
+    null,
+
+  questionSets:
+    [],
+
+  recordingEnabled:
+    true,
+
+  transcriptionEnabled:
+    true,
+
+  evaluationEnabled:
+    true,
+
+};
+
+
+// =====================================================
+// GENERIC ID HELPER
+// =====================================================
+
+function normaliseId(
+  value
+) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    typeof value ===
+    "string"
+  ) {
+
+    const trimmed =
+      value.trim();
+
+    return (
+      trimmed ||
+      null
+    );
+
+  }
+
+
+  if (
+    typeof value ===
+    "object"
+  ) {
+
+    return (
+
+      value?.id ||
+
+      value?._id ||
+
+      value?.projectId ||
+
+      value?.interviewId ||
+
+      value?.interview_id ||
+
+      null
+
+    );
+
+  }
+
+
+  return null;
+
+}
+
+
+// =====================================================
+// PROJECT ID
 // =====================================================
 //
-// Canonical project identity:
+// Priority:
 //
-// runtime.project.id
-//
-// Explicit params.projectId can override it.
+// 1. Explicit params.projectId
+// 2. runtime.project.id
+// 3. runtime.project._id
+// 4. runtime.project.projectId
+// 5. runtime project paths
 //
 // =====================================================
 
@@ -48,8 +138,9 @@ function resolveProjectId(
 ) {
 
   const explicitProjectId =
-    params?.projectId ||
-    null;
+    normaliseId(
+      params?.projectId
+    );
 
 
   const runtimeProject =
@@ -60,18 +151,35 @@ function resolveProjectId(
 
 
   const runtimeProjectId =
-    runtimeProject?.id ||
-    runtimeProject?._id ||
-    runtimeProject?.projectId ||
-    ctx?.get?.(
-      "project.id"
+    normaliseId(
+      runtimeProject
     ) ||
-    ctx?.get?.(
-      "project._id"
+    normaliseId(
+      ctx?.get?.(
+        "project.id"
+      )
     ) ||
-    ctx?.get?.(
-      "projectId"
+    normaliseId(
+      ctx?.get?.(
+        "project._id"
+      )
     ) ||
+    normaliseId(
+      ctx?.get?.(
+        "project.projectId"
+      )
+    ) ||
+    normaliseId(
+      ctx?.get?.(
+        "projectId"
+      )
+    ) ||
+    null;
+
+
+  const resolved =
+    explicitProjectId ||
+    runtimeProjectId ||
     null;
 
 
@@ -81,25 +189,23 @@ function resolveProjectId(
 
       explicitProjectId,
 
-      runtimeProject,
-
       runtimeProjectId,
+
+      resolved,
+
+      runtimeProject,
 
     }
   );
 
 
-  return (
-    explicitProjectId ||
-    runtimeProjectId ||
-    null
-  );
+  return resolved;
 
 }
 
 
 // =====================================================
-// NORMALISE QUESTIONS
+// QUESTIONS
 // =====================================================
 
 function normaliseQuestions(
@@ -122,7 +228,7 @@ function normaliseQuestions(
     .map(
       question =>
         String(
-          question
+          question ?? ""
         ).trim()
     )
 
@@ -134,50 +240,674 @@ function normaliseQuestions(
 
 
 // =====================================================
-// RESOLVE INTERVIEW ID
+// QUESTION SET
+// =====================================================
+
+function normaliseQuestionSet(
+  questionSet = {}
+) {
+
+  return {
+
+    id:
+      questionSet?.id ||
+      questionSet?._id ||
+      null,
+
+    name:
+      String(
+        questionSet?.name ||
+        "Untitled Question Set"
+      ).trim(),
+
+    description:
+      String(
+        questionSet?.description ||
+        ""
+      ).trim(),
+
+    questions:
+      normaliseQuestions(
+        questionSet?.questions
+      ),
+
+    source:
+      questionSet?.source ||
+      "manual",
+
+  };
+
+}
+
+
+// =====================================================
+// INTERVIEW CONFIG
 // =====================================================
 //
-// The backend is authoritative.
+// Supports:
 //
-// Expected backend response:
+// runtime.project.interviewConfig
 //
-// {
-//   interview: {
-//     _id: "..."
-//   }
-// }
+// runtime path:
 //
-// We also support:
+// project.interviewConfig
 //
-// interview.id
-// interview.interviewId
+// Explicit params.interviewConfig can override runtime
+// configuration for an individual interview.
 //
+// =====================================================
+
+function normaliseInterviewConfig(
+  config
+) {
+
+  const source =
+    config &&
+    typeof config ===
+      "object"
+
+      ? config
+
+      : {};
+
+
+  const questionSets =
+    Array.isArray(
+      source?.questionSets
+    )
+
+      ? source.questionSets
+          .map(
+            normaliseQuestionSet
+          )
+
+      : [];
+
+
+  let activeQuestionSetId =
+    source?.activeQuestionSetId ||
+    null;
+
+
+  // ---------------------------------------------------
+  // Validate active Question Set.
+  // ---------------------------------------------------
+
+  const activeExists =
+    activeQuestionSetId &&
+    questionSets.some(
+      questionSet =>
+        String(
+          questionSet?.id
+        ) ===
+        String(
+          activeQuestionSetId
+        )
+    );
+
+
+  if (
+    !activeExists
+  ) {
+
+    activeQuestionSetId =
+      questionSets[0]?.id ||
+      null;
+
+  }
+
+
+  return {
+
+    ...DEFAULT_INTERVIEW_CONFIG,
+
+    ...source,
+
+    activeQuestionSetId,
+
+    questionSets,
+
+    recordingEnabled:
+      source?.recordingEnabled !== false,
+
+    transcriptionEnabled:
+      source?.transcriptionEnabled !== false,
+
+    evaluationEnabled:
+      source?.evaluationEnabled !== false,
+
+  };
+
+}
+
+
+// =====================================================
+// RESOLVE PROJECT INTERVIEW CONFIG
+// =====================================================
+
+function resolveProjectInterviewConfig(
+  ctx,
+  params = {}
+) {
+
+  const runtimeProject =
+    ctx?.get?.(
+      "project"
+    ) ||
+    {};
+
+
+  // ---------------------------------------------------
+  // Project-level configuration.
+  // ---------------------------------------------------
+
+  const runtimeProjectConfig =
+    runtimeProject?.interviewConfig ||
+    ctx?.get?.(
+      "project.interviewConfig"
+    ) ||
+    {};
+
+
+  const projectConfig =
+    normaliseInterviewConfig(
+      runtimeProjectConfig
+    );
+
+
+  // ---------------------------------------------------
+  // Explicit per-interview override.
+  // ---------------------------------------------------
+
+  const explicitConfig =
+    params?.interviewConfig &&
+    typeof params.interviewConfig ===
+      "object"
+
+      ? params.interviewConfig
+
+      : {};
+
+
+  const merged =
+    {
+
+      ...projectConfig,
+
+      ...explicitConfig,
+
+      questionSets:
+        explicitConfig?.questionSets ??
+        projectConfig.questionSets,
+
+    };
+
+
+  const resolved =
+    normaliseInterviewConfig(
+      merged
+    );
+
+
+  console.log(
+    "[startInterview] PROJECT INTERVIEW CONFIG RESOLUTION",
+    {
+
+      runtimeProjectConfig,
+
+      explicitConfig,
+
+      activeQuestionSetId:
+        resolved.activeQuestionSetId,
+
+      questionSetCount:
+        resolved.questionSets.length,
+
+      recordingEnabled:
+        resolved.recordingEnabled,
+
+      transcriptionEnabled:
+        resolved.transcriptionEnabled,
+
+      evaluationEnabled:
+        resolved.evaluationEnabled,
+
+    }
+  );
+
+
+  return resolved;
+
+}
+
+
+// =====================================================
+// RESOLVE QUESTION SET
+// =====================================================
+//
+// Priority:
+//
+// 1. Explicit params.questionSetId
+// 2. Project activeQuestionSetId
+// 3. First available project Question Set
+//
+// =====================================================
+
+function resolveQuestionSet(
+  interviewConfig,
+  params = {}
+) {
+
+  const questionSets =
+    Array.isArray(
+      interviewConfig?.questionSets
+    )
+
+      ? interviewConfig.questionSets
+
+      : [];
+
+
+  // ---------------------------------------------------
+  // Explicit Question Set
+  // ---------------------------------------------------
+
+  const requestedId =
+    params?.questionSetId ||
+    null;
+
+
+  if (
+    requestedId
+  ) {
+
+    const explicitSet =
+      questionSets.find(
+        questionSet =>
+          String(
+            questionSet?.id
+          ) ===
+          String(
+            requestedId
+          )
+      );
+
+
+    if (
+      explicitSet
+    ) {
+
+      console.log(
+        "[startInterview] Using explicit Question Set",
+        {
+
+          id:
+            explicitSet.id,
+
+          name:
+            explicitSet.name,
+
+        }
+      );
+
+
+      return explicitSet;
+
+    }
+
+
+    console.warn(
+      "[startInterview] Explicit Question Set not found",
+      {
+
+        requestedId,
+
+        availableQuestionSets:
+          questionSets.map(
+            questionSet =>
+              questionSet?.id
+          ),
+
+      }
+    );
+
+  }
+
+
+  // ---------------------------------------------------
+  // Active project Question Set
+  // ---------------------------------------------------
+
+  const activeId =
+    interviewConfig
+      ?.activeQuestionSetId ||
+    null;
+
+
+  if (
+    activeId
+  ) {
+
+    const activeSet =
+      questionSets.find(
+        questionSet =>
+          String(
+            questionSet?.id
+          ) ===
+          String(
+            activeId
+          )
+      );
+
+
+    if (
+      activeSet
+    ) {
+
+      console.log(
+        "[startInterview] Using PROJECT ACTIVE Question Set",
+        {
+
+          id:
+            activeSet.id,
+
+          name:
+            activeSet.name,
+
+          questionCount:
+            activeSet.questions?.length ||
+            0,
+
+        }
+      );
+
+
+      return activeSet;
+
+    }
+
+
+    console.warn(
+      "[startInterview] Active Question Set ID does not exist",
+      {
+
+        activeId,
+
+      }
+    );
+
+  }
+
+
+  // ---------------------------------------------------
+  // First available project Question Set
+  // ---------------------------------------------------
+
+  if (
+    questionSets.length > 0
+  ) {
+
+    const firstSet =
+      questionSets[0];
+
+
+    console.log(
+      "[startInterview] Using FIRST PROJECT Question Set",
+      {
+
+        id:
+          firstSet?.id,
+
+        name:
+          firstSet?.name,
+
+      }
+    );
+
+
+    return firstSet;
+
+  }
+
+
+  return null;
+
+}
+
+
+// =====================================================
+// RESOLVE QUESTIONS
+// =====================================================
+//
+// This is the key project → Confo bridge.
+//
+// Project:
+//
+// interviewConfig.questionSets
+//
+//       ↓
+//
+// activeQuestionSetId
+//
+//       ↓
+//
+// Question Set
+//
+//       ↓
+//
+// Interview snapshot
+//
+// =====================================================
+
+function resolveQuestions({
+  params = {},
+  interviewConfig,
+  currentInterview,
+}) {
+
+  // ===================================================
+  // 1. EXPLICIT QUESTIONS
+  // ===================================================
+
+  const explicitQuestions =
+    normaliseQuestions(
+      params?.questions
+    );
+
+
+  if (
+    explicitQuestions.length > 0
+  ) {
+
+    console.log(
+      "[startInterview] Using EXPLICIT QUESTIONS",
+      {
+
+        count:
+          explicitQuestions.length,
+
+      }
+    );
+
+
+    return {
+
+      questions:
+        explicitQuestions,
+
+      questionSource:
+        params?.questionSource ||
+        "custom",
+
+      questionSetId:
+        params?.questionSetId ||
+        null,
+
+      questionSetName:
+        null,
+
+    };
+
+  }
+
+
+  // ===================================================
+  // 2. PROJECT QUESTION SET
+  // ===================================================
+
+  const questionSet =
+    resolveQuestionSet(
+      interviewConfig,
+      params
+    );
+
+
+  if (
+    questionSet
+  ) {
+
+    const questionSetQuestions =
+      normaliseQuestions(
+        questionSet?.questions
+      );
+
+
+    if (
+      questionSetQuestions.length > 0
+    ) {
+
+      return {
+
+        questions:
+          questionSetQuestions,
+
+        questionSource:
+          questionSet?.source ||
+          "project_default",
+
+        questionSetId:
+          questionSet?.id ||
+          null,
+
+        questionSetName:
+          questionSet?.name ||
+          null,
+
+      };
+
+    }
+
+
+    console.warn(
+      "[startInterview] Selected Question Set contains no questions",
+      {
+
+        questionSetId:
+          questionSet?.id,
+
+        questionSetName:
+          questionSet?.name,
+
+      }
+    );
+
+  }
+
+
+  // ===================================================
+  // 3. EXISTING RUNTIME INTERVIEW
+  // ===================================================
+
+  const runtimeQuestions =
+    normaliseQuestions(
+      currentInterview?.questions
+    );
+
+
+  if (
+    runtimeQuestions.length > 0
+  ) {
+
+    console.log(
+      "[startInterview] Falling back to EXISTING RUNTIME INTERVIEW QUESTIONS"
+    );
+
+
+    return {
+
+      questions:
+        runtimeQuestions,
+
+      questionSource:
+        currentInterview?.questionSource ||
+        "project_default",
+
+      questionSetId:
+        currentInterview?.questionSetId ||
+        null,
+
+      questionSetName:
+        currentInterview?.questionSetName ||
+        null,
+
+    };
+
+  }
+
+
+  // ===================================================
+  // 4. TEMPORARY DEFAULT
+  // ===================================================
+
+  console.warn(
+    "[startInterview] No project Question Set found - using temporary defaults"
+  );
+
+
+  return {
+
+    questions:
+      DEFAULT_QUESTIONS,
+
+    questionSource:
+      "project_default",
+
+    questionSetId:
+      null,
+
+    questionSetName:
+      null,
+
+  };
+
+}
+
+
+// =====================================================
+// RESOLVE INTERVIEW ID
 // =====================================================
 
 function resolveInterviewId(
   interview
 ) {
 
-  if (
-    !interview ||
-    typeof interview !==
-      "object"
-  ) {
-
-    return null;
-
-  }
-
-
   return (
 
-    interview._id ||
+    normaliseId(
+      interview?._id
+    ) ||
 
-    interview.id ||
+    normaliseId(
+      interview?.id
+    ) ||
 
-    interview.interviewId ||
+    normaliseId(
+      interview?.interviewId
+    ) ||
 
-    interview.interview_id ||
+    normaliseId(
+      interview?.interview_id
+    ) ||
 
     null
 
@@ -187,17 +917,38 @@ function resolveInterviewId(
 
 
 // =====================================================
-// BUILD RUNTIME INTERVIEW
+// VIDEO TARGET
 // =====================================================
 //
-// This creates the canonical shape used by:
+// Standard AI Interviewer target:
 //
-// useRuntimeValue("interview")
+// interview-video
 //
-// VideoFeed then consumes:
+// Can be overridden by a Confo.
 //
-// interview.id
-//
+// =====================================================
+
+function resolveVideoTargetId(
+  params = {}
+) {
+
+  return (
+
+    params?.videoTargetId ||
+
+    params?.recordingTargetId ||
+
+    params?.videoSourceId ||
+
+    "interview-video"
+
+  );
+
+}
+
+
+// =====================================================
+// BUILD RUNTIME INTERVIEW
 // =====================================================
 
 function buildRuntimeInterview({
@@ -206,6 +957,8 @@ function buildRuntimeInterview({
   projectId,
   questions,
   questionSource,
+  questionSetId,
+  questionSetName,
   interviewConfig,
 }) {
 
@@ -217,32 +970,40 @@ function buildRuntimeInterview({
 
   const finalQuestions =
     persistedQuestions.length > 0
+
       ? persistedQuestions
+
       : questions;
 
 
-  const firstQuestion =
+  const finalProjectId =
+    normaliseId(
+      interview?.projectId
+    ) ||
+    projectId;
+
+
+  const currentQuestion =
     finalQuestions[0] ||
     null;
 
 
   return {
 
-    // -------------------------------------------------
-    // PERSISTENT IDENTITY
-    // -------------------------------------------------
+    // =================================================
+    // IDENTITY
+    // =================================================
 
     id:
       interviewId,
 
     projectId:
-      interview?.projectId ||
-      projectId,
+      finalProjectId,
 
 
-    // -------------------------------------------------
+    // =================================================
     // LIFECYCLE
-    // -------------------------------------------------
+    // =================================================
 
     status:
       interview?.status ||
@@ -255,32 +1016,49 @@ function buildRuntimeInterview({
       false,
 
 
-    // -------------------------------------------------
-    // QUESTIONS
-    // -------------------------------------------------
+    // =================================================
+    // QUESTION SOURCE
+    // =================================================
 
     questionSource:
       interview?.questionSource ||
       questionSource,
 
+    questionSetId:
+      interview?.questionSetId ||
+      questionSetId ||
+      null,
+
+    questionSetName:
+      interview?.questionSetName ||
+      questionSetName ||
+      null,
+
+
+    // =================================================
+    // QUESTIONS
+    // =================================================
+
     questions:
       finalQuestions,
-
 
     currentQuestionIndex:
       0,
 
     currentQuestion:
-      firstQuestion,
+      currentQuestion,
 
 
-    // -------------------------------------------------
+    // =================================================
     // CURRENT ANSWER
-    // -------------------------------------------------
+    // =================================================
 
     answer: {
 
       text:
+        "",
+
+      transcript:
         "",
 
       startedAt:
@@ -292,47 +1070,189 @@ function buildRuntimeInterview({
     },
 
 
-    // -------------------------------------------------
+    // =================================================
     // EXISTING ANSWERS
-    // -------------------------------------------------
+    // =================================================
 
     answers:
+
       Array.isArray(
         interview?.answers
       )
+
         ? interview.answers
+
         : [],
 
 
-    // -------------------------------------------------
-    // INTERVIEW CONFIGURATION
-    // -------------------------------------------------
+    // =================================================
+    // INTERVIEW CONFIG
+    // =================================================
 
     interviewConfig:
       interview?.interviewConfig ||
+
       interviewConfig,
 
 
-    // -------------------------------------------------
+    // =================================================
     // EVALUATION
-    // -------------------------------------------------
+    // =================================================
 
     result:
+      interview?.aiEvaluation ||
+
       null,
 
 
-    // -------------------------------------------------
+    // =================================================
     // DATES
-    // -------------------------------------------------
+    // =================================================
 
     startedAt:
       interview?.startedAt ||
+
       Date.now(),
 
     completedAt:
+      interview?.completedAt ||
+
       null,
 
   };
+
+}
+
+
+// =====================================================
+// START RECORDING
+// =====================================================
+//
+// MediaRecorder remains owned by VideoFeed.
+//
+// startInterview simply triggers the existing runtime
+// recording action after the persistent interview has
+// been created and runtime interview state initialised.
+//
+// =====================================================
+
+async function startInterviewRecording(
+  ctx,
+  {
+    videoTargetId,
+    interviewId,
+    projectId,
+  }
+) {
+
+  if (
+    typeof ctx?.runAction !==
+    "function"
+  ) {
+
+    console.warn(
+      "[startInterview] Runtime action chaining unavailable"
+    );
+
+
+    return {
+
+      ok:
+        false,
+
+      error:
+        "RUNTIME_RUN_ACTION_UNAVAILABLE",
+
+    };
+
+  }
+
+
+  if (
+    !videoTargetId
+  ) {
+
+    return {
+
+      ok:
+        false,
+
+      error:
+        "VIDEO_TARGET_REQUIRED",
+
+    };
+
+  }
+
+
+  console.log(
+    "[startInterview] STARTING RECORDING",
+    {
+
+      videoTargetId,
+
+      interviewId,
+
+      projectId,
+
+    }
+  );
+
+
+  try {
+
+    const result =
+      await ctx.runAction(
+        "video.startRecording",
+        {
+
+          targetId:
+            videoTargetId,
+
+          sourceId:
+            videoTargetId,
+
+        }
+      );
+
+
+    console.log(
+      "[startInterview] RECORDING RESULT",
+      {
+
+        videoTargetId,
+
+        result,
+
+      }
+    );
+
+
+    return result;
+
+  }
+  catch (
+    error
+  ) {
+
+    console.error(
+      "[startInterview] Recording action failed",
+      error
+    );
+
+
+    return {
+
+      ok:
+        false,
+
+      error:
+        error?.message ||
+        "AUTOMATIC_RECORDING_FAILED",
+
+    };
+
+  }
 
 }
 
@@ -343,18 +1263,14 @@ function buildRuntimeInterview({
 //
 // RESPONSIBILITY:
 //
-// 1. Resolve project
-// 2. Create persistent interview
-// 3. Receive backend interview ID
-// 4. Store canonical interview state in runtime
-//
-// IMPORTANT:
-//
-// This action DOES NOT start MediaRecorder.
-//
-// Recording is a separate action:
-//
-// video.startRecording
+// 1. Resolve current project
+// 2. Read project Interview configuration
+// 3. Resolve selected Question Set
+// 4. Create persistent Interview
+// 5. Receive persistent Interview ID
+// 6. Build canonical runtime Interview
+// 7. Patch runtime Interview
+// 8. Start recording when enabled
 //
 // =====================================================
 
@@ -379,7 +1295,7 @@ export default async function startInterview(
   try {
 
     // =================================================
-    // EXISTING RUNTIME INTERVIEW
+    // CURRENT INTERVIEW
     // =================================================
 
     const currentInterview =
@@ -389,19 +1305,33 @@ export default async function startInterview(
       {};
 
 
+    // =================================================
+    // CURRENT PROJECT
+    // =================================================
+
+    const runtimeProject =
+      ctx?.get?.(
+        "project"
+      ) ||
+      {};
+
+
     console.log(
-      "[startInterview] CURRENT RUNTIME INTERVIEW",
-      currentInterview
+      "[startInterview] CURRENT RUNTIME CONTEXT",
+      {
+
+        project:
+          runtimeProject,
+
+        interview:
+          currentInterview,
+
+      }
     );
 
 
     // =================================================
     // ALREADY ACTIVE
-    // =================================================
-    //
-    // Do not create another persistent interview when
-    // an active interview already exists.
-    //
     // =================================================
 
     if (
@@ -418,14 +1348,56 @@ export default async function startInterview(
             currentInterview.id,
 
           projectId:
-            currentInterview.projectId ||
-
-            ctx?.get?.(
-              "project.id"
-            ),
+            currentInterview.projectId,
 
         }
       );
+
+
+      const existingConfig =
+        normaliseInterviewConfig(
+          currentInterview?.interviewConfig
+        );
+
+
+      const recordingEnabled =
+        existingConfig?.recordingEnabled !==
+        false;
+
+
+      let recordingResult =
+        null;
+
+
+      // ------------------------------------------------
+      // Explicit restart only.
+      // ------------------------------------------------
+
+      if (
+        recordingEnabled &&
+        params?.restartRecording === true
+      ) {
+
+        recordingResult =
+          await startInterviewRecording(
+            ctx,
+            {
+
+              videoTargetId:
+                resolveVideoTargetId(
+                  params
+                ),
+
+              interviewId:
+                currentInterview.id,
+
+              projectId:
+                currentInterview.projectId,
+
+            }
+          );
+
+      }
 
 
       return {
@@ -441,22 +1413,47 @@ export default async function startInterview(
           projectId:
             currentInterview.projectId ||
 
-            ctx?.get?.(
-              "project.id"
+            resolveProjectId(
+              ctx,
+              params
             ),
 
           status:
             currentInterview.status,
 
-          currentQuestion:
-            currentInterview.currentQuestion,
-
           currentQuestionIndex:
             currentInterview.currentQuestionIndex,
+
+          currentQuestion:
+            currentInterview.currentQuestion,
 
           questions:
             currentInterview.questions ||
             [],
+
+          questionSetId:
+            currentInterview.questionSetId ||
+            null,
+
+          questionSetName:
+            currentInterview.questionSetName ||
+            null,
+
+          questionSource:
+            currentInterview.questionSource ||
+            "project_default",
+
+          recordingEnabled,
+
+          transcriptionEnabled:
+            existingConfig?.transcriptionEnabled !==
+            false,
+
+          evaluationEnabled:
+            existingConfig?.evaluationEnabled !==
+            false,
+
+          recordingResult,
 
           alreadyActive:
             true,
@@ -469,7 +1466,7 @@ export default async function startInterview(
 
 
     // =================================================
-    // RESOLVE PROJECT
+    // PROJECT ID
     // =================================================
 
     const projectId =
@@ -487,15 +1484,7 @@ export default async function startInterview(
         "[startInterview] PROJECT_ID_REQUIRED",
         {
 
-          runtimeProject:
-            ctx?.get?.(
-              "project"
-            ),
-
-          runtimeProjectId:
-            ctx?.get?.(
-              "project.id"
-            ),
+          runtimeProject,
 
           params,
 
@@ -517,39 +1506,51 @@ export default async function startInterview(
 
 
     // =================================================
+    // PROJECT INTERVIEW CONFIG
+    // =================================================
+
+    const projectInterviewConfig =
+      resolveProjectInterviewConfig(
+        ctx,
+        params
+      );
+
+
+    // =================================================
     // RESOLVE QUESTIONS
     // =================================================
-    //
-    // Priority:
-    //
-    // 1. params.questions
-    // 2. existing runtime interview questions
-    // 3. defaults
-    //
-    // =================================================
 
-    const configuredQuestions =
-      normaliseQuestions(
-        params?.questions
-      );
+    const resolved =
+      resolveQuestions({
 
+        ctx,
 
-    const runtimeQuestions =
-      normaliseQuestions(
-        currentInterview?.questions
-      );
+        params,
+
+        interviewConfig:
+          projectInterviewConfig,
+
+        currentInterview,
+
+      });
 
 
     const questions =
-      configuredQuestions.length > 0
+      resolved.questions;
 
-        ? configuredQuestions
 
-        : runtimeQuestions.length > 0
+    const questionSource =
+      resolved.questionSource;
 
-          ? runtimeQuestions
 
-          : DEFAULT_QUESTIONS;
+    const questionSetId =
+      resolved.questionSetId ||
+      null;
+
+
+    const questionSetName =
+      resolved.questionSetName ||
+      null;
 
 
     if (
@@ -570,57 +1571,49 @@ export default async function startInterview(
     }
 
 
+    console.log(
+      "[startInterview] QUESTIONS RESOLVED",
+      {
+
+        projectId,
+
+        questionCount:
+          questions.length,
+
+        questionSource,
+
+        questionSetId,
+
+        questionSetName,
+
+        questions,
+
+      }
+    );
+
+
     // =================================================
-    // QUESTION SOURCE
+    // FINAL INTERVIEW CONFIG
     // =================================================
 
-    const questionSource =
-      params?.questionSource ||
+    const finalInterviewConfig =
+      normaliseInterviewConfig({
 
-      currentInterview?.questionSource ||
+        ...projectInterviewConfig,
 
-      "project_default";
+        ...(
 
+          params?.interviewConfig &&
+          typeof params.interviewConfig ===
+            "object"
 
-    // =================================================
-    // INTERVIEW CONFIGURATION
-    // =================================================
+            ? params.interviewConfig
 
-    const interviewConfig = {
+            : {}
 
-      recordingEnabled:
-        params?.interviewConfig
-          ?.recordingEnabled ??
+        ),
 
-        currentInterview
-          ?.interviewConfig
-          ?.recordingEnabled ??
-
-        true,
-
-
-      transcriptionEnabled:
-        params?.interviewConfig
-          ?.transcriptionEnabled ??
-
-        currentInterview
-          ?.interviewConfig
-          ?.transcriptionEnabled ??
-
-        true,
-
-
-      evaluationEnabled:
-        params?.interviewConfig
-          ?.evaluationEnabled ??
-
-        currentInterview
-          ?.interviewConfig
-          ?.evaluationEnabled ??
-
-        true,
-
-    };
+      });
 
 
     // =================================================
@@ -638,21 +1631,38 @@ export default async function startInterview(
 
 
     // =================================================
+    // VIDEO TARGET
+    // =================================================
+
+    const videoTargetId =
+      resolveVideoTargetId(
+        params
+      );
+
+
+    // =================================================
     // CREATE PERSISTENT INTERVIEW
     // =================================================
 
     console.log(
-      "[startInterview] Creating persistent Interview",
+      "[startInterview] CREATING INTERVIEW",
       {
 
         projectId,
+
+        questionSetId,
+
+        questionSetName,
 
         questionCount:
           questions.length,
 
         questionSource,
 
-        interviewConfig,
+        interviewConfig:
+          finalInterviewConfig,
+
+        videoTargetId,
 
         candidateUserId,
 
@@ -662,25 +1672,33 @@ export default async function startInterview(
 
     const response =
       await api.post(
+
         `/projects/${projectId}/interviews`,
+
         {
 
           questions,
 
           questionSource,
 
-          interviewConfig,
+          questionSetId,
+
+          questionSetName,
+
+          interviewConfig:
+            finalInterviewConfig,
 
           candidateUserId,
 
           candidate,
 
         }
+
       );
 
 
     // =================================================
-    // API RESPONSE
+    // SERVER RESPONSE
     // =================================================
 
     console.log(
@@ -723,31 +1741,6 @@ export default async function startInterview(
       );
 
 
-    console.log(
-      "[startInterview] PERSISTENT INTERVIEW ID",
-      {
-
-        interviewId,
-
-        backendId:
-          interview?._id ||
-
-          null,
-
-        backendPublicId:
-          interview?.id ||
-
-          null,
-
-        backendInterviewId:
-          interview?.interviewId ||
-
-          null,
-
-      }
-    );
-
-
     if (
       !interviewId
     ) {
@@ -771,16 +1764,15 @@ export default async function startInterview(
 
     const finalQuestions =
       persistedQuestions.length > 0
+
         ? persistedQuestions
+
         : questions;
 
 
-    const firstQuestion =
-      finalQuestions[0];
-
-
     if (
-      !firstQuestion
+      finalQuestions.length ===
+      0
     ) {
 
       throw new Error(
@@ -791,7 +1783,7 @@ export default async function startInterview(
 
 
     // =================================================
-    // BUILD CANONICAL RUNTIME INTERVIEW
+    // CANONICAL RUNTIME INTERVIEW
     // =================================================
 
     const runtimeInterview =
@@ -808,17 +1800,22 @@ export default async function startInterview(
 
         questionSource,
 
-        interviewConfig,
+        questionSetId,
+
+        questionSetName,
+
+        interviewConfig:
+          finalInterviewConfig,
 
       });
 
 
     // =================================================
-    // DEFINITIVE RUNTIME IDENTITY CHECK
+    // IDENTITY VALIDATION
     // =================================================
 
     if (
-      !runtimeInterview.id
+      !runtimeInterview?.id
     ) {
 
       throw new Error(
@@ -829,7 +1826,7 @@ export default async function startInterview(
 
 
     if (
-      !runtimeInterview.projectId
+      !runtimeInterview?.projectId
     ) {
 
       throw new Error(
@@ -838,6 +1835,10 @@ export default async function startInterview(
 
     }
 
+
+    // =================================================
+    // RUNTIME INTERVIEW
+    // =================================================
 
     console.log(
       "[startInterview] RUNTIME INTERVIEW INITIALISING",
@@ -855,12 +1856,18 @@ export default async function startInterview(
         questionCount:
           runtimeInterview.questions.length,
 
-        currentQuestion:
+        questionSetId:
+          runtimeInterview.questionSetId,
+
+        questionSetName:
+          runtimeInterview.questionSetName,
+
+        firstQuestion:
           runtimeInterview.currentQuestion,
 
         recordingEnabled:
           runtimeInterview
-            .interviewConfig
+            ?.interviewConfig
             ?.recordingEnabled,
 
       }
@@ -868,21 +1875,85 @@ export default async function startInterview(
 
 
     // =================================================
-    // WRITE INTERVIEW TO RUNTIME STATE
-    // =================================================
-    //
-    // IMPORTANT:
-    //
-    // Use patch("interview", ...) so the entire canonical
-    // interview state is established in one runtime
-    // transaction.
-    //
+    // WRITE RUNTIME INTERVIEW
     // =================================================
 
     ctx?.patch?.(
       "interview",
       runtimeInterview
     );
+
+
+    // =================================================
+    // AUTOMATIC RECORDING
+    // =================================================
+    //
+    // Recording is a consequence of starting an
+    // interview, but VideoFeed still owns MediaRecorder.
+    //
+    // =================================================
+
+    let recordingResult =
+      null;
+
+
+    const recordingEnabled =
+      runtimeInterview
+        ?.interviewConfig
+        ?.recordingEnabled !== false;
+
+
+    if (
+      recordingEnabled
+    ) {
+
+      recordingResult =
+        await startInterviewRecording(
+          ctx,
+          {
+
+            videoTargetId,
+
+            interviewId:
+              runtimeInterview.id,
+
+            projectId:
+              runtimeInterview.projectId,
+
+          }
+        );
+
+
+      if (
+        recordingResult?.ok ===
+        false
+      ) {
+
+        console.error(
+          "[startInterview] Recording failed to start",
+          {
+
+            recordingResult,
+
+            interviewId:
+              runtimeInterview.id,
+
+            projectId:
+              runtimeInterview.projectId,
+
+          }
+        );
+
+      }
+
+    }
+    else {
+
+      console.log(
+        "[startInterview] Recording disabled by project configuration"
+      );
+
+    }
 
 
     // =================================================
@@ -903,7 +1974,7 @@ export default async function startInterview(
 
 
     console.log(
-      "[startInterview] Runtime interview active",
+      "[startInterview] INTERVIEW ACTIVE",
       {
 
         interviewId:
@@ -912,17 +1983,21 @@ export default async function startInterview(
         projectId:
           runtimeInterview.projectId,
 
-        status:
-          runtimeInterview.status,
-
-        currentQuestion:
-          runtimeInterview.currentQuestion,
-
-        currentQuestionIndex:
-          runtimeInterview.currentQuestionIndex,
-
         questionCount:
           runtimeInterview.questions.length,
+
+        questionSetId:
+          runtimeInterview.questionSetId,
+
+        questionSetName:
+          runtimeInterview.questionSetName,
+
+        questionSource:
+          runtimeInterview.questionSource,
+
+        recordingEnabled,
+
+        recordingResult,
 
       }
     );
@@ -956,23 +2031,32 @@ export default async function startInterview(
         questionCount:
           runtimeInterview.questions.length,
 
-        recordingEnabled:
-          runtimeInterview
-            .interviewConfig
-            ?.recordingEnabled ??
-          true,
+        questionSource:
+          runtimeInterview.questionSource,
+
+        questionSetId:
+          runtimeInterview.questionSetId,
+
+        questionSetName:
+          runtimeInterview.questionSetName,
+
+        recordingEnabled,
 
         transcriptionEnabled:
           runtimeInterview
-            .interviewConfig
-            ?.transcriptionEnabled ??
-          true,
+            ?.interviewConfig
+            ?.transcriptionEnabled !==
+          false,
 
         evaluationEnabled:
           runtimeInterview
-            .interviewConfig
-            ?.evaluationEnabled ??
-          true,
+            ?.interviewConfig
+            ?.evaluationEnabled !==
+          false,
+
+        videoTargetId,
+
+        recordingResult,
 
       },
 
@@ -980,27 +2064,28 @@ export default async function startInterview(
 
   }
   catch (
-    err
+    error
   ) {
 
     console.error(
       "[startInterview] FAILED",
       {
 
-        error:
-          err,
+        name:
+          error?.name,
 
         message:
-          err?.message,
+          error?.message,
+
+        stack:
+          error?.stack,
 
         response:
-          err?.response?.data ||
-
+          error?.response?.data ||
           null,
 
         status:
-          err?.response?.status ||
-
+          error?.response?.status ||
           null,
 
       }
@@ -1013,11 +2098,11 @@ export default async function startInterview(
         false,
 
       error:
-        err?.response?.data?.error ||
+        error?.response?.data?.error ||
 
-        err?.response?.data?.message ||
+        error?.response?.data?.message ||
 
-        err?.message ||
+        error?.message ||
 
         "START_INTERVIEW_FAILED",
 

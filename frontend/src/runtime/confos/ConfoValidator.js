@@ -1,55 +1,62 @@
-// =====================================================
-// ConfoValidator
-// -----------------------------------------------------
-// Validates a Confo before it is loaded into the runtime.
-//
-// Returns:
-//
-// {
-//    valid: true,
-//    errors: [],
-//    warnings: []
-// }
-//
-// =====================================================
-
 import componentRegistry
-from "../../actions/componentRegistry";
+  from "../../actions/componentRegistry";
 
 import {
   getActionByValue,
-}
-from "../../actions/getActionByValue";
+} from "../../actions/getActionByValue";
 
 
 // =====================================================
-// VALIDATE
+// CONFO VALIDATOR
+// =====================================================
+//
+// Supports:
+//
+// Legacy:
+//   confo.elements[]
+//
+// Current:
+//   confo.tree
+//
+// The tree model is now the preferred representation.
+//
 // =====================================================
 
-export function validateConfo(confo) {
+export function validateConfo(
+  confo
+) {
 
   const errors = [];
   const warnings = [];
+
 
   // ===================================================
   // BASIC
   // ===================================================
 
-  if (!confo) {
+  if (
+    !confo
+  ) {
 
     errors.push(
       "Confo is undefined."
     );
 
     return {
-      valid: false,
+      valid:
+        false,
+
       errors,
+
       warnings,
     };
 
   }
 
-  if (!confo.id) {
+
+  if (
+    !confo.id
+  ) {
 
     errors.push(
       "Missing confo.id"
@@ -57,7 +64,10 @@ export function validateConfo(confo) {
 
   }
 
-  if (!confo.name) {
+
+  if (
+    !confo.name
+  ) {
 
     warnings.push(
       "Missing confo.name"
@@ -65,7 +75,10 @@ export function validateConfo(confo) {
 
   }
 
-  if (!confo.version) {
+
+  if (
+    !confo.version
+  ) {
 
     warnings.push(
       "Missing confo.version"
@@ -73,13 +86,18 @@ export function validateConfo(confo) {
 
   }
 
-  if (confo.type !== "confo") {
+
+  if (
+    confo.type !==
+    "confo"
+  ) {
 
     errors.push(
       `Invalid type '${confo.type}'. Expected 'confo'.`
     );
 
   }
+
 
   // ===================================================
   // CAPABILITIES
@@ -91,15 +109,53 @@ export function validateConfo(confo) {
     warnings
   );
 
+
   // ===================================================
-  // ELEMENTS
+  // STRUCTURE
+  // ===================================================
+  //
+  // Prefer tree.
+  //
+  // Legacy elements remain supported.
+  //
   // ===================================================
 
-  validateElements(
-    confo.elements,
-    errors,
-    warnings
-  );
+  if (
+    confo.tree
+  ) {
+
+    validateTree(
+      confo.tree,
+      errors,
+      warnings
+    );
+
+  }
+  else if (
+    Array.isArray(
+      confo.elements
+    )
+  ) {
+
+    validateElements(
+      confo.elements,
+      errors,
+      warnings
+    );
+
+  }
+  else {
+
+    errors.push(
+      "Confo must contain either 'tree' or 'elements'."
+    );
+
+  }
+
+
+  // ===================================================
+  // RESULT
+  // ===================================================
 
   return {
 
@@ -115,7 +171,6 @@ export function validateConfo(confo) {
 }
 
 
-
 // =====================================================
 // CAPABILITIES
 // =====================================================
@@ -126,7 +181,10 @@ function validateCapabilities(
   warnings
 ) {
 
-  if (!capabilities) {
+  if (
+    capabilities ===
+    undefined
+  ) {
 
     warnings.push(
       "Missing capabilities."
@@ -136,7 +194,26 @@ function validateCapabilities(
 
   }
 
+
   if (
+    capabilities ===
+    null ||
+    typeof capabilities !==
+    "object"
+  ) {
+
+    errors.push(
+      "capabilities must be an object."
+    );
+
+    return;
+
+  }
+
+
+  if (
+    capabilities.maxParticipants !==
+    undefined &&
     typeof capabilities.maxParticipants !==
     "number"
   ) {
@@ -146,6 +223,7 @@ function validateCapabilities(
     );
 
   }
+
 
   if (
     capabilities.roles &&
@@ -163,9 +241,526 @@ function validateCapabilities(
 }
 
 
+// =====================================================
+// TREE
+// =====================================================
+
+function validateTree(
+  tree,
+  errors,
+  warnings
+) {
+
+  if (
+    !tree ||
+    typeof tree !==
+    "object"
+  ) {
+
+    errors.push(
+      "tree must be an object."
+    );
+
+    return;
+
+  }
+
+
+  const ids =
+    new Set();
+
+
+  validateTreeNode(
+    tree,
+    "tree",
+    ids,
+    errors,
+    warnings
+  );
+
+}
+
 
 // =====================================================
-// ELEMENTS
+// TREE NODE
+// =====================================================
+
+function validateTreeNode(
+  node,
+  path,
+  ids,
+  errors,
+  warnings
+) {
+
+  if (
+    !node ||
+    typeof node !==
+    "object"
+  ) {
+
+    errors.push(
+      `${path}: Invalid tree node.`
+    );
+
+    return;
+
+  }
+
+
+  // ===================================================
+  // ID
+  // ===================================================
+
+  if (
+    !node.id
+  ) {
+
+    errors.push(
+      `${path}: Missing element id.`
+    );
+
+  }
+  else {
+
+    if (
+      ids.has(
+        node.id
+      )
+    ) {
+
+      errors.push(
+        `${path}: Duplicate element id '${node.id}'.`
+      );
+
+    }
+
+    ids.add(
+      node.id
+    );
+
+  }
+
+
+  // ===================================================
+  // TYPE
+  // ===================================================
+
+  if (
+    !node.type
+  ) {
+
+    errors.push(
+      `${path}: Missing component type.`
+    );
+
+  }
+  else {
+
+    const registryEntry =
+      componentRegistry[
+        node.type
+      ];
+
+
+    if (
+      !registryEntry
+    ) {
+
+      errors.push(
+        `${node.id || path}: Unknown component '${node.type}'.`
+      );
+
+    }
+    else {
+
+      validateContract(
+        node,
+        registryEntry,
+        errors,
+        warnings
+      );
+
+    }
+
+  }
+
+
+  // ===================================================
+  // PROPS
+  // ===================================================
+
+  validateRuntimeBindings(
+    node.props,
+    node.id ||
+      path,
+    warnings
+  );
+
+
+  // ===================================================
+  // PROP ACTION
+  // ===================================================
+
+  const propAction =
+    node?.props?.action;
+
+
+  if (
+    propAction
+  ) {
+
+    const registered =
+      getActionByValue(
+        propAction
+      );
+
+
+    if (
+      !registered
+    ) {
+
+      errors.push(
+        `${node.id || path}: Unknown action '${propAction}'.`
+      );
+
+    }
+
+  }
+
+
+  // ===================================================
+  // DECLARED ACTIONS
+  // ===================================================
+
+  if (
+    Array.isArray(
+      node.actions
+    )
+  ) {
+
+    node.actions.forEach(
+      (
+        action,
+        index
+      ) => {
+
+        if (
+          !action?.name
+        ) {
+
+          errors.push(
+            `${node.id || path}: Action ${index} is missing name.`
+          );
+
+          return;
+
+        }
+
+
+        const registered =
+          getActionByValue(
+            action.name
+          );
+
+
+        if (
+          !registered
+        ) {
+
+          errors.push(
+            `${node.id || path}: Unknown action '${action.name}'.`
+          );
+
+        }
+
+      }
+    );
+
+  }
+
+
+  // ===================================================
+  // CHILDREN
+  // ===================================================
+
+  if (
+    node.children !==
+    undefined &&
+    !Array.isArray(
+      node.children
+    )
+  ) {
+
+    errors.push(
+      `${node.id || path}: children must be an array.`
+    );
+
+    return;
+
+  }
+
+
+  if (
+    Array.isArray(
+      node.children
+    )
+  ) {
+
+    node.children.forEach(
+      (
+        child,
+        index
+      ) => {
+
+        validateTreeNode(
+          child,
+          `${path}.children[${index}]`,
+          ids,
+          errors,
+          warnings
+        );
+
+      }
+    );
+
+  }
+
+}
+
+
+// =====================================================
+// CONTRACT VALIDATION
+// =====================================================
+
+function validateContract(
+  node,
+  registryEntry,
+  errors,
+  warnings
+) {
+
+  const contract =
+    registryEntry?.contract;
+
+
+  // ---------------------------------------------------
+  // No contract
+  // ---------------------------------------------------
+
+  if (
+    !contract
+  ) {
+
+    warnings.push(
+      `${node.id}: Component '${node.type}' has no contract.`
+    );
+
+    return;
+
+  }
+
+
+  // ===================================================
+  // REQUIRED PROPS
+  // ===================================================
+
+  const requiredProps =
+    Array.isArray(
+      contract.requiredProps
+    )
+      ? contract.requiredProps
+      : [];
+
+
+  requiredProps.forEach(
+    propName => {
+
+      if (
+        !propName
+      ) {
+
+        return;
+
+      }
+
+
+      if (
+        node?.props?.[
+          propName
+        ] ===
+        undefined
+      ) {
+
+        errors.push(
+          `${node.id}: Missing required prop '${propName}'.`
+        );
+
+      }
+
+    }
+  );
+
+
+  // ===================================================
+  // OPTIONAL PROPS
+  // ===================================================
+
+  const optionalProps =
+    Array.isArray(
+      contract.optionalProps
+    )
+      ? contract.optionalProps
+      : [];
+
+
+  // ---------------------------------------------------
+  // Informational only for now.
+  //
+  // We deliberately do not reject props which aren't
+  // declared in the contract because the Confo schema
+  // is still evolving.
+  // ---------------------------------------------------
+
+  if (
+    optionalProps.length === 0
+  ) {
+
+    // Intentionally no-op.
+
+  }
+
+
+  // ===================================================
+  // CONTRACT ACTIONS
+  // ===================================================
+  //
+  // Example:
+  //
+  // actions: [
+  //   "interview.start",
+  //   "interview.complete"
+  // ]
+  //
+  // Every action declared by the component contract
+  // must exist in the runtime action registry.
+  //
+  // ===================================================
+
+  const contractActions =
+    Array.isArray(
+      contract.actions
+    )
+      ? contract.actions
+      : [];
+
+
+  const actionSet =
+    new Set();
+
+
+  contractActions.forEach(
+    (
+      actionName,
+      index
+    ) => {
+
+      // ------------------------------------------------
+      // Validate action name
+      // ------------------------------------------------
+
+      if (
+        typeof actionName !==
+        "string" ||
+        !actionName.trim()
+      ) {
+
+        errors.push(
+          `${node.id}: Contract action ${index} is invalid.`
+        );
+
+        return;
+
+      }
+
+
+      const normalizedActionName =
+        actionName.trim();
+
+
+      // ------------------------------------------------
+      // Duplicate action
+      // ------------------------------------------------
+
+      if (
+        actionSet.has(
+          normalizedActionName
+        )
+      ) {
+
+        warnings.push(
+          `${node.id}: Contract contains duplicate action '${normalizedActionName}'.`
+        );
+
+        return;
+
+      }
+
+
+      actionSet.add(
+        normalizedActionName
+      );
+
+
+      // ------------------------------------------------
+      // Runtime registration
+      // ------------------------------------------------
+
+      const registered =
+        getActionByValue(
+          normalizedActionName
+        );
+
+
+      if (
+        !registered
+      ) {
+
+        errors.push(
+          `${node.id}: Contract action '${normalizedActionName}' is not registered in the runtime action registry.`
+        );
+
+      }
+
+    }
+  );
+
+
+  // ===================================================
+  // CONTRACT TYPE
+  // ===================================================
+
+  if (
+    contract.type &&
+    String(
+      contract.type
+    ) !==
+    String(
+      node.type
+    )
+  ) {
+
+    errors.push(
+      `${node.id}: Contract type '${contract.type}' does not match component type '${node.type}'.`
+    );
+
+  }
+
+}
+
+
+// =====================================================
+// LEGACY ELEMENTS
 // =====================================================
 
 function validateElements(
@@ -174,33 +769,41 @@ function validateElements(
   warnings
 ) {
 
-  if (!Array.isArray(elements)) {
-
-    errors.push(
-      "elements must be an array."
-    );
-
-    return;
-
-  }
-
   const ids =
     new Set();
 
+
   elements.forEach(
-    (element, index) => {
+    (
+      element,
+      index
+    ) => {
 
-      // -----------------------------------------------
-      // ID
-      // -----------------------------------------------
+      if (
+        !element ||
+        typeof element !==
+        "object"
+      ) {
 
-      if (!element.id) {
+        errors.push(
+          `Element ${index} is invalid.`
+        );
+
+        return;
+
+      }
+
+
+      if (
+        !element.id
+      ) {
 
         errors.push(
           `Element ${index} is missing an id.`
         );
 
       }
+
 
       if (
         ids.has(
@@ -214,15 +817,15 @@ function validateElements(
 
       }
 
+
       ids.add(
         element.id
       );
 
-      // -----------------------------------------------
-      // TYPE
-      // -----------------------------------------------
 
-      if (!element.type) {
+      if (
+        !element.type
+      ) {
 
         errors.push(
           `${element.id}: Missing component type.`
@@ -241,8 +844,43 @@ function validateElements(
 
       }
 
+
+      validateRuntimeBindings(
+        element.props,
+        element.id,
+        warnings
+      );
+
+
       // -----------------------------------------------
-      // ACTIONS
+      // PROP ACTION
+      // -----------------------------------------------
+
+      if (
+        element?.props?.action
+      ) {
+
+        const registered =
+          getActionByValue(
+            element.props.action
+          );
+
+
+        if (
+          !registered
+        ) {
+
+          errors.push(
+            `${element.id}: Unknown action '${element.props.action}'.`
+          );
+
+        }
+
+      }
+
+
+      // -----------------------------------------------
+      // DECLARED ACTIONS
       // -----------------------------------------------
 
       if (
@@ -252,9 +890,11 @@ function validateElements(
       ) {
 
         element.actions.forEach(
-          (action) => {
+          action => {
 
-            if (!action.name) {
+            if (
+              !action?.name
+            ) {
 
               errors.push(
                 `${element.id}: Action missing name.`
@@ -264,12 +904,16 @@ function validateElements(
 
             }
 
+
             const registered =
               getActionByValue(
                 action.name
               );
 
-            if (!registered) {
+
+            if (
+              !registered
+            ) {
 
               errors.push(
                 `${element.id}: Unknown action '${action.name}'.`
@@ -282,21 +926,10 @@ function validateElements(
 
       }
 
-      // -----------------------------------------------
-      // RUNTIME PLACEHOLDERS
-      // -----------------------------------------------
-
-      validateRuntimeBindings(
-        element.props,
-        element.id,
-        warnings
-      );
-
     }
   );
 
 }
-
 
 
 // =====================================================
@@ -309,19 +942,36 @@ function validateRuntimeBindings(
   warnings
 ) {
 
-  if (!props)
+  if (
+    !props ||
+    typeof props !==
+    "object"
+  ) {
+
     return;
+
+  }
+
 
   Object.entries(
     props
   ).forEach(
-    ([key, value]) => {
+    (
+      [
+        key,
+        value,
+      ]
+    ) => {
 
       if (
         typeof value !==
         "string"
-      )
+      ) {
+
         return;
+
+      }
+
 
       if (
         value.startsWith(
@@ -342,3 +992,8 @@ function validateRuntimeBindings(
   );
 
 }
+
+
+export default {
+  validateConfo,
+};

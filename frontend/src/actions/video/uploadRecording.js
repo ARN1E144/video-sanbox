@@ -775,7 +775,7 @@ export default async function uploadRecording(
 
     const completeResponse =
       await api.post(
-        `/api/projects/${projectId}/interviews/${interviewId}/recording/complete`,
+        `/projects/${projectId}/interviews/${interviewId}/recording/complete`,
         {
 
           s3Key,

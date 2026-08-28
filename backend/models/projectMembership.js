@@ -70,6 +70,37 @@ const projectMembershipSchema =
           default: false,
         },
 
+        canViewTranscriptions: {
+        type: Boolean,
+        default: false,
+        },
+
+        canViewEvaluations: {
+        type: Boolean,
+        default: false,
+        },
+
+        canCreateData: {
+        type: Boolean,
+        default: false,
+        },
+
+        canEditData: {
+        type: Boolean,
+        default: false,
+        },
+
+        canDeleteData: {
+        type: Boolean,
+        default: false,
+        },
+
+        canExportData: {
+        type: Boolean,
+        default: false,
+        },
+
+
       },
 
     },

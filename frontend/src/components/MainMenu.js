@@ -52,17 +52,29 @@ export default function MainMenu({ currentView, setCurrentView }) {
       </div>
 
       <div
+        style={
+          currentView === "data"
+            ? {
+                ...buttonStyle,
+                ...activeStyle,
+              }
+            : buttonStyle
+        }
+
+        onClick={() =>
+          setCurrentView("data")
+        }
+      >
+        📊 Data
+      </div>
+
+      <div
         style={currentView === 'settings' ? { ...buttonStyle, ...activeStyle } : buttonStyle}
         onClick={() => setCurrentView('settings')}
       >
         ⚙️ Settings
       </div>
-      <div
-        style={currentView === 'calls' ? { ...buttonStyle, ...activeStyle } : buttonStyle}
-        onClick={() => setCurrentView('calls')}
-      >
-        📞 Calls
-      </div>
+  
       <div style={buttonStyle}
       >
         <button onClick={logout}>Logout</button>

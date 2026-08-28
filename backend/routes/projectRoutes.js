@@ -1,22 +1,26 @@
-
 // backend/routes/projectRoutes.js
 
 import express from "express";
 import mongoose from "mongoose";
 
 import Project from "../models/project.js";
-import ProjectMembership
-  from "../models/projectMembership.js";
+import ProjectMembership from "../models/projectMembership.js";
 
-import { requireAuth }
-  from "../middleware/requireAuth.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 
-const router =
-  express.Router();
+
+const router = express.Router();
 
 
 // =====================================================
 // PROJECT PERMISSION DEFAULTS
+// =====================================================
+//
+// Owner permissions represent the maximum permissions
+// currently supported by the platform.
+//
+// These are also used for legacy projects that do not yet
+// have a ProjectMembership document.
 // =====================================================
 
 const OWNER_PERMISSIONS = {
@@ -33,7 +37,301 @@ const OWNER_PERMISSIONS = {
 
   canViewRecordings: true,
 
+  canViewEvaluations: true,
+
 };
+
+
+// =====================================================
+// DEFAULT INTERVIEW CONFIG
+// =====================================================
+//
+// The project remains the source of truth for AI
+// Interviewer configuration.
+//
+// This protects older projects that do not yet contain
+// interviewConfig.
+// =====================================================
+
+const DEFAULT_INTERVIEW_CONFIG = {
+
+  activeQuestionSetId: null,
+
+  questionSets: [],
+
+  recordingEnabled: true,
+
+  transcriptionEnabled: true,
+
+  evaluationEnabled: true,
+
+};
+
+
+// =====================================================
+// NORMALISE QUESTION SET
+// =====================================================
+
+function normaliseQuestionSet(
+  questionSet = {}
+) {
+
+  const id =
+    questionSet?.id ||
+    questionSet?._id ||
+    null;
+
+
+  if (!id) {
+
+    return null;
+
+  }
+
+
+  const questions =
+    Array.isArray(
+      questionSet?.questions
+    )
+
+      ? questionSet.questions
+
+          .map(
+            question =>
+              String(
+                question ?? ""
+              ).trim()
+          )
+
+          .filter(
+            Boolean
+          )
+
+      : [];
+
+
+  return {
+
+    id:
+      String(
+        id
+      ),
+
+    name:
+      String(
+        questionSet?.name ||
+        "Untitled Question Set"
+      ).trim(),
+
+    description:
+      String(
+        questionSet?.description ||
+        ""
+      ).trim(),
+
+    questions,
+
+    source:
+      questionSet?.source ||
+      "manual",
+
+  };
+
+}
+
+
+// =====================================================
+// NORMALISE INTERVIEW CONFIG
+// =====================================================
+//
+// Backend remains authoritative.
+//
+// Important:
+// We do NOT generate IDs here.
+//
+// A question set's ID should remain stable when the
+// project is loaded/saved.
+// =====================================================
+
+function normaliseInterviewConfig(
+  config
+) {
+
+  const safeConfig =
+    config &&
+    typeof config === "object"
+
+      ? config
+
+      : {};
+
+
+  const sourceQuestionSets =
+    Array.isArray(
+      safeConfig.questionSets
+    )
+
+      ? safeConfig.questionSets
+
+      : [];
+
+
+  const questionSets =
+    sourceQuestionSets
+
+      .map(
+        normaliseQuestionSet
+      )
+
+      .filter(Boolean);
+
+
+  let activeQuestionSetId =
+    safeConfig.activeQuestionSetId ||
+    null;
+
+
+  // ===================================================
+  // VALIDATE ACTIVE SET
+  // ===================================================
+
+  const activeExists =
+    activeQuestionSetId &&
+    questionSets.some(
+      questionSet =>
+        String(
+          questionSet.id
+        ) ===
+        String(
+          activeQuestionSetId
+        )
+    );
+
+
+  if (
+    !activeExists
+  ) {
+
+    activeQuestionSetId =
+      questionSets[0]?.id ||
+      null;
+
+  }
+
+
+  // ===================================================
+  // FIRST SET FALLBACK
+  // ===================================================
+
+  if (
+    !activeQuestionSetId &&
+    questionSets.length > 0
+  ) {
+
+    activeQuestionSetId =
+      questionSets[0].id;
+
+  }
+
+
+  return {
+
+    ...DEFAULT_INTERVIEW_CONFIG,
+
+    ...safeConfig,
+
+    activeQuestionSetId,
+
+    questionSets,
+
+    recordingEnabled:
+      safeConfig.recordingEnabled !== false,
+
+    transcriptionEnabled:
+      safeConfig.transcriptionEnabled !== false,
+
+    evaluationEnabled:
+      safeConfig.evaluationEnabled !== false,
+
+  };
+
+}
+
+
+// =====================================================
+// NORMALISE PROJECT
+// =====================================================
+//
+// All project responses pass through this function before
+// being returned to the frontend.
+//
+// This means:
+// project list
+// single project
+// created project
+// updated project
+//
+// all have exactly the same project shape.
+// =====================================================
+
+function normaliseProject(
+  project
+) {
+
+  if (
+    !project ||
+    typeof project !== "object"
+  ) {
+
+    return null;
+
+  }
+
+
+  const projectId =
+    project?._id ||
+    project?.id ||
+    null;
+
+
+  if (!projectId) {
+
+    return null;
+
+  }
+
+
+  return {
+
+    ...project,
+
+    _id:
+      projectId,
+
+    name:
+      project?.name ||
+      "Untitled Project",
+
+    type:
+      project?.type ||
+      "single",
+
+    schema:
+      project?.schema ||
+      {},
+
+    backgroundConfigs:
+      project?.backgroundConfigs ||
+      {},
+
+    interviewConfig:
+      normaliseInterviewConfig(
+        project?.interviewConfig
+      ),
+
+  };
+
+}
 
 
 // =====================================================
@@ -52,115 +350,71 @@ function isValidObjectId(
 
 
 // =====================================================
-// REQUIRE TENANT
+// NORMALISE OBJECT ID
+// =====================================================
+
+function normaliseObjectId(
+  value
+) {
+
+  if (
+    !isValidObjectId(
+      value
+    )
+  ) {
+
+    return null;
+
+  }
+
+
+  return new mongoose.Types.ObjectId(
+    value
+  );
+
+}
+
+
+// =====================================================
+// GET TENANT ID
 // =====================================================
 
 function getTenantId(
   req
 ) {
 
-  const tenantId =
-    req.user?.tenantId;
-
-  if (!tenantId) {
-
-    return null;
-
-  }
-
-  if (
-    !isValidObjectId(
-      tenantId
-    )
-  ) {
-
-    return null;
-
-  }
-
-  return new mongoose.Types.ObjectId(
-    tenantId
+  return normaliseObjectId(
+    req.user?.tenantId
   );
 
 }
 
 
 // =====================================================
-// GET CURRENT USER ID
+// GET USER ID
 // =====================================================
 
 function getUserId(
   req
 ) {
 
-  const userId =
-    req.user?.userId;
-
-  if (!userId) {
-
-    return null;
-
-  }
-
-  if (
-    !isValidObjectId(
-      userId
-    )
-  ) {
-
-    return null;
-
-  }
-
-  return new mongoose.Types.ObjectId(
-    userId
+  return normaliseObjectId(
+    req.user?.userId
   );
 
 }
 
 
 // =====================================================
-// FIND PROJECT MEMBERSHIP
+// GET PROJECT ACCESS
 // =====================================================
-
-async function getMembership(
-  req,
-  projectId
-) {
-
-  const userId =
-    getUserId(req);
-
-  const tenantId =
-    getTenantId(req);
-
-
-  if (
-    !userId ||
-    !tenantId ||
-    !projectId
-  ) {
-
-    return null;
-
-  }
-
-
-  return ProjectMembership.findOne({
-
-    tenantId,
-
-    projectId,
-
-    userId,
-
-  }).lean();
-
-}
-
-
-// =====================================================
-// PROJECT ACCESS CHECK
+//
+// Supports:
+//
+// 1. Explicit ProjectMembership
+// 2. Legacy ownership fallback
+//
+// Tenant isolation is always enforced.
 // =====================================================
 
 async function getProjectAccess(
@@ -170,10 +424,21 @@ async function getProjectAccess(
 ) {
 
   const userId =
-    getUserId(req);
+    getUserId(
+      req
+    );
+
 
   const tenantId =
-    getTenantId(req);
+    getTenantId(
+      req
+    );
+
+
+  const normalizedProjectId =
+    normaliseObjectId(
+      projectId
+    );
 
 
   if (!userId) {
@@ -182,10 +447,10 @@ async function getProjectAccess(
 
       allowed: false,
 
-      status: 400,
+      status: 401,
 
       error:
-        "Invalid authenticated user ID.",
+        "INVALID_AUTHENTICATED_USER",
 
     };
 
@@ -201,75 +466,92 @@ async function getProjectAccess(
       status: 400,
 
       error:
-        "Authenticated tenant ID is required.",
+        "TENANT_REQUIRED",
 
     };
 
   }
 
 
+  if (!normalizedProjectId) {
+
+    return {
+
+      allowed: false,
+
+      status: 400,
+
+      error:
+        "INVALID_PROJECT_ID",
+
+    };
+
+  }
+
+
+  // ===================================================
+  // EXPLICIT MEMBERSHIP
+  // ===================================================
+
   const membership =
-    await ProjectMembership.findOne({
+    await ProjectMembership
+      .findOne({
 
-      tenantId,
+        tenantId,
 
-      projectId,
+        projectId:
+          normalizedProjectId,
 
-      userId,
+        userId,
 
-    }).lean();
-
-
-  /*
-  -----------------------------------------------------
-  LEGACY OWNER FALLBACK
-  -----------------------------------------------------
-
-  Existing projects may not yet have a membership
-  document.
-
-  Until the migration is complete, allow the project
-  owner to access their existing projects.
-
-  When accessed this way, we return "legacy-owner".
-  -----------------------------------------------------
-  */
-
-  if (!membership) {
-
-    const ownerProject =
-      await Project.findOne({
-
-        _id:
-          projectId,
-
-        ownerId:
-          userId,
-
-      }).lean();
+      })
+      .lean();
 
 
-    if (ownerProject) {
+  if (
+    membership
+  ) {
+
+    const allowed =
+      membership
+        ?.permissions?.[
+          permission
+        ] === true;
+
+
+    if (!allowed) {
+
+      console.warn(
+        "[Projects] Permission denied",
+        {
+
+          projectId:
+            normalizedProjectId.toString(),
+
+          userId:
+            userId.toString(),
+
+          role:
+            membership.role,
+
+          permission,
+
+        }
+      );
+
 
       return {
 
-        allowed: true,
+        allowed:
+          false,
 
-        project:
-          ownerProject,
+        status:
+          403,
 
-        membership: {
+        error:
+          "PROJECT_PERMISSION_DENIED",
 
-          role:
-            "owner",
-
-          permissions:
-            OWNER_PERMISSIONS,
-
-          legacy:
-            true,
-
-        },
+        membership,
 
       };
 
@@ -278,35 +560,8 @@ async function getProjectAccess(
 
     return {
 
-      allowed: false,
-
-      status: 403,
-
-      error:
-        "PROJECT_ACCESS_DENIED",
-
-    };
-
-  }
-
-
-  const allowed =
-    membership
-      ?.permissions?.[
-        permission
-      ] === true;
-
-
-  if (!allowed) {
-
-    return {
-
-      allowed: false,
-
-      status: 403,
-
-      error:
-        "PROJECT_PERMISSION_DENIED",
+      allowed:
+        true,
 
       membership,
 
@@ -315,11 +570,88 @@ async function getProjectAccess(
   }
 
 
+  // ===================================================
+  // LEGACY OWNER FALLBACK
+  // ===================================================
+
+  const ownerProject =
+    await Project
+      .findOne({
+
+        _id:
+          normalizedProjectId,
+
+        ownerId:
+          userId,
+
+      })
+      .lean();
+
+
+  if (
+    ownerProject
+  ) {
+
+    const allowed =
+      OWNER_PERMISSIONS[
+        permission
+      ] === true;
+
+
+    if (!allowed) {
+
+      return {
+
+        allowed:
+          false,
+
+        status:
+          403,
+
+        error:
+          "PROJECT_PERMISSION_DENIED",
+
+      };
+
+    }
+
+
+    return {
+
+      allowed:
+        true,
+
+      project:
+        ownerProject,
+
+      membership: {
+
+        role:
+          "owner",
+
+        permissions:
+          OWNER_PERMISSIONS,
+
+        legacy:
+          true,
+
+      },
+
+    };
+
+  }
+
+
   return {
 
-    allowed: true,
+    allowed:
+      false,
 
-    membership,
+    status:
+      403,
+
+    error:
+      "PROJECT_ACCESS_DENIED",
 
   };
 
@@ -327,14 +659,18 @@ async function getProjectAccess(
 
 
 // =====================================================
-// GET ALL PROJECTS
+// GET ALL ACCESSIBLE PROJECTS
+// =====================================================
 //
-// Returns projects the current user can view.
+// GET /api/projects
 //
-// Includes:
-// - Explicit memberships
-// - Legacy owned projects
+// IMPORTANT:
 //
+// The returned projects now include the complete
+// interviewConfig from MongoDB.
+//
+// This is critical because the frontend uses the project
+// list to populate its initial project state.
 // =====================================================
 
 router.get(
@@ -348,22 +684,28 @@ router.get(
     try {
 
       const userId =
-        getUserId(req);
+        getUserId(
+          req
+        );
+
 
       const tenantId =
-        getTenantId(req);
+        getTenantId(
+          req
+        );
 
 
       if (!userId) {
 
         return res
-          .status(400)
+          .status(401)
           .json({
 
-            success: false,
+            success:
+              false,
 
-            message:
-              "Invalid authenticated user ID.",
+            error:
+              "INVALID_AUTHENTICATED_USER",
 
           });
 
@@ -376,19 +718,20 @@ router.get(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
-            message:
-              "Authenticated tenant ID is required.",
+            error:
+              "TENANT_REQUIRED",
 
           });
 
       }
 
 
-      // -------------------------------------------------
+      // =================================================
       // EXPLICIT MEMBERSHIPS
-      // -------------------------------------------------
+      // =================================================
 
       const memberships =
         await ProjectMembership
@@ -406,49 +749,67 @@ router.get(
 
 
       const membershipProjectIds =
-        memberships.map(
-          membership =>
-            membership.projectId
-        );
+        memberships
+
+          .map(
+            membership =>
+              membership.projectId
+          )
+
+          .filter(Boolean);
 
 
-      // -------------------------------------------------
-      // LEGACY OWNER PROJECTS
-      // -------------------------------------------------
+      // =================================================
+      // OWNED PROJECTS
+      // =================================================
 
       const ownedProjects =
-        await Project.find({
+        await Project
+          .find({
 
-          ownerId:
-            userId,
+            ownerId:
+              userId,
 
-        })
-        .select("_id")
-        .lean();
+          })
+
+          .select("_id")
+
+          .lean();
 
 
       const ownedProjectIds =
-        ownedProjects.map(
-          project =>
-            project._id
-        );
+        ownedProjects
+
+          .map(
+            project =>
+              project._id
+          )
+
+          .filter(Boolean);
 
 
-      // -------------------------------------------------
-      // COMBINE PROJECT IDS
-      // -------------------------------------------------
+      // =================================================
+      // UNIQUE PROJECT IDS
+      // =================================================
 
       const projectIdStrings =
         new Set(
 
           [
+
             ...membershipProjectIds,
+
             ...ownedProjectIds,
+
           ]
+
             .filter(Boolean)
+
             .map(
               id =>
-                id.toString()
+                String(
+                  id
+                )
             )
 
         );
@@ -458,126 +819,196 @@ router.get(
         Array.from(
           projectIdStrings
         )
+
           .map(
             id =>
-              new mongoose.Types.ObjectId(
+              normaliseObjectId(
                 id
               )
-          );
+          )
+
+          .filter(Boolean);
 
 
-      if (!projectIds.length) {
+      if (
+        projectIds.length === 0
+      ) {
 
         return res
           .status(200)
           .json({
 
-            success: true,
+            success:
+              true,
 
-            projects: [],
+            projects:
+              [],
 
           });
 
       }
 
 
-      const projects =
+      // =================================================
+      // LOAD PROJECTS
+      // =================================================
+
+      const loadedProjects =
         await Project
           .find({
 
             _id: {
+
               $in:
                 projectIds,
+
             },
 
           })
+
           .sort({
 
             updatedAt:
               -1,
 
           })
+
           .lean();
 
 
-      // -------------------------------------------------
-      // ATTACH ACCESS INFORMATION
-      // -------------------------------------------------
+      // =================================================
+      // MEMBERSHIP MAP
+      // =================================================
 
       const membershipMap =
         new Map(
 
           memberships.map(
             membership => [
-              membership.projectId.toString(),
+
+              String(
+                membership.projectId
+              ),
+
               membership,
+
             ]
           )
 
         );
 
 
+      // =================================================
+      // BUILD RESPONSE
+      // =================================================
+
       const result =
-        projects.map(
-          project => {
+        loadedProjects
 
-            const membership =
-              membershipMap.get(
-                project._id.toString()
-              );
+          .map(
+            project => {
+
+              const hydratedProject =
+                normaliseProject(
+                  project
+                );
 
 
-            if (membership) {
+              if (
+                !hydratedProject
+              ) {
+
+                return null;
+
+              }
+
+
+              const membership =
+                membershipMap.get(
+                  String(
+                    project._id
+                  )
+                );
+
 
               return {
 
-                ...project,
+                ...hydratedProject,
 
                 access: {
 
                   role:
-                    membership.role,
+                    membership?.role ||
+                    "owner",
 
                   permissions:
-                    membership.permissions,
+                    membership?.permissions ||
+                    OWNER_PERMISSIONS,
+
+                  legacy:
+                    membership
+                      ? false
+                      : true,
 
                 },
 
               };
 
             }
+          )
+
+          .filter(Boolean);
 
 
-            // Legacy owner
+      console.log(
+        "[Projects] Accessible projects",
+        {
 
-            return {
+          userId:
+            userId.toString(),
 
-              ...project,
+          tenantId:
+            tenantId.toString(),
 
-              access: {
+          count:
+            result.length,
 
-                role:
-                  "owner",
+          projects:
+            result.map(
+              project => ({
 
-                permissions:
-                  OWNER_PERMISSIONS,
+                id:
+                  project._id,
 
-                legacy:
-                  true,
+                name:
+                  project.name,
 
-              },
+                questionSetCount:
+                  project
+                    .interviewConfig
+                    ?.questionSets
+                    ?.length ||
+                  0,
 
-            };
+                activeQuestionSetId:
+                  project
+                    .interviewConfig
+                    ?.activeQuestionSetId ||
+                  null,
 
-          }
-        );
+              })
+            ),
+
+        }
+      );
 
 
       return res
         .status(200)
         .json({
 
-          success: true,
+          success:
+            true,
 
           projects:
             result,
@@ -585,10 +1016,12 @@ router.get(
         });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
-        "[Projects] GET /",
+        "[Projects] GET / failed",
         error
       );
 
@@ -597,7 +1030,11 @@ router.get(
         .status(500)
         .json({
 
-          success: false,
+          success:
+            false,
+
+          error:
+            "PROJECT_LIST_FAILED",
 
           message:
             "Failed to load projects.",
@@ -612,6 +1049,11 @@ router.get(
 
 // =====================================================
 // GET SINGLE PROJECT
+// =====================================================
+//
+// GET /api/projects/:id
+//
+// The full interview configuration is always returned.
 // =====================================================
 
 router.get(
@@ -640,7 +1082,11 @@ router.get(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
+
+            error:
+              "INVALID_PROJECT_ID",
 
             message:
               "Invalid project ID.",
@@ -651,7 +1097,7 @@ router.get(
 
 
       const projectId =
-        new mongoose.Types.ObjectId(
+        normaliseObjectId(
           id
         );
 
@@ -664,18 +1110,21 @@ router.get(
         );
 
 
-      if (!access.allowed) {
+      if (
+        !access.allowed
+      ) {
 
         return res
           .status(
             access.status ||
-              403
+            403
           )
           .json({
 
-            success: false,
+            success:
+              false,
 
-            message:
+            error:
               access.error,
 
           });
@@ -683,7 +1132,7 @@ router.get(
       }
 
 
-      const project =
+      const rawProject =
         access.project ||
         await Project
           .findById(
@@ -692,16 +1141,45 @@ router.get(
           .lean();
 
 
-      if (!project) {
+      if (
+        !rawProject
+      ) {
 
         return res
           .status(404)
           .json({
 
-            success: false,
+            success:
+              false,
+
+            error:
+              "PROJECT_NOT_FOUND",
 
             message:
               "Project not found.",
+
+          });
+
+      }
+
+
+      const project =
+        normaliseProject(
+          rawProject
+        );
+
+
+      if (!project) {
+
+        return res
+          .status(500)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "PROJECT_NORMALISATION_FAILED",
 
           });
 
@@ -712,7 +1190,8 @@ router.get(
         .status(200)
         .json({
 
-          success: true,
+          success:
+            true,
 
           project: {
 
@@ -721,7 +1200,8 @@ router.get(
             access: {
 
               role:
-                access.membership?.role ||
+                access.membership
+                  ?.role ||
                 "owner",
 
               permissions:
@@ -741,10 +1221,12 @@ router.get(
         });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
-        "[Projects] GET /:id",
+        "[Projects] GET /:id failed",
         error
       );
 
@@ -753,7 +1235,11 @@ router.get(
         .status(500)
         .json({
 
-          success: false,
+          success:
+            false,
+
+          error:
+            "PROJECT_GET_FAILED",
 
           message:
             "Failed to load project.",
@@ -768,13 +1254,11 @@ router.get(
 
 // =====================================================
 // CREATE PROJECT
+// =====================================================
 //
-// IMPORTANT:
-// The creator automatically receives an owner
-// ProjectMembership.
+// POST /api/projects
 //
-// This is the point where the model becomes part
-// of the real backend lifecycle.
+// interviewConfig is persisted with the project.
 // =====================================================
 
 router.post(
@@ -788,37 +1272,57 @@ router.post(
     try {
 
       const {
+
         name,
+
         type,
+
         schema,
+
         backgroundConfigs,
+
+        interviewConfig,
+
         installedFromConfo,
+
         confoVersion,
+
       } =
         req.body;
 
 
       const userId =
-        getUserId(req);
+        getUserId(
+          req
+        );
+
 
       const tenantId =
-        getTenantId(req);
+        getTenantId(
+          req
+        );
 
 
-      // -------------------------------------------------
+      // =================================================
       // VALIDATION
-      // -------------------------------------------------
+      // =================================================
 
       if (
         !name ||
-        !name.trim()
+        !String(
+          name
+        ).trim()
       ) {
 
         return res
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
+
+            error:
+              "PROJECT_NAME_REQUIRED",
 
             message:
               "Project name is required.",
@@ -834,7 +1338,11 @@ router.post(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
+
+            error:
+              "PROJECT_SCHEMA_REQUIRED",
 
             message:
               "Project schema is required.",
@@ -847,13 +1355,14 @@ router.post(
       if (!userId) {
 
         return res
-          .status(400)
+          .status(401)
           .json({
 
-            success: false,
+            success:
+              false,
 
-            message:
-              "Invalid authenticated user ID.",
+            error:
+              "INVALID_AUTHENTICATED_USER",
 
           });
 
@@ -866,25 +1375,38 @@ router.post(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
-            message:
-              "Authenticated tenant ID is required.",
+            error:
+              "TENANT_REQUIRED",
 
           });
 
       }
 
 
-      // -------------------------------------------------
+      // =================================================
+      // INTERVIEW CONFIG
+      // =================================================
+
+      const normalizedInterviewConfig =
+        normaliseInterviewConfig(
+          interviewConfig
+        );
+
+
+      // =================================================
       // CREATE PROJECT
-      // -------------------------------------------------
+      // =================================================
 
       const project =
         await Project.create({
 
           name:
-            name.trim(),
+            String(
+              name
+            ).trim(),
 
           type:
             type ||
@@ -895,6 +1417,9 @@ router.post(
           backgroundConfigs:
             backgroundConfigs ||
             {},
+
+          interviewConfig:
+            normalizedInterviewConfig,
 
           installedFromConfo:
             installedFromConfo ||
@@ -910,9 +1435,9 @@ router.post(
         });
 
 
-      // -------------------------------------------------
-      // CREATE OWNER MEMBERSHIP
-      // -------------------------------------------------
+      // =================================================
+      // OWNER MEMBERSHIP
+      // =================================================
 
       try {
 
@@ -938,15 +1463,6 @@ router.post(
         membershipError
       ) {
 
-        /*
-        -------------------------------------------------
-        IMPORTANT
-
-        Do not leave an orphaned project if the owner
-        membership cannot be created.
-        -------------------------------------------------
-        */
-
         console.error(
           "[Projects] Owner membership creation failed",
           membershipError
@@ -968,6 +1484,12 @@ router.post(
       }
 
 
+      const hydratedProject =
+        normaliseProject(
+          project.toObject()
+        );
+
+
       console.log(
         "[Projects] Created",
         {
@@ -978,13 +1500,14 @@ router.post(
           name:
             project.name,
 
-          ownerId:
-            project.ownerId,
-
           tenantId,
 
-          membership:
-            "owner",
+          questionSetCount:
+            hydratedProject
+              ?.interviewConfig
+              ?.questionSets
+              ?.length ||
+            0,
 
         }
       );
@@ -994,11 +1517,12 @@ router.post(
         .status(201)
         .json({
 
-          success: true,
+          success:
+            true,
 
           project: {
 
-            ...project.toObject(),
+            ...hydratedProject,
 
             access: {
 
@@ -1015,21 +1539,51 @@ router.post(
         });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
-        "[Projects] POST /",
+        "[Projects] POST / failed",
         error
       );
+
+
+      if (
+        error?.code ===
+        11000
+      ) {
+
+        return res
+          .status(409)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "PROJECT_NAME_ALREADY_EXISTS",
+
+            message:
+              "A project with this name already exists.",
+
+          });
+
+      }
 
 
       return res
         .status(500)
         .json({
 
-          success: false,
+          success:
+            false,
+
+          error:
+            "PROJECT_CREATE_FAILED",
 
           message:
+            error?.message ||
             "Failed to create project.",
 
         });
@@ -1042,9 +1596,13 @@ router.post(
 
 // =====================================================
 // UPDATE PROJECT
+// =====================================================
 //
-// Requires:
-// canEdit
+// PATCH /api/projects/:id
+//
+// Requires canEdit.
+//
+// interviewConfig is explicitly persisted.
 // =====================================================
 
 router.patch(
@@ -1073,7 +1631,11 @@ router.patch(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
+
+            error:
+              "INVALID_PROJECT_ID",
 
             message:
               "Invalid project ID.",
@@ -1084,7 +1646,7 @@ router.patch(
 
 
       const projectId =
-        new mongoose.Types.ObjectId(
+        normaliseObjectId(
           id
         );
 
@@ -1097,18 +1659,21 @@ router.patch(
         );
 
 
-      if (!access.allowed) {
+      if (
+        !access.allowed
+      ) {
 
         return res
           .status(
             access.status ||
-              403
+            403
           )
           .json({
 
-            success: false,
+            success:
+              false,
 
-            message:
+            error:
               access.error,
 
           });
@@ -1116,27 +1681,39 @@ router.patch(
       }
 
 
-      // -------------------------------------------------
-      // KNOWN FIELDS ONLY
-      // -------------------------------------------------
+      // =================================================
+      // KNOWN FIELDS
+      // =================================================
 
       const updates = {};
 
+
+      // =================================================
+      // NAME
+      // =================================================
 
       if (
         req.body.name !==
         undefined
       ) {
 
-        if (
-          !req.body.name.trim()
-        ) {
+        const name =
+          String(
+            req.body.name
+          ).trim();
+
+
+        if (!name) {
 
           return res
             .status(400)
             .json({
 
-              success: false,
+              success:
+                false,
+
+              error:
+                "PROJECT_NAME_REQUIRED",
 
               message:
                 "Project name cannot be empty.",
@@ -1147,10 +1724,14 @@ router.patch(
 
 
         updates.name =
-          req.body.name.trim();
+          name;
 
       }
 
+
+      // =================================================
+      // TYPE
+      // =================================================
 
       if (
         req.body.type !==
@@ -1163,6 +1744,10 @@ router.patch(
       }
 
 
+      // =================================================
+      // SCHEMA
+      // =================================================
+
       if (
         req.body.schema !==
         undefined
@@ -1174,6 +1759,10 @@ router.patch(
       }
 
 
+      // =================================================
+      // BACKGROUND CONFIG
+      // =================================================
+
       if (
         req.body.backgroundConfigs !==
         undefined
@@ -1184,6 +1773,27 @@ router.patch(
 
       }
 
+
+      // =================================================
+      // AI INTERVIEWER CONFIG
+      // =================================================
+
+      if (
+        req.body.interviewConfig !==
+        undefined
+      ) {
+
+        updates.interviewConfig =
+          normaliseInterviewConfig(
+            req.body.interviewConfig
+          );
+
+      }
+
+
+      // =================================================
+      // CONFO METADATA
+      // =================================================
 
       if (
         req.body.installedFromConfo !==
@@ -1207,19 +1817,50 @@ router.patch(
       }
 
 
-      const project =
+      // =================================================
+      // NOTHING TO UPDATE
+      // =================================================
+
+      if (
+        Object.keys(
+          updates
+        ).length ===
+        0
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "NO_PROJECT_UPDATES",
+
+            message:
+              "No project changes were supplied.",
+
+          });
+
+      }
+
+
+      // =================================================
+      // UPDATE
+      // =================================================
+
+      const updatedProjectRaw =
         await Project.findOneAndUpdate(
 
           {
             _id:
               projectId,
-
           },
 
           {
             $set:
               updates,
-
           },
 
           {
@@ -1234,13 +1875,19 @@ router.patch(
         ).lean();
 
 
-      if (!project) {
+      if (
+        !updatedProjectRaw
+      ) {
 
         return res
           .status(404)
           .json({
 
-            success: false,
+            success:
+              false,
+
+            error:
+              "PROJECT_NOT_FOUND",
 
             message:
               "Project not found.",
@@ -1250,19 +1897,41 @@ router.patch(
       }
 
 
+      const updatedProject =
+        normaliseProject(
+          updatedProjectRaw
+        );
+
+
       const membership =
         access.membership;
+
+
+      console.log(
+        "[Projects] Updated",
+        {
+
+          projectId:
+            projectId.toString(),
+
+          updatedInterviewConfig:
+            updatedProject
+              ?.interviewConfig,
+
+        }
+      );
 
 
       return res
         .status(200)
         .json({
 
-          success: true,
+          success:
+            true,
 
           project: {
 
-            ...project,
+            ...updatedProject,
 
             access: {
 
@@ -1274,6 +1943,10 @@ router.patch(
                 membership?.permissions ||
                 OWNER_PERMISSIONS,
 
+              legacy:
+                membership?.legacy ||
+                false,
+
             },
 
           },
@@ -1281,21 +1954,51 @@ router.patch(
         });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
-        "[Projects] PATCH /:id",
+        "[Projects] PATCH /:id failed",
         error
       );
+
+
+      if (
+        error?.code ===
+        11000
+      ) {
+
+        return res
+          .status(409)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "PROJECT_NAME_ALREADY_EXISTS",
+
+            message:
+              "A project with this name already exists.",
+
+          });
+
+      }
 
 
       return res
         .status(500)
         .json({
 
-          success: false,
+          success:
+            false,
+
+          error:
+            "PROJECT_UPDATE_FAILED",
 
           message:
+            error?.message ||
             "Failed to update project.",
 
         });
@@ -1308,11 +2011,14 @@ router.patch(
 
 // =====================================================
 // DELETE PROJECT
+// =====================================================
 //
-// Requires:
-// canManageData
+// Requires canManageData.
 //
-// Owners receive this automatically.
+// Deletes project and project memberships.
+//
+// Interviews/recordings should eventually be removed by
+// a dedicated cascading deletion service.
 // =====================================================
 
 router.delete(
@@ -1341,7 +2047,11 @@ router.delete(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
+
+            error:
+              "INVALID_PROJECT_ID",
 
             message:
               "Invalid project ID.",
@@ -1352,7 +2062,7 @@ router.delete(
 
 
       const projectId =
-        new mongoose.Types.ObjectId(
+        normaliseObjectId(
           id
         );
 
@@ -1365,18 +2075,21 @@ router.delete(
         );
 
 
-      if (!access.allowed) {
+      if (
+        !access.allowed
+      ) {
 
         return res
           .status(
             access.status ||
-              403
+            403
           )
           .json({
 
-            success: false,
+            success:
+              false,
 
-            message:
+            error:
               access.error,
 
           });
@@ -1384,19 +2097,29 @@ router.delete(
       }
 
 
+      // =================================================
+      // DELETE PROJECT
+      // =================================================
+
       const project =
         await Project.findByIdAndDelete(
           projectId
         );
 
 
-      if (!project) {
+      if (
+        !project
+      ) {
 
         return res
           .status(404)
           .json({
 
-            success: false,
+            success:
+              false,
+
+            error:
+              "PROJECT_NOT_FOUND",
 
             message:
               "Project not found.",
@@ -1406,14 +2129,21 @@ router.delete(
       }
 
 
-      // -------------------------------------------------
-      // DELETE ALL MEMBERSHIPS
-      // -------------------------------------------------
+      // =================================================
+      // DELETE MEMBERSHIPS
+      // =================================================
+
+      const tenantId =
+        getTenantId(
+          req
+        );
+
 
       await ProjectMembership.deleteMany({
 
-        projectId:
+        tenantId,
 
+        projectId:
           project._id,
 
       });
@@ -1437,7 +2167,8 @@ router.delete(
         .status(200)
         .json({
 
-          success: true,
+          success:
+            true,
 
           message:
             "Project deleted.",
@@ -1445,10 +2176,12 @@ router.delete(
         });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
-        "[Projects] DELETE /:id",
+        "[Projects] DELETE /:id failed",
         error
       );
 
@@ -1457,7 +2190,11 @@ router.delete(
         .status(500)
         .json({
 
-          success: false,
+          success:
+            false,
+
+          error:
+            "PROJECT_DELETE_FAILED",
 
           message:
             "Failed to delete project.",
@@ -1469,5 +2206,9 @@ router.delete(
   }
 );
 
+
+// =====================================================
+// DEFAULT EXPORT
+// =====================================================
 
 export default router;

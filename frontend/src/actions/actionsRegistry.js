@@ -75,6 +75,9 @@ import evaluateInterview
 import uploadRecording
   from "./video/uploadRecording";
 
+import completeInterview 
+  from "./interview/completeInterview";
+
 
 import {
   setColor,
@@ -182,6 +185,9 @@ export const ACTIONS = {
 
   INTERVIEW_EVALUATE:
     "interview.evaluate",
+
+  INTERVIEW_COMPLETE:
+  "interview.complete",
 
 
   // =======================================================
@@ -788,6 +794,24 @@ export const actionRegistry = {
       ],
 
     }),
+
+     complete: createAction({
+        value:
+          ACTIONS.INTERVIEW_COMPLETE,
+
+        label:
+          "Complete Interview",
+
+        category:
+          "interview",
+
+        run:
+          completeInterview,
+
+        targets: [
+          "InterviewPanel",
+        ],
+      }),
 
 
     evaluate: createAction({

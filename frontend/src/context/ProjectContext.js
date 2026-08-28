@@ -1,4 +1,3 @@
-
 // src/context/ProjectContext.js
 
 import React, {
@@ -25,10 +24,19 @@ export const ProjectContext =
 
 
 // =====================================================
+// API
+// =====================================================
+
+const API_URL =
+  process.env.REACT_APP_API_URL ||
+  "http://localhost:5000";
+
+
+// =====================================================
 // DEFAULT BACKGROUND
 // =====================================================
 
-const DEFAULT_BACKGROUND_CONFIGS = {
+export const DEFAULT_BACKGROUND_CONFIGS = {
 
   desktop: {
     kind: "color",
@@ -55,12 +63,295 @@ const DEFAULT_BACKGROUND_CONFIGS = {
 
 
 // =====================================================
-// API
+// DEFAULT INTERVIEW CONFIG
 // =====================================================
 
-const API_URL =
-  process.env.REACT_APP_API_URL ||
-  "http://localhost:5000";
+export const DEFAULT_INTERVIEW_CONFIG = {
+
+  activeQuestionSetId: null,
+
+  questionSets: [],
+
+  recordingEnabled: true,
+
+  transcriptionEnabled: true,
+
+  evaluationEnabled: true,
+
+};
+
+
+// =====================================================
+// QUESTION SET ID
+// =====================================================
+
+function createQuestionSetId() {
+
+  return (
+    `question-set-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`
+  );
+
+}
+
+
+// =====================================================
+// NORMALISE QUESTION SET
+// =====================================================
+
+function normaliseQuestionSet(
+  questionSet = {}
+) {
+
+  const questions =
+    Array.isArray(
+      questionSet?.questions
+    )
+
+      ? questionSet.questions
+          .map(
+            question =>
+              String(
+                question ?? ""
+              ).trim()
+          )
+          .filter(Boolean)
+
+      : [];
+
+
+  return {
+
+    id:
+      questionSet?.id ||
+      questionSet?._id ||
+      createQuestionSetId(),
+
+    name:
+      String(
+        questionSet?.name ||
+        "Untitled Question Set"
+      ).trim(),
+
+    description:
+      String(
+        questionSet?.description ||
+        ""
+      ).trim(),
+
+    questions,
+
+    source:
+      questionSet?.source ||
+      "manual",
+
+  };
+
+}
+
+
+// =====================================================
+// NORMALISE INTERVIEW CONFIG
+// =====================================================
+
+export function normaliseInterviewConfig(
+  config
+) {
+
+  const safeConfig =
+    config &&
+    typeof config === "object"
+
+      ? config
+
+      : {};
+
+
+  const sourceQuestionSets =
+    Array.isArray(
+      safeConfig.questionSets
+    )
+      ? safeConfig.questionSets
+      : [];
+
+
+  const questionSets =
+    sourceQuestionSets
+      .map(
+        normaliseQuestionSet
+      )
+      .filter(Boolean);
+
+
+  let activeQuestionSetId =
+    safeConfig.activeQuestionSetId ||
+    null;
+
+
+  // ---------------------------------------------------
+  // Validate active question set
+  // ---------------------------------------------------
+
+  const activeExists =
+    activeQuestionSetId &&
+    questionSets.some(
+      questionSet =>
+        String(
+          questionSet.id
+        ) ===
+        String(
+          activeQuestionSetId
+        )
+    );
+
+
+  if (!activeExists) {
+
+    activeQuestionSetId =
+      questionSets[0]?.id ||
+      null;
+
+  }
+
+
+  // ---------------------------------------------------
+  // Automatically select first question set when
+  // question sets exist but no active set is defined.
+  // ---------------------------------------------------
+
+  if (
+    !activeQuestionSetId &&
+    questionSets.length > 0
+  ) {
+
+    activeQuestionSetId =
+      questionSets[0].id;
+
+  }
+
+
+  return {
+
+    ...DEFAULT_INTERVIEW_CONFIG,
+
+    ...safeConfig,
+
+    activeQuestionSetId,
+
+    questionSets,
+
+    recordingEnabled:
+      safeConfig.recordingEnabled !== false,
+
+    transcriptionEnabled:
+      safeConfig.transcriptionEnabled !== false,
+
+    evaluationEnabled:
+      safeConfig.evaluationEnabled !== false,
+
+  };
+
+}
+
+
+// =====================================================
+// PROJECT HELPERS
+// =====================================================
+
+function getProjectId(
+  project
+) {
+
+  return (
+    project?._id ||
+    project?.id ||
+    null
+  );
+
+}
+
+
+function getProjectName(
+  project
+) {
+
+  return (
+    project?.name ||
+    null
+  );
+
+}
+
+
+// =====================================================
+// HYDRATE PROJECT
+// =====================================================
+//
+// Every project entering ProjectContext is normalised.
+//
+// =====================================================
+
+function hydrateProject(
+  project
+) {
+
+  if (
+    !project ||
+    typeof project !== "object"
+  ) {
+
+    return null;
+
+  }
+
+
+  const projectId =
+    getProjectId(
+      project
+    );
+
+
+  if (
+    !projectId
+  ) {
+
+    return null;
+
+  }
+
+
+  return {
+
+    ...project,
+
+    _id:
+      projectId,
+
+    name:
+      project.name ||
+      "Untitled Project",
+
+    type:
+      project.type ||
+      "single",
+
+    schema:
+      project.schema ||
+      makeEmptyProjectSchema(),
+
+    backgroundConfigs:
+      project.backgroundConfigs ||
+      DEFAULT_BACKGROUND_CONFIGS,
+
+    interviewConfig:
+      normaliseInterviewConfig(
+        project.interviewConfig
+      ),
+
+  };
+
+}
 
 
 // =====================================================
@@ -80,98 +371,272 @@ export function ProjectProvider({
 
 
   // ===================================================
-  // PROJECT STATE
+  // PROJECT EDITOR STATE
   // ===================================================
 
   const [
     projectSchema,
     setProjectSchema,
-  ] = useState(
-    makeEmptyProjectSchema()
-  );
+  ] =
+    useState(
+      makeEmptyProjectSchema()
+    );
 
 
   const [
     viewMode,
     setViewMode,
-  ] = useState(
-    "preview"
-  );
+  ] =
+    useState(
+      "preview"
+    );
 
 
   const [
     projectType,
     setProjectType,
-  ] = useState(
-    "single"
-  );
+  ] =
+    useState(
+      "single"
+    );
 
 
   const [
     collapsed,
     setCollapsed,
-  ] = useState(
-    false
-  );
+  ] =
+    useState(
+      false
+    );
 
 
   const [
     backgroundConfigs,
     setBackgroundConfigs,
-  ] = useState(
-    DEFAULT_BACKGROUND_CONFIGS
-  );
+  ] =
+    useState(
+      DEFAULT_BACKGROUND_CONFIGS
+    );
 
 
   // ===================================================
-  // DATABASE PROJECTS
+  // INTERVIEW CONFIGURATION
+  // ===================================================
+
+  const [
+    interviewConfig,
+    setInterviewConfigState,
+  ] =
+    useState(
+      DEFAULT_INTERVIEW_CONFIG
+    );
+
+
+  // ===================================================
+  // PROJECT DATABASE STATE
   // ===================================================
 
   const [
     projects,
     setProjects,
-  ] = useState(
-    []
-  );
+  ] =
+    useState([]);
 
+
+  /*
+  =====================================================
+  activeProject === null
+      → NEW UNSAVED PROJECT
+
+  activeProject !== null
+      → EXISTING SAVED PROJECT
+  =====================================================
+  */
 
   const [
     activeProject,
     setActiveProjectState,
-  ] = useState(
-    null
-  );
+  ] =
+    useState(null);
 
 
   const [
     projectsLoading,
     setProjectsLoading,
-  ] = useState(
-    true
-  );
+  ] =
+    useState(true);
 
 
   // ===================================================
-  // SYNCHRONISE RUNTIME PROJECT
+  // CURRENT PROJECT
+  // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // This MUST be declared before any callback dependency
+  // arrays that reference currentProject.
+  //
+  // ===================================================
+
+  const currentProject =
+    useMemo(
+      () => {
+
+        if (
+          !activeProject
+        ) {
+
+          return null;
+
+        }
+
+
+        return (
+          projects.find(
+            project =>
+              String(
+                getProjectId(
+                  project
+                )
+              ) ===
+              String(
+                activeProject
+              )
+          ) ||
+          null
+        );
+
+      },
+      [
+        projects,
+        activeProject,
+      ]
+    );
+
+
+  // ===================================================
+  // RESET PROJECT EDITOR
+  // ===================================================
+
+  const resetProjectEditor =
+    useCallback(
+      () => {
+
+        setProjectSchema(
+          makeEmptyProjectSchema()
+        );
+
+
+        setProjectType(
+          "single"
+        );
+
+
+        setBackgroundConfigs(
+          DEFAULT_BACKGROUND_CONFIGS
+        );
+
+
+        setInterviewConfigState(
+          DEFAULT_INTERVIEW_CONFIG
+        );
+
+      },
+      []
+    );
+
+
+  // ===================================================
+  // SYNC RUNTIME PROJECT
   // ===================================================
 
   const syncRuntimeProject =
     useCallback(
-      (
-        projectId,
-        projectName = null
-      ) => {
+      project => {
+
+        const hydrated =
+          hydrateProject(
+            project
+          );
+
+
+        // ------------------------------------------------
+        // NEW / EMPTY PROJECT
+        // ------------------------------------------------
+
+        if (!hydrated) {
+
+          runtime.patch(
+            "project",
+            {
+
+              id:
+                null,
+
+              name:
+                null,
+
+              type:
+                "single",
+
+              schema:
+                makeEmptyProjectSchema(),
+
+              backgroundConfigs:
+                DEFAULT_BACKGROUND_CONFIGS,
+
+              interviewConfig:
+                DEFAULT_INTERVIEW_CONFIG,
+
+              installedFromConfo:
+                null,
+
+              confoVersion:
+                null,
+
+            }
+          );
+
+
+          return;
+
+        }
+
+
+        // ------------------------------------------------
+        // EXISTING PROJECT
+        // ------------------------------------------------
 
         runtime.patch(
           "project",
           {
+
             id:
-              projectId ||
-              null,
+              hydrated._id,
 
             name:
-              projectName ||
+              hydrated.name,
+
+            type:
+              hydrated.type,
+
+            schema:
+              hydrated.schema,
+
+            backgroundConfigs:
+              hydrated.backgroundConfigs,
+
+            installedFromConfo:
+              hydrated.installedFromConfo ||
               null,
+
+            confoVersion:
+              hydrated.confoVersion ||
+              null,
+
+            interviewConfig:
+              hydrated.interviewConfig,
+
           }
         );
 
@@ -179,13 +644,16 @@ export function ProjectProvider({
         console.log(
           "[Projects] Runtime project synchronised",
           {
+
             projectId:
-              projectId ||
-              null,
+              hydrated._id,
 
             projectName:
-              projectName ||
-              null,
+              hydrated.name,
+
+            interviewConfig:
+              hydrated.interviewConfig,
+
           }
         );
 
@@ -197,30 +665,76 @@ export function ProjectProvider({
 
 
   // ===================================================
-  // CANONICAL ACTIVE PROJECT SETTER
+  // START NEW PROJECT
   // ===================================================
-  //
-  // IMPORTANT:
-  //
-  // This must NOT depend on `projects`.
-  //
-  // Otherwise:
-  //
-  // projects changes
-  //   ↓
-  // setter identity changes
-  //   ↓
-  // loadProjects identity changes
-  //   ↓
-  // useEffect runs again
-  //
+
+  const startNewProject =
+    useCallback(
+      () => {
+
+        console.log(
+          "[Projects] Starting NEW unsaved project"
+        );
+
+
+        setActiveProjectState(
+          null
+        );
+
+
+        resetProjectEditor();
+
+
+        runtime.patch(
+          "project",
+          {
+
+            id:
+              null,
+
+            name:
+              null,
+
+            type:
+              "single",
+
+            schema:
+              makeEmptyProjectSchema(),
+
+            backgroundConfigs:
+              DEFAULT_BACKGROUND_CONFIGS,
+
+            interviewConfig:
+              DEFAULT_INTERVIEW_CONFIG,
+
+            installedFromConfo:
+              null,
+
+            confoVersion:
+              null,
+
+          }
+        );
+
+      },
+      [
+        resetProjectEditor,
+        runtime,
+      ]
+    );
+
+
+  // ===================================================
+  // SET ACTIVE EXISTING PROJECT
   // ===================================================
 
   const setActiveProject =
     useCallback(
       (
         projectId,
-        projectName = null
+        projectName = null,
+        nextInterviewConfig =
+          DEFAULT_INTERVIEW_CONFIG
       ) => {
 
         const nextId =
@@ -228,33 +742,679 @@ export function ProjectProvider({
           null;
 
 
+        const normalisedConfig =
+          normaliseInterviewConfig(
+            nextInterviewConfig
+          );
+
+
         setActiveProjectState(
           nextId
         );
 
 
-        syncRuntimeProject(
-          nextId,
-          projectName
+        setInterviewConfigState(
+          normalisedConfig
+        );
+
+
+        runtime.patch(
+          "project",
+          {
+
+            id:
+              nextId,
+
+            name:
+              projectName ||
+              null,
+
+            interviewConfig:
+              normalisedConfig,
+
+          }
         );
 
 
         console.log(
           "[Projects] Active project changed",
           {
+
             projectId:
               nextId,
 
             projectName:
               projectName ||
               null,
+
           }
         );
 
       },
       [
+        runtime,
+      ]
+    );
+
+
+  // ===================================================
+  // APPLY HYDRATED PROJECT
+  // ===================================================
+
+  const applyProject =
+    useCallback(
+      project => {
+
+        const hydrated =
+          hydrateProject(
+            project
+          );
+
+
+        if (
+          !hydrated
+        ) {
+
+          throw new Error(
+            "Invalid project returned by API."
+          );
+
+        }
+
+
+        const projectId =
+          hydrated._id;
+
+
+        const config =
+          hydrated.interviewConfig;
+
+
+        // ------------------------------------------------
+        // EDITOR STATE
+        // ------------------------------------------------
+
+        setProjectSchema(
+          hydrated.schema
+        );
+
+
+        setProjectType(
+          hydrated.type
+        );
+
+
+        setBackgroundConfigs(
+          hydrated.backgroundConfigs
+        );
+
+
+        setInterviewConfigState(
+          config
+        );
+
+
+        // ------------------------------------------------
+        // ACTIVE PROJECT
+        // ------------------------------------------------
+
+        setActiveProjectState(
+          projectId
+        );
+
+
+        // ------------------------------------------------
+        // PROJECT LIST
+        // ------------------------------------------------
+
+        setProjects(
+          previous => {
+
+            const exists =
+              previous.some(
+                existing =>
+                  String(
+                    getProjectId(
+                      existing
+                    )
+                  ) ===
+                  String(
+                    projectId
+                  )
+              );
+
+
+            if (
+              exists
+            ) {
+
+              return previous.map(
+                existing =>
+                  String(
+                    getProjectId(
+                      existing
+                    )
+                  ) ===
+                  String(
+                    projectId
+                  )
+                    ? hydrated
+                    : existing
+              );
+
+            }
+
+
+            return [
+
+              ...previous,
+
+              hydrated,
+
+            ];
+
+          }
+        );
+
+
+        // ------------------------------------------------
+        // RUNTIME
+        // ------------------------------------------------
+
+        syncRuntimeProject(
+          hydrated
+        );
+
+
+        console.log(
+          "[Projects] PROJECT HYDRATED",
+          {
+
+            id:
+              hydrated._id,
+
+            name:
+              hydrated.name,
+
+            questionSetCount:
+              hydrated
+                .interviewConfig
+                ?.questionSets
+                ?.length ||
+              0,
+
+            activeQuestionSetId:
+              hydrated
+                .interviewConfig
+                ?.activeQuestionSetId ||
+              null,
+
+          }
+        );
+
+
+        return hydrated;
+
+      },
+      [
         syncRuntimeProject,
       ]
+    );
+
+
+  // ===================================================
+  // SET INTERVIEW CONFIG
+  // ===================================================
+
+  const setInterviewConfig =
+    useCallback(
+      nextConfig => {
+
+        setInterviewConfigState(
+          previous => {
+
+            const resolved =
+              typeof nextConfig ===
+              "function"
+
+                ? nextConfig(
+                    previous
+                  )
+
+                : nextConfig;
+
+
+            return normaliseInterviewConfig(
+              resolved
+            );
+
+          }
+        );
+
+      },
+      []
+    );
+
+
+  // ===================================================
+  // UPDATE INTERVIEW CONFIG
+  // ===================================================
+
+  const updateInterviewConfig =
+    useCallback(
+      patch => {
+
+        setInterviewConfigState(
+          previous => {
+
+            const resolvedPatch =
+              typeof patch ===
+              "function"
+
+                ? patch(
+                    previous
+                  )
+
+                : patch;
+
+
+            const safePatch =
+              resolvedPatch &&
+              typeof resolvedPatch ===
+                "object"
+
+                ? resolvedPatch
+
+                : {};
+
+
+            return normaliseInterviewConfig({
+
+              ...previous,
+
+              ...safePatch,
+
+            });
+
+          }
+        );
+
+      },
+      []
+    );
+
+
+  // ===================================================
+  // ADD QUESTION SET
+  // ===================================================
+
+  const addQuestionSet =
+    useCallback(
+      (
+        questionSet = {}
+      ) => {
+
+        const newQuestionSet =
+          normaliseQuestionSet(
+            questionSet
+          );
+
+
+        setInterviewConfigState(
+          previous => {
+
+            const previousSets =
+              Array.isArray(
+                previous?.questionSets
+              )
+                ? previous.questionSets
+                : [];
+
+
+            return normaliseInterviewConfig({
+
+              ...previous,
+
+              questionSets: [
+
+                ...previousSets,
+
+                newQuestionSet,
+
+              ],
+
+              activeQuestionSetId:
+
+                previous?.activeQuestionSetId ||
+                newQuestionSet.id,
+
+            });
+
+          }
+        );
+
+
+        console.log(
+          "[Projects] Question Set added",
+          newQuestionSet
+        );
+
+
+        return newQuestionSet;
+
+      },
+      []
+    );
+
+
+  // ===================================================
+  // UPDATE QUESTION SET
+  // ===================================================
+
+  const updateQuestionSet =
+    useCallback(
+      (
+        questionSetId,
+        updates = {}
+      ) => {
+
+        if (
+          !questionSetId
+        ) {
+
+          return false;
+
+        }
+
+
+        let changed =
+          false;
+
+
+        setInterviewConfigState(
+          previous => {
+
+            const questionSets =
+              Array.isArray(
+                previous?.questionSets
+              )
+                ? previous.questionSets
+                : [];
+
+
+            const nextQuestionSets =
+              questionSets.map(
+                questionSet => {
+
+                  if (
+                    String(
+                      questionSet?.id
+                    ) !==
+                    String(
+                      questionSetId
+                    )
+                  ) {
+
+                    return questionSet;
+
+                  }
+
+
+                  changed =
+                    true;
+
+
+                  return normaliseQuestionSet({
+
+                    ...questionSet,
+
+                    ...updates,
+
+                  });
+
+                }
+              );
+
+
+            return normaliseInterviewConfig({
+
+              ...previous,
+
+              questionSets:
+                nextQuestionSets,
+
+            });
+
+          }
+        );
+
+
+        console.log(
+          "[Projects] Question Set updated",
+          {
+
+            questionSetId,
+
+            changed,
+
+          }
+        );
+
+
+        return changed;
+
+      },
+      []
+    );
+
+
+  // ===================================================
+  // REMOVE QUESTION SET
+  // ===================================================
+
+  const removeQuestionSet =
+    useCallback(
+      questionSetId => {
+
+        if (
+          !questionSetId
+        ) {
+
+          return false;
+
+        }
+
+
+        let removed =
+          false;
+
+
+        setInterviewConfigState(
+          previous => {
+
+            const questionSets =
+              Array.isArray(
+                previous?.questionSets
+              )
+                ? previous.questionSets
+                : [];
+
+
+            const remaining =
+              questionSets.filter(
+                questionSet => {
+
+                  const keep =
+                    String(
+                      questionSet?.id
+                    ) !==
+                    String(
+                      questionSetId
+                    );
+
+
+                  if (
+                    !keep
+                  ) {
+
+                    removed =
+                      true;
+
+                  }
+
+
+                  return keep;
+
+                }
+              );
+
+
+            const wasActive =
+              String(
+                previous?.activeQuestionSetId
+              ) ===
+              String(
+                questionSetId
+              );
+
+
+            return normaliseInterviewConfig({
+
+              ...previous,
+
+              questionSets:
+                remaining,
+
+              activeQuestionSetId:
+
+                wasActive
+
+                  ? (
+                      remaining[0]?.id ||
+                      null
+                    )
+
+                  : previous?.activeQuestionSetId,
+
+            });
+
+          }
+        );
+
+
+        console.log(
+          "[Projects] Question Set removed",
+          {
+
+            questionSetId,
+
+            removed,
+
+          }
+        );
+
+
+        return removed;
+
+      },
+      []
+    );
+
+
+  // ===================================================
+  // SET ACTIVE QUESTION SET
+  // ===================================================
+
+  const setActiveQuestionSet =
+    useCallback(
+      questionSetId => {
+
+        if (
+          !questionSetId
+        ) {
+
+          return false;
+
+        }
+
+
+        let activated =
+          false;
+
+
+        setInterviewConfigState(
+          previous => {
+
+            const questionSets =
+              Array.isArray(
+                previous?.questionSets
+              )
+                ? previous.questionSets
+                : [];
+
+
+            const exists =
+              questionSets.some(
+                questionSet =>
+                  String(
+                    questionSet?.id
+                  ) ===
+                  String(
+                    questionSetId
+                  )
+              );
+
+
+            if (
+              !exists
+            ) {
+
+              console.warn(
+                "[Projects] Cannot activate missing Question Set",
+                {
+                  questionSetId,
+                }
+              );
+
+
+              return previous;
+
+            }
+
+
+            activated =
+              true;
+
+
+            return normaliseInterviewConfig({
+
+              ...previous,
+
+              activeQuestionSetId:
+                questionSetId,
+
+            });
+
+          }
+        );
+
+
+        console.log(
+          "[Projects] Active Question Set changed",
+          {
+
+            questionSetId,
+
+            activated,
+
+          }
+        );
+
+
+        return activated;
+
+      },
+      []
     );
 
 
@@ -288,24 +1448,50 @@ export function ProjectProvider({
             );
 
 
-          const loadedProjects =
+          const rawProjects =
             Array.isArray(
-              response.data?.projects
+              response?.data?.projects
             )
               ? response.data.projects
               : [];
 
 
-          console.log(
-            "[Projects] Loaded",
-            loadedProjects
-          );
+          const hydratedProjects =
+            rawProjects
+              .map(
+                hydrateProject
+              )
+              .filter(Boolean);
 
 
           setProjects(
-            loadedProjects
+            hydratedProjects
           );
 
+
+          /*
+          IMPORTANT:
+
+          Do not select an existing project on startup.
+
+          Startup always represents a new unsaved project.
+          */
+
+          startNewProject();
+
+
+          console.log(
+            "[Projects] Project list loaded",
+            {
+
+              count:
+                hydratedProjects.length,
+
+              mode:
+                "new-project",
+
+            }
+          );
 
         }
         catch (
@@ -313,7 +1499,7 @@ export function ProjectProvider({
         ) {
 
           console.error(
-            "[Projects] Failed to load",
+            "[Projects] Failed to load projects",
             error
           );
 
@@ -323,10 +1509,7 @@ export function ProjectProvider({
           );
 
 
-          setActiveProject(
-            null
-          );
-
+          startNewProject();
 
         }
         finally {
@@ -339,13 +1522,13 @@ export function ProjectProvider({
 
       },
       [
-        setActiveProject,
+        startNewProject,
       ]
     );
 
 
   // ===================================================
-  // INITIAL PROJECT LOAD
+  // INITIAL LOAD
   // ===================================================
 
   useEffect(
@@ -361,97 +1544,227 @@ export function ProjectProvider({
 
 
   // ===================================================
-  // STALE ACTIVE PROJECT CHECK
+  // SAVE INTERVIEW CONFIG
+  // ===================================================
+  //
+  // This persists the COMPLETE config immediately for
+  // an existing project.
+  //
+  // This is intentionally separate from saveCurrentProject
+  // so QuestionSetEditor can save directly without being
+  // affected by asynchronous React state updates.
+  //
   // ===================================================
 
-  useEffect(
-    () => {
+  const saveInterviewConfig =
+    useCallback(
+      async (
+        nextInterviewConfig
+      ) => {
 
-      if (
-        !activeProject ||
-        projectsLoading
-      ) {
-
-        return;
-
-      }
+        const normalisedConfig =
+          normaliseInterviewConfig(
+            nextInterviewConfig
+          );
 
 
-      const exists =
-        projects.some(
-          project =>
-            String(
-              project?._id
-            ) ===
-            String(
-              activeProject
+        // ------------------------------------------------
+        // NEW PROJECT
+        // ------------------------------------------------
+
+        if (
+          !activeProject
+        ) {
+
+          setInterviewConfigState(
+            normalisedConfig
+          );
+
+
+          runtime.patch(
+            "project",
+            {
+
+              id:
+                null,
+
+              name:
+                null,
+
+              interviewConfig:
+                normalisedConfig,
+
+            }
+          );
+
+
+          console.log(
+            "[Projects] Interview config updated on NEW project"
+          );
+
+
+          return {
+
+            persisted:
+              false,
+
+            newProject:
+              true,
+
+            interviewConfig:
+              normalisedConfig,
+
+          };
+
+        }
+
+
+        // ------------------------------------------------
+        // EXISTING PROJECT
+        // ------------------------------------------------
+
+        console.log(
+          "[Projects] Persisting interview config",
+          {
+
+            projectId:
+              activeProject,
+
+            interviewConfig:
+              normalisedConfig,
+
+          }
+        );
+
+
+        const response =
+          await api.patch(
+            `${API_URL}/api/projects/${activeProject}`,
+            {
+
+              interviewConfig:
+                normalisedConfig,
+
+            },
+            {
+              withCredentials:
+                true,
+            }
+          );
+
+
+        const rawProject =
+          response?.data?.project;
+
+
+        if (
+          !rawProject
+        ) {
+
+          throw new Error(
+            "Server did not return updated project."
+          );
+
+        }
+
+
+        const updatedProject =
+          hydrateProject(
+            rawProject
+          );
+
+
+        if (
+          !updatedProject
+        ) {
+
+          throw new Error(
+            "Updated project could not be hydrated."
+          );
+
+        }
+
+
+        setProjects(
+          previous =>
+            previous.map(
+              project =>
+                String(
+                  getProjectId(project)
+                ) ===
+                String(
+                  activeProject
+                )
+
+                  ? updatedProject
+
+                  : project
             )
         );
 
 
-      if (
-        !exists
-      ) {
+        setInterviewConfigState(
+          updatedProject.interviewConfig
+        );
+
+
+        syncRuntimeProject(
+          updatedProject
+        );
+
 
         console.log(
-          "[Projects] Clearing stale active project:",
-          activeProject
+          "[Projects] Interview configuration persisted",
+          {
+
+            projectId:
+              updatedProject._id,
+
+            questionSetCount:
+              updatedProject
+                ?.interviewConfig
+                ?.questionSets
+                ?.length ||
+              0,
+
+          }
         );
 
 
-        setActiveProject(
-          null
-        );
+        return {
 
+          persisted:
+            true,
 
-        setProjectSchema(
-          makeEmptyProjectSchema()
-        );
+          newProject:
+            false,
 
+          project:
+            updatedProject,
 
-        setProjectType(
-          "single"
-        );
+          interviewConfig:
+            updatedProject.interviewConfig,
 
+        };
 
-        setBackgroundConfigs(
-          DEFAULT_BACKGROUND_CONFIGS
-        );
-
-      }
-
-    },
-    [
-      projects,
-      activeProject,
-      projectsLoading,
-      setActiveProject,
-    ]
-  );
+      },
+      [
+        activeProject,
+        runtime,
+        syncRuntimeProject,
+      ]
+    );
 
 
   // ===================================================
-  // CREATE / SAVE PROJECT
+  // SAVE PROJECT
   // ===================================================
 
   const saveProject =
     useCallback(
       async (
-        name
+        name = null
       ) => {
-
-        if (
-          !name?.trim()
-        ) {
-
-          return null;
-
-        }
-
-
-        const trimmedName =
-          name.trim();
-
 
         // =================================================
         // EXISTING PROJECT
@@ -461,11 +1774,11 @@ export function ProjectProvider({
           activeProject
         ) {
 
-          const currentProject =
+          const selectedProject =
             projects.find(
               project =>
                 String(
-                  project?._id
+                  getProjectId(project)
                 ) ===
                 String(
                   activeProject
@@ -473,141 +1786,170 @@ export function ProjectProvider({
             );
 
 
-          // ------------------------------------------------
-          // Active project no longer exists locally.
-          // ------------------------------------------------
-
           if (
-            !currentProject
+            !selectedProject
           ) {
 
             console.warn(
-              "[Projects] Active project record unavailable:",
-              activeProject
+              "[Projects] Active project missing; reverting to NEW project"
             );
 
 
-            setActiveProject(
-              null
-            );
+            startNewProject();
+
+            return null;
 
           }
 
-          // ------------------------------------------------
-          // Existing project
-          // ------------------------------------------------
 
-          else {
+          const confirmed =
+            window.confirm(
+              `Save changes to "${selectedProject.name}"?\n\n` +
+              `This will overwrite the existing saved version of this project.`
+            );
 
-            const confirmed =
-              window.confirm(
-                `Save changes to "${currentProject.name}"?\n\n` +
-                `This will overwrite the existing saved version of this project.`
+
+          if (
+            !confirmed
+          ) {
+
+            return null;
+
+          }
+
+
+          try {
+
+            const payload = {
+
+              name:
+                selectedProject.name,
+
+              type:
+                projectType,
+
+              schema:
+                projectSchema,
+
+              backgroundConfigs:
+                backgroundConfigs,
+
+              interviewConfig:
+                normaliseInterviewConfig(
+                  interviewConfig
+                ),
+
+            };
+
+
+            const response =
+              await api.patch(
+                `${API_URL}/api/projects/${activeProject}`,
+                payload,
+                {
+                  withCredentials:
+                    true,
+                }
+              );
+
+
+            const rawProject =
+              response?.data?.project;
+
+
+            if (
+              !rawProject
+            ) {
+
+              throw new Error(
+                "Server did not return updated project."
+              );
+
+            }
+
+
+            const updatedProject =
+              hydrateProject(
+                rawProject
               );
 
 
             if (
-              !confirmed
+              !updatedProject
             ) {
 
-              return null;
+              throw new Error(
+                "Updated project could not be hydrated."
+              );
 
             }
 
 
-            try {
+            setProjects(
+              previous =>
+                previous.map(
+                  project =>
+                    String(
+                      getProjectId(project)
+                    ) ===
+                    String(
+                      activeProject
+                    )
 
-              const response =
-                await api.patch(
-                  `${API_URL}/api/projects/${activeProject}`,
-                  {
+                      ? updatedProject
 
-                    name:
-                      currentProject.name,
-
-                    type:
-                      projectType,
-
-                    schema:
-                      projectSchema,
-
-                    backgroundConfigs:
-                      backgroundConfigs,
-
-                  },
-                  {
-                    withCredentials:
-                      true,
-                  }
-                );
+                      : project
+                )
+            );
 
 
-              const updatedProject =
-                response.data?.project;
+            // ------------------------------------------------
+            // IMPORTANT
+            //
+            // Apply the server response back to ALL project
+            // editor state, not just interviewConfig.
+            // ------------------------------------------------
+
+            applyProject(
+              updatedProject
+            );
 
 
-              if (
-                !updatedProject
-              ) {
+            console.log(
+              "[Projects] Existing project saved",
+              {
 
-                throw new Error(
-                  "Server did not return updated project."
-                );
+                projectId:
+                  updatedProject._id,
+
+                name:
+                  updatedProject.name,
+
+                questionSetCount:
+                  updatedProject
+                    ?.interviewConfig
+                    ?.questionSets
+                    ?.length ||
+                  0,
 
               }
+            );
 
 
-              setProjects(
-                previous =>
-                  previous.map(
-                    project =>
-                      project._id ===
-                      activeProject
+            return updatedProject._id;
 
-                        ? updatedProject
+          }
+          catch (
+            error
+          ) {
 
-                        : project
-                  )
-              );
-
-
-              syncRuntimeProject(
-                activeProject,
-                updatedProject.name ||
-                  currentProject.name ||
-                  null
-              );
-
-
-              console.log(
-                "[Projects] Updated project:",
-                updatedProject
-              );
-
-
-              return activeProject;
-
-            }
-            catch (
+            console.error(
+              "[Projects] Existing project save failed",
               error
-            ) {
-
-              console.error(
-                "[Projects] Update failed:",
-                error
-              );
+            );
 
 
-              alert(
-                error.response?.data?.error ||
-                error.response?.data?.message ||
-                "Failed to save project."
-              );
-
-
-              return null;
-
-            }
+            throw error;
 
           }
 
@@ -618,14 +1960,34 @@ export function ProjectProvider({
         // NEW PROJECT
         // =================================================
 
+        const trimmedName =
+          String(
+            name ||
+            ""
+          ).trim();
+
+
+        if (
+          !trimmedName
+        ) {
+
+          throw new Error(
+            "PROJECT_NAME_REQUIRED"
+          );
+
+        }
+
+
         const duplicate =
           projects.some(
             project =>
-              project.name
-                ?.trim()
+              String(
+                project?.name ||
+                ""
+              )
+                .trim()
                 .toLowerCase() ===
-              trimmedName
-                .toLowerCase()
+              trimmedName.toLowerCase()
           );
 
 
@@ -633,20 +1995,18 @@ export function ProjectProvider({
           duplicate
         ) {
 
-          alert(
-            `A project named "${trimmedName}" already exists.\n\n` +
-            `Please choose a different project name.`
+          throw new Error(
+            `A project named "${trimmedName}" already exists.`
           );
-
-
-          return null;
 
         }
 
 
-        // =================================================
-        // CREATE
-        // =================================================
+        const projectInterviewConfig =
+          normaliseInterviewConfig(
+            interviewConfig
+          );
+
 
         try {
 
@@ -667,6 +2027,9 @@ export function ProjectProvider({
                 backgroundConfigs:
                   backgroundConfigs,
 
+                interviewConfig:
+                  projectInterviewConfig,
+
               },
               {
                 withCredentials:
@@ -675,12 +2038,12 @@ export function ProjectProvider({
             );
 
 
-          const newProject =
-            response.data?.project;
+          const rawProject =
+            response?.data?.project;
 
 
           if (
-            !newProject
+            !rawProject
           ) {
 
             throw new Error(
@@ -690,17 +2053,18 @@ export function ProjectProvider({
           }
 
 
-          const newProjectId =
-            newProject._id ||
-            newProject.id;
+          const newProject =
+            hydrateProject(
+              rawProject
+            );
 
 
           if (
-            !newProjectId
+            !newProject
           ) {
 
             throw new Error(
-              "Created project has no ID."
+              "Created project could not be hydrated."
             );
 
           }
@@ -708,66 +2072,42 @@ export function ProjectProvider({
 
           setProjects(
             previous => [
+
               ...previous,
+
               newProject,
+
             ]
           );
 
 
-          setActiveProject(
-            newProjectId,
-            newProject.name ||
-              trimmedName
+          applyProject(
+            newProject
           );
 
 
-          if (
-            newProject.schema
-          ) {
-
-            setProjectSchema(
-              newProject.schema
-            );
-
-          }
-
-
-          if (
-            newProject.type
-          ) {
-
-            setProjectType(
-              newProject.type
-            );
-
-          }
-
-
-          if (
-            newProject.backgroundConfigs
-          ) {
-
-            setBackgroundConfigs(
-              newProject.backgroundConfigs
-            );
-
-          }
-
-
           console.log(
-            "[Projects] Created project:",
+            "[Projects] New project created",
             {
+
               id:
-                newProjectId,
+                newProject._id,
 
               name:
-                newProject.name ||
-                trimmedName,
+                newProject.name,
+
+              questionSetCount:
+                newProject
+                  ?.interviewConfig
+                  ?.questionSets
+                  ?.length ||
+                0,
+
             }
           );
 
 
-          return newProjectId;
+          return newProject._id;
 
         }
         catch (
@@ -775,19 +2115,12 @@ export function ProjectProvider({
         ) {
 
           console.error(
-            "[Projects] Create failed:",
+            "[Projects] New project creation failed",
             error
           );
 
 
-          alert(
-            error.response?.data?.error ||
-            error.response?.data?.message ||
-            "Failed to create project."
-          );
-
-
-          return null;
+          throw error;
 
         }
 
@@ -798,14 +2131,15 @@ export function ProjectProvider({
         projectType,
         projectSchema,
         backgroundConfigs,
-        setActiveProject,
-        syncRuntimeProject,
+        interviewConfig,
+        startNewProject,
+        applyProject,
       ]
     );
 
 
   // ===================================================
-  // LOAD PROJECT
+  // LOAD EXISTING PROJECT
   // ===================================================
 
   const loadProject =
@@ -825,166 +2159,91 @@ export function ProjectProvider({
         }
 
 
-        try {
-
-          console.log(
-            "[Projects] Loading",
-            id
-          );
+        console.log(
+          "[Projects] Loading project",
+          id
+        );
 
 
-          const response =
-            await api.get(
-              `${API_URL}/api/projects/${id}`,
-              {
-                withCredentials:
-                  true,
-                }
-            );
-
-
-          const project =
-            response.data?.project;
-
-
-          if (
-            !project
-          ) {
-
-            throw new Error(
-              "Project not found."
-            );
-
-          }
-
-
-          const projectId =
-            project._id ||
-            project.id;
-
-
-          if (
-            !projectId
-          ) {
-
-            throw new Error(
-              "Loaded project has no ID."
-            );
-
-          }
-
-
-          // ------------------------------------------------
-          // Update local project list.
-          // ------------------------------------------------
-
-          setProjects(
-            previous => {
-
-              const exists =
-                previous.some(
-                  existing =>
-                    String(
-                      existing?._id
-                    ) ===
-                    String(
-                      projectId
-                    )
-                );
-
-
-              if (
-                exists
-              ) {
-
-                return previous.map(
-                  existing =>
-                    String(
-                      existing?._id
-                    ) ===
-                    String(
-                      projectId
-                    )
-
-                      ? project
-
-                      : existing
-                );
-
-              }
-
-
-              return [
-                ...previous,
-                project,
-              ];
-
-            }
-          );
-
-
-          // ------------------------------------------------
-          // Active project + runtime.
-          // ------------------------------------------------
-
-          setActiveProject(
-            projectId,
-            project.name ||
-              null
-          );
-
-
-          setProjectType(
-            project.type ||
-              "single"
-          );
-
-
-          setProjectSchema(
-            project.schema ||
-              makeEmptyProjectSchema()
-          );
-
-
-          setBackgroundConfigs(
-            project.backgroundConfigs ||
-              DEFAULT_BACKGROUND_CONFIGS
-          );
-
-
-          console.log(
-            "[Projects] Loaded project",
+        const response =
+          await api.get(
+            `${API_URL}/api/projects/${id}`,
             {
-              id:
-                projectId,
-
-              name:
-                project.name ||
-                null,
+              withCredentials:
+                true,
             }
           );
 
 
-          return project;
+        const rawProject =
+          response?.data?.project;
 
-        }
-        catch (
-          error
+
+        if (
+          !rawProject
         ) {
 
-          console.error(
-            "[Projects] Load failed",
-            error
+          throw new Error(
+            "Project not found."
+          );
+
+        }
+
+
+        const hydratedProject =
+          hydrateProject(
+            rawProject
           );
 
 
-          throw error;
+        if (
+          !hydratedProject
+        ) {
+
+          throw new Error(
+            "Loaded project could not be hydrated."
+          );
 
         }
+
+
+        applyProject(
+          hydratedProject
+        );
+
+
+        console.log(
+          "[Projects] EXISTING PROJECT SELECTED",
+          {
+
+            id:
+              hydratedProject._id,
+
+            name:
+              hydratedProject.name,
+
+            questionSetCount:
+              hydratedProject
+                ?.interviewConfig
+                ?.questionSets
+                ?.length ||
+              0,
+
+            activeQuestionSetId:
+              hydratedProject
+                ?.interviewConfig
+                ?.activeQuestionSetId ||
+              null,
+
+          }
+        );
+
+
+        return hydratedProject;
 
       },
       [
-        setActiveProject,
+        applyProject,
       ]
     );
 
@@ -997,139 +2256,140 @@ export function ProjectProvider({
     useCallback(
       async (
         id,
-        updates
+        updates = {}
       ) => {
 
         if (
           !id
         ) {
 
-          console.warn(
-            "[Projects] No project ID."
-          );
-
-
           return null;
 
         }
 
 
-        try {
+        const payload = {
 
-          const response =
-            await api.patch(
-              `${API_URL}/api/projects/${id}`,
-              updates,
-              {
-                withCredentials:
-                  true,
-              }
+          ...updates,
+
+        };
+
+
+        if (
+          Object.prototype.hasOwnProperty.call(
+            payload,
+            "interviewConfig"
+          )
+        ) {
+
+          payload.interviewConfig =
+            normaliseInterviewConfig(
+              payload.interviewConfig
             );
 
-
-          const updatedProject =
-            response.data?.project;
+        }
 
 
-          if (
-            !updatedProject
-          ) {
-
-            throw new Error(
-              "Server did not return updated project."
-            );
-
-          }
-
-
-          setProjects(
-            previous =>
-              previous.map(
-                project =>
-                  project._id ===
-                  id
-
-                    ? updatedProject
-
-                    : project
-              )
+        const response =
+          await api.patch(
+            `${API_URL}/api/projects/${id}`,
+            payload,
+            {
+              withCredentials:
+                true,
+            }
           );
 
 
-          if (
-            String(id) ===
-            String(activeProject)
-          ) {
-
-            syncRuntimeProject(
-              id,
-              updatedProject.name ||
-                null
-            );
+        const rawProject =
+          response?.data?.project;
 
 
-            if (
-              updatedProject.schema
-            ) {
+        if (
+          !rawProject
+        ) {
 
-              setProjectSchema(
-                updatedProject.schema
-              );
+          throw new Error(
+            "Server did not return updated project."
+          );
 
-            }
-
-
-            if (
-              updatedProject.type
-            ) {
-
-              setProjectType(
-                updatedProject.type
-              );
-
-            }
+        }
 
 
-            if (
-              updatedProject.backgroundConfigs
-            ) {
-
-              setBackgroundConfigs(
-                updatedProject.backgroundConfigs
-              );
-
-            }
-
-          }
+        const updatedProject =
+          hydrateProject(
+            rawProject
+          );
 
 
-          console.log(
-            "[Projects] Updated project:",
+        if (
+          !updatedProject
+        ) {
+
+          throw new Error(
+            "Updated project could not be hydrated."
+          );
+
+        }
+
+
+        setProjects(
+          previous =>
+            previous.map(
+              project =>
+                String(
+                  getProjectId(project)
+                ) ===
+                String(id)
+
+                  ? updatedProject
+
+                  : project
+            )
+        );
+
+
+        if (
+          String(
+            id
+          ) ===
+          String(
+            activeProject
+          )
+        ) {
+
+          applyProject(
             updatedProject
           );
 
-
-          return updatedProject;
-
         }
-        catch (
-          error
-        ) {
-
-          console.error(
-            "[Projects] Update failed",
-            error
-          );
 
 
-          throw error;
+        console.log(
+          "[Projects] Project updated",
+          {
 
-        }
+            projectId:
+              updatedProject._id,
+
+            active:
+              String(
+                id
+              ) ===
+              String(
+                activeProject
+              ),
+
+          }
+        );
+
+
+        return updatedProject;
 
       },
       [
         activeProject,
-        syncRuntimeProject,
+        applyProject,
       ]
     );
 
@@ -1140,9 +2400,7 @@ export function ProjectProvider({
 
   const deleteProject =
     useCallback(
-      async (
-        id
-      ) => {
+      async id => {
 
         if (
           !id
@@ -1153,93 +2411,53 @@ export function ProjectProvider({
         }
 
 
-        try {
-
-          await api.delete(
-            `${API_URL}/api/projects/${id}`,
-            {
-              withCredentials:
-                true,
+        await api.delete(
+          `${API_URL}/api/projects/${id}`,
+          {
+            withCredentials:
+              true,
             }
-          );
+        );
 
 
-          setProjects(
-            previous =>
-              previous.filter(
-                project =>
-                  project._id !==
-                  id
-              )
-          );
+        setProjects(
+          previous =>
+            previous.filter(
+              project =>
+                String(
+                  getProjectId(project)
+                ) !==
+                String(id)
+            )
+        );
 
 
-          if (
-            String(id) ===
-            String(activeProject)
-          ) {
-
-            setActiveProject(
-              null
-            );
-
-
-            setProjectSchema(
-              makeEmptyProjectSchema()
-            );
-
-
-            setProjectType(
-              "single"
-            );
-
-
-            setBackgroundConfigs(
-              DEFAULT_BACKGROUND_CONFIGS
-            );
-
-
-            syncRuntimeProject(
-              null,
-              null
-            );
-
-
-            console.log(
-              "[Projects] Runtime project cleared"
-            );
-
-          }
-
-
-          console.log(
-            "[Projects] Deleted project:",
+        if (
+          String(
             id
-          );
-
-
-          return true;
-
-        }
-        catch (
-          error
+          ) ===
+          String(
+            activeProject
+          )
         ) {
 
-          console.error(
-            "[Projects] Delete failed",
-            error
-          );
-
-
-          throw error;
+          startNewProject();
 
         }
+
+
+        console.log(
+          "[Projects] Project deleted",
+          id
+        );
+
+
+        return true;
 
       },
       [
         activeProject,
-        setActiveProject,
-        syncRuntimeProject,
+        startNewProject,
       ]
     );
 
@@ -1256,19 +2474,44 @@ export function ProjectProvider({
           !activeProject
         ) {
 
-          console.warn(
-            "[Projects] No active project."
+          throw new Error(
+            "NO_ACTIVE_PROJECT"
+          );
+
+        }
+
+
+        const selectedProject =
+          projects.find(
+            project =>
+              String(
+                getProjectId(project)
+              ) ===
+              String(
+                activeProject
+              )
           );
 
 
-          return null;
+        if (
+          !selectedProject
+        ) {
+
+          throw new Error(
+            "ACTIVE_PROJECT_NOT_FOUND"
+          );
 
         }
 
 
         return updateProject(
+
           activeProject,
+
           {
+
+            name:
+              selectedProject.name,
 
             schema:
               projectSchema,
@@ -1279,27 +2522,39 @@ export function ProjectProvider({
             backgroundConfigs:
               backgroundConfigs,
 
+            interviewConfig:
+              normaliseInterviewConfig(
+                interviewConfig
+              ),
+
           }
+
         );
 
       },
       [
         activeProject,
+        projects,
         projectSchema,
         projectType,
         backgroundConfigs,
+        interviewConfig,
         updateProject,
       ]
     );
 
 
   // ===================================================
-  // VALUE
+  // CONTEXT VALUE
   // ===================================================
 
   const value =
     useMemo(
       () => ({
+
+        // ------------------------------------------------
+        // Project editor
+        // ------------------------------------------------
 
         projectSchema,
         setProjectSchema,
@@ -1313,11 +2568,30 @@ export function ProjectProvider({
         backgroundConfigs,
         setBackgroundConfigs,
 
+
+        // ------------------------------------------------
+        // Projects
+        // ------------------------------------------------
+
         projects,
 
         activeProject,
 
+        currentProject,
+
+        projectsLoading,
+
+        collapsed,
+        setCollapsed,
+
+
+        // ------------------------------------------------
+        // Project operations
+        // ------------------------------------------------
+
         setActiveProject,
+
+        startNewProject,
 
         loadProjects,
 
@@ -1331,10 +2605,42 @@ export function ProjectProvider({
 
         saveCurrentProject,
 
-        projectsLoading,
+        resetProjectEditor,
 
-        collapsed,
-        setCollapsed,
+
+        // ------------------------------------------------
+        // Interview configuration
+        // ------------------------------------------------
+
+        interviewConfig,
+
+        setInterviewConfig,
+
+        updateInterviewConfig,
+
+        saveInterviewConfig,
+
+
+        // ------------------------------------------------
+        // Question sets
+        // ------------------------------------------------
+
+        addQuestionSet,
+
+        updateQuestionSet,
+
+        removeQuestionSet,
+
+        setActiveQuestionSet,
+
+
+        // ------------------------------------------------
+        // Helpers
+        // ------------------------------------------------
+
+        normaliseInterviewConfig,
+
+        hydrateProject,
 
       }),
       [
@@ -1342,17 +2648,37 @@ export function ProjectProvider({
         viewMode,
         projectType,
         backgroundConfigs,
+
         projects,
         activeProject,
+        currentProject,
+        projectsLoading,
+
+        collapsed,
+
         setActiveProject,
+        startNewProject,
+
         loadProjects,
+
         saveProject,
         loadProject,
         updateProject,
         deleteProject,
         saveCurrentProject,
-        projectsLoading,
-        collapsed,
+
+        resetProjectEditor,
+
+        interviewConfig,
+
+        setInterviewConfig,
+        updateInterviewConfig,
+        saveInterviewConfig,
+
+        addQuestionSet,
+        updateQuestionSet,
+        removeQuestionSet,
+        setActiveQuestionSet,
       ]
     );
 
@@ -1362,19 +2688,11 @@ export function ProjectProvider({
   // ===================================================
 
   return (
-
     <ProjectContext.Provider
-      value={
-        value
-      }
+      value={value}
     >
-
-      {
-        children
-      }
-
+      {children}
     </ProjectContext.Provider>
-
   );
 
 }
@@ -1392,7 +2710,9 @@ export function useProjectContext() {
     );
 
 
-  if (!ctx) {
+  if (
+    !ctx
+  ) {
 
     throw new Error(
       "useProjectContext must be used within ProjectProvider"
@@ -1404,4 +2724,3 @@ export function useProjectContext() {
   return ctx;
 
 }
-

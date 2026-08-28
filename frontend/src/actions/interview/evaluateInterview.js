@@ -1,12 +1,8 @@
-// src/actions/interview/evaluateInterview.js
-
 import api from "../../services/api";
+
 
 // =====================================================
 // IN-FLIGHT EVALUATIONS
-//
-// Prevents duplicate AI requests for the same interview
-// while an evaluation is already running.
 // =====================================================
 
 const evaluationInFlight =
@@ -31,25 +27,69 @@ export default async function evaluateInterview(
   );
 
 
+  let interviewId =
+    null;
+
+
   try {
 
-    // =====================================================
-    // GET CURRENT INTERVIEW
-    // =====================================================
+    // =================================================
+    // GET INTERVIEW
+    // =================================================
 
     const interview =
-      ctx.get?.("interview") || {};
+      ctx?.get?.(
+        "interview"
+      ) || {};
 
 
-    // =====================================================
-    // VALIDATE INTERVIEW
-    // =====================================================
+    interviewId =
+      interview?.id ||
+      interview?._id ||
+      null;
 
-    if (!interview.id) {
+
+    console.log(
+      "[evaluateInterview] CURRENT INTERVIEW",
+      {
+
+        interviewId,
+
+        status:
+          interview?.status,
+
+        questionCount:
+          interview?.questions?.length ||
+          0,
+
+        answerCount:
+          interview?.answers?.length ||
+          0,
+
+        result:
+          interview?.result ||
+          null,
+
+        aiEvaluation:
+          interview?.aiEvaluation ||
+          null,
+
+      }
+    );
+
+
+    // =================================================
+    // VALIDATE
+    // =================================================
+
+    if (
+      !interviewId
+    ) {
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "INTERVIEW_NOT_FOUND",
@@ -66,7 +106,8 @@ export default async function evaluateInterview(
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "INTERVIEW_NOT_COMPLETED",
@@ -76,51 +117,94 @@ export default async function evaluateInterview(
     }
 
 
-    // =====================================================
-    // EXISTING RESULT GUARD
-    // =====================================================
+    // =================================================
+    // PROJECT
+    // =================================================
+
+    const projectId =
+      interview.projectId ||
+      params?.projectId ||
+      ctx?.get?.(
+        "project.id"
+      ) ||
+      null;
+
 
     if (
-      interview.result
+      !projectId
     ) {
-
-      console.log(
-        "[evaluateInterview] RESULT ALREADY EXISTS - SKIPPING AI REQUEST"
-      );
-
 
       return {
 
-        ok: true,
+        ok:
+          false,
 
-        cached: true,
-
-        result:
-          interview.result,
+        error:
+          "PROJECT_ID_REQUIRED",
 
       };
 
     }
 
 
-    // =====================================================
-    // IN-FLIGHT GUARD
-    // =====================================================
+    // =================================================
+    // EXISTING RESULT
+    // =================================================
 
-    if (
-      evaluationInFlight.has(
-        interview.id
-      )
-    ) {
+     const existingEvaluation =
+  interview?.aiEvaluation || null;
 
-      console.log(
-        "[evaluateInterview] EVALUATION ALREADY IN FLIGHT - SKIPPING"
-      );
+const hasValidEvaluation =
+  existingEvaluation &&
+  typeof existingEvaluation === "object" &&
+  existingEvaluation.overallScore !== undefined &&
+  existingEvaluation.overallScore !== null;
+
+if (hasValidEvaluation) {
+
+  console.log(
+    "[evaluateInterview] EXISTING AI EVALUATION FOUND - USING CACHE",
+    {
+      interviewId,
+      overallScore:
+        existingEvaluation.overallScore,
+    }
+  );
+
 
 
       return {
 
-        ok: false,
+        ok:
+          true,
+
+        cached:
+          true,
+
+        result:
+          existingEvaluation,
+
+      };
+
+    }
+
+
+    // =================================================
+    // IN-FLIGHT
+    // =================================================
+
+    if (
+      evaluationInFlight.has(
+        String(
+          interviewId
+        )
+      )
+    ) {
+
+      return {
+
+        ok:
+          false,
 
         error:
           "EVALUATION_IN_PROGRESS",
@@ -130,28 +214,35 @@ export default async function evaluateInterview(
     }
 
 
-    evaluationInFlight.add(
-      interview.id
-    );
-
-
-    // =====================================================
+    // =================================================
     // QUESTIONS / ANSWERS
-    // =====================================================
+    // =================================================
 
     const questions =
-      interview.questions || [];
+      Array.isArray(
+        interview.questions
+      )
+        ? interview.questions
+        : [];
 
 
     const answers =
-      interview.answers || [];
+      Array.isArray(
+        interview.answers
+      )
+        ? interview.answers
+        : [];
 
 
-    if (!questions.length) {
+    if (
+      questions.length ===
+      0
+    ) {
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "NO_INTERVIEW_QUESTIONS",
@@ -161,11 +252,15 @@ export default async function evaluateInterview(
     }
 
 
-    if (!answers.length) {
+    if (
+      answers.length ===
+      0
+    ) {
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "NO_INTERVIEW_ANSWERS",
@@ -175,36 +270,82 @@ export default async function evaluateInterview(
     }
 
 
-    // =====================================================
-    // CALL AI BACKEND
-    // =====================================================
+    // =================================================
+    // LOCK
+    // =================================================
 
-    console.log(
-      "[evaluateInterview] Sending interview to AI"
+    evaluationInFlight.add(
+      String(
+        interviewId
+      )
     );
 
 
-    const {
-      data
-    } =
+    // =================================================
+    // BACKEND REQUEST
+    // =================================================
+
+    console.log(
+      "[evaluateInterview] POSTING TO AI BACKEND",
+      {
+
+        projectId,
+
+        interviewId,
+
+        questionCount:
+          questions.length,
+
+        answerCount:
+          answers.length,
+
+      }
+    );
+
+
+    const response =
       await api.post(
         "/ai/evaluateInterview",
         {
+
+          projectId,
+
+          interviewId,
+
           questions,
+
           answers,
+
         }
       );
 
 
+    console.log(
+      "[evaluateInterview] AI BACKEND RESPONSE",
+      {
+
+        status:
+          response?.status,
+
+        data:
+          response?.data,
+
+      }
+    );
+
+
     const result =
-      data?.result;
+      response?.data?.result;
 
 
-    if (!result) {
+    if (
+      !result
+    ) {
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "INVALID_AI_RESULT",
@@ -214,79 +355,88 @@ export default async function evaluateInterview(
     }
 
 
-    // =====================================================
-    // STORE RESULT IN RUNTIME
-    // =====================================================
+    // =================================================
+    // RUNTIME
+    // =================================================
 
-    ctx.patch?.(
+    ctx?.patch?.(
       "interview",
       {
+
         result,
+
+        aiEvaluation:
+          result,
+
       }
     );
 
 
     console.log(
-      "[evaluateInterview] RESULT STORED",
+      "[evaluateInterview] RESULT WRITTEN TO RUNTIME",
       result
     );
 
 
-    // =====================================================
-    // SUCCESS
-    // =====================================================
-
     return {
 
-      ok: true,
+      ok:
+        true,
 
-      cached: false,
+      cached:
+        response?.data?.cached ===
+        true,
 
       result,
 
     };
 
-
-  } catch (err) {
+  }
+  catch (
+    err
+  ) {
 
     console.error(
       "[evaluateInterview] FAILED",
-      err
-    );
+      {
 
+        interviewId,
 
-    console.error(
-      "[evaluateInterview] Backend error",
-      err?.response?.data
+        error:
+          err,
+
+        response:
+          err?.response?.data,
+
+      }
     );
 
 
     return {
 
-      ok: false,
+      ok:
+        false,
 
       error:
         err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.response?.data?.details ||
         err?.message ||
         "INTERVIEW_EVALUATION_FAILED",
 
     };
 
+  }
+  finally {
 
-  } finally {
-
-    // =====================================================
-    // RELEASE IN-FLIGHT LOCK
-    // =====================================================
-
-    const interview =
-      ctx.get?.("interview") || {};
-
-
-    if (interview?.id) {
+    if (
+      interviewId
+    ) {
 
       evaluationInFlight.delete(
-        interview.id
+        String(
+          interviewId
+        )
       );
 
     }

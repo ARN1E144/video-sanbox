@@ -18,13 +18,14 @@ export default async function stopRecording(
   );
 
 
-  // =====================================================
-  // RESOLVE TARGET
-  // =====================================================
+  // ===================================================
+  // TARGET
+  // ===================================================
 
   const id =
-    params.targetId ||
-    params.id;
+    params?.targetId ||
+    params?.id ||
+    null;
 
 
   if (!id) {
@@ -33,43 +34,83 @@ export default async function stopRecording(
       "[stopRecording] No VideoFeed target"
     );
 
+
     return {
-      ok: false,
-      error: "VIDEO_TARGET_REQUIRED",
+
+      ok:
+        false,
+
+      error:
+        "VIDEO_TARGET_REQUIRED",
+
     };
 
   }
 
 
-  // =====================================================
+  // ===================================================
+  // EXPLICIT UPLOAD REQUEST
+  // ===================================================
+
+  const requestUpload =
+    params?.autoUploadRecording === true;
+
+
+  // ===================================================
   // CURRENT BINDING
-  // =====================================================
+  // ===================================================
 
   const current =
-    ctx.bindings?.[id] || {};
+    ctx?.bindings?.[id] ||
+    {};
 
 
-  // =====================================================
+  console.log(
+    "[stopRecording] CURRENT BINDING",
+    {
+
+      id,
+
+      recording:
+        current.recording,
+
+      recordingStatus:
+        current.recordingStatus,
+
+      requestUpload,
+
+    }
+  );
+
+
+  // ===================================================
   // NOT RECORDING
-  // =====================================================
+  // ===================================================
 
   if (
-    current.recording !== true
+    current.recording !==
+    true
   ) {
 
     console.log(
       "[stopRecording] No active recording",
       {
+
         id,
+
         recordingStatus:
           current.recordingStatus,
+
+        requestUpload,
+
       }
     );
 
 
     return {
 
-      ok: true,
+      ok:
+        true,
 
       result: {
 
@@ -85,6 +126,9 @@ export default async function stopRecording(
         alreadyStopped:
           true,
 
+        uploadRequested:
+          requestUpload,
+
       },
 
     };
@@ -92,24 +136,18 @@ export default async function stopRecording(
   }
 
 
-  // =====================================================
+  // ===================================================
   // REQUEST STOP
-  // =====================================================
+  // ===================================================
   //
-  // VideoFeed observes recording=false.
+  // VideoFeed will detect recording=false.
   //
-  // MediaRecorder.stop() then runs asynchronously.
+  // The explicit upload request is stored alongside
+  // the stop request.
   //
-  // The eventual Blob is produced by VideoFeed and the
-  // binding changes to:
-  //
-  // recordingStatus: "ready"
-  // recordingBlob: Blob
-  //
-  // We upload only AFTER that happens.
-  // =====================================================
+  // ===================================================
 
-  ctx.updateBinding?.(
+  ctx?.updateBinding?.(
     id,
     {
 
@@ -119,21 +157,33 @@ export default async function stopRecording(
       recordingStatus:
         "stopping",
 
+      recordingUploadRequested:
+        requestUpload,
+
     }
   );
-
 
   console.log(
-    "[stopRecording] Recording stop requested",
-    {
-      id,
-    }
-  );
+  "%c 🛑 [stopRecording] BINDING UPDATE REQUESTED %c",
+  "background-color: #E0E7FF; color: #3730A3; font-weight: bold; padding: 3px 8px; border-radius: 4px; font-size: 11px;",
+  "",
+  {
+    id,
+    recording: false,
+    recordingStatus: "stopping",
+    currentBinding: ctx?.bindings?.[id] || null,
+  }
+);
 
+
+  // ===================================================
+  // SUCCESS
+  // ===================================================
 
   return {
 
-    ok: true,
+    ok:
+      true,
 
     result: {
 
@@ -146,7 +196,10 @@ export default async function stopRecording(
         "stopping",
 
       uploadPending:
-        true,
+        requestUpload,
+
+      recordingUploadRequested:
+        requestUpload,
 
     },
 

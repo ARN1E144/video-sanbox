@@ -36,6 +36,8 @@
       {
         "id": "interview-video",
         "type": "VideoFeed",
+        "width": 800,
+        "height": 450,
         "props": {
           "autoplay": true,
           "muted": true,
@@ -48,6 +50,8 @@
       {
         "id": "interview-answer",
         "type": "TextBox",
+        "width": 620,
+        "height": 100,
         "props": {
           "value": "{{interview.answer.text}}",
           "bindTo": "interview.answer.text",
@@ -57,11 +61,11 @@
       {
         "id": "interview-workflow-controls",
         "type": "ControlPanel",
+        "width": 620,
+        "height": 64,
         "props": {
           "layout": "horizontal"
         },
-        "width": 620,
-        "height": 64,
         "children": [
           {
             "id": "interview-start",
@@ -91,6 +95,18 @@
             }
           },
           {
+            "id": "interview-complete",
+            "type": "ControlButton",
+            "props": {
+              "label": "Complete Interview",
+              "action": "interview.complete",
+              "params": {
+                "videoTargetId": "interview-video",
+                "stopRecording": true
+              }
+            }
+          },
+          {
             "id": "interview-evaluate",
             "type": "ControlButton",
             "props": {
@@ -103,11 +119,11 @@
       {
         "id": "interview-media-controls",
         "type": "ControlPanel",
+        "width": 620,
+        "height": 64,
         "props": {
           "layout": "horizontal"
         },
-        "width": 620,
-        "height": 64,
         "children": [
           {
             "id": "interview-mic",
@@ -124,15 +140,6 @@
             "props": {
               "label": "Toggle Camera",
               "action": "video.toggleVideo",
-              "targetId": "interview-video"
-            }
-          },
-          {
-            "id": "interview-record-start",
-            "type": "ControlButton",
-            "props": {
-              "label": "Start Recording",
-              "action": "video.startRecording",
               "targetId": "interview-video"
             }
           },

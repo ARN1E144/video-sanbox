@@ -1,17 +1,22 @@
 // backend/middleware/projectAccess.js
 
-  console.log(
-  "🔥 PROJECT ACCESS MODULE LOADED:",
-  import.meta.url
-);
-
-
-
+import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 
 import Project from "../models/project.js";
 import ProjectMembership
   from "../models/projectMembership.js";
+
+
+// =====================================================
+// MODULE LOADED
+// =====================================================
+
+console.log(
+  "🔥 PROJECT ACCESS MODULE LOADED:",
+  import.meta.url
+);
+
 
 // =====================================================
 // OBJECT ID HELPERS
@@ -28,28 +33,13 @@ function isValidObjectId(
 }
 
 
-// =====================================================
-// CURRENT USER ID
-// =====================================================
-//
-// IMPORTANT:
-//
-// Your existing authentication middleware exposes:
-//
-// req.user.userId
-//
-// We use that consistently everywhere.
-// =====================================================
-
-function getAuthenticatedUserId(
-  req
+function normalizeObjectId(
+  value
 ) {
 
-  const rawUserId =
-    req.user?.userId;
-
-
-  if (!rawUserId) {
+  if (
+    !value
+  ) {
 
     return null;
 
@@ -57,8 +47,17 @@ function getAuthenticatedUserId(
 
 
   if (
+    value instanceof mongoose.Types.ObjectId
+  ) {
+
+    return value;
+
+  }
+
+
+  if (
     !isValidObjectId(
-      rawUserId
+      value
     )
   ) {
 
@@ -68,49 +67,298 @@ function getAuthenticatedUserId(
 
 
   return new mongoose.Types.ObjectId(
-    rawUserId
+    value
   );
 
 }
 
 
 // =====================================================
-// TENANT ID
+// AUTHENTICATED USER ID
 // =====================================================
 //
-// Uses the same authenticated tenant identity that is
-// stored on ProjectMembership.
+// Canonical authentication payload:
+//
+// req.user.userId
+//
+// =====================================================
+
+function getAuthenticatedUserId(
+  req
+) {
+
+  return normalizeObjectId(
+    req.user?.userId
+  );
+
+}
+
+
+// =====================================================
+// AUTHENTICATED TENANT ID
+// =====================================================
+//
+// Canonical authentication payload:
+//
+// req.user.tenantId
+//
 // =====================================================
 
 function getAuthenticatedTenantId(
   req
 ) {
 
-  const rawTenantId =
-    req.user?.tenantId;
+  return normalizeObjectId(
+    req.user?.tenantId
+  );
+
+}
 
 
-  if (!rawTenantId) {
+// =====================================================
+// REQUIRE AUTH
+// =====================================================
+//
+// Verifies the JWT access token and creates the canonical:
+//
+// req.user
+//
+// shape:
+//
+// {
+//   userId,
+//   tenantId,
+//   role
+// }
+//
+// =====================================================
 
-    return null;
+export function requireAuth(
+  req,
+  res,
+  next
+) {
 
-  }
-
+  // ---------------------------------------------------
+  // Browser preflight
+  // ---------------------------------------------------
 
   if (
-    !isValidObjectId(
-      rawTenantId
-    )
+    req.method === "OPTIONS"
   ) {
 
-    return null;
+    return next();
 
   }
 
 
-  return new mongoose.Types.ObjectId(
-    rawTenantId
-  );
+  try {
+
+    // =================================================
+    // JWT SECRET
+    // =================================================
+
+    const secret =
+      process.env.JWT_ACCESS_SECRET;
+
+
+    if (
+      !secret
+    ) {
+
+      console.error(
+        "[requireAuth] JWT_ACCESS_SECRET is not set"
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            "JWT_ACCESS_SECRET_NOT_SET",
+
+        });
+
+    }
+
+
+    // =================================================
+    // AUTH HEADER
+    // =================================================
+
+    const authorization =
+      req.headers.authorization ||
+      "";
+
+
+    const [
+      scheme,
+      token,
+    ] =
+      authorization.split(" ");
+
+
+    if (
+      scheme !== "Bearer" ||
+      !token
+    ) {
+
+      console.warn(
+        "[requireAuth] Missing or invalid Authorization header"
+      );
+
+
+      return res
+        .status(401)
+        .json({
+
+          success:
+            false,
+
+          error:
+            "MISSING_OR_INVALID_AUTHORIZATION",
+
+        });
+
+    }
+
+
+    // =================================================
+    // VERIFY TOKEN
+    // =================================================
+
+    const payload =
+      jwt.verify(
+        token,
+        secret
+      );
+
+
+    // =================================================
+    // VALIDATE REQUIRED CLAIMS
+    // =================================================
+
+    const userId =
+      normalizeObjectId(
+        payload?.userId
+      );
+
+
+    const tenantId =
+      normalizeObjectId(
+        payload?.tenantId
+      );
+
+
+    if (
+      !userId
+    ) {
+
+      console.error(
+        "[requireAuth] JWT missing valid userId",
+        {
+          payload,
+        }
+      );
+
+
+      return res
+        .status(401)
+        .json({
+
+          success:
+            false,
+
+          error:
+            "INVALID_AUTHENTICATED_USER",
+
+        });
+
+    }
+
+
+    if (
+      !tenantId
+    ) {
+
+      console.error(
+        "[requireAuth] JWT missing valid tenantId",
+        {
+          payload,
+        }
+      );
+
+
+      return res
+        .status(401)
+        .json({
+
+          success:
+            false,
+
+          error:
+            "TENANT_CONTEXT_MISSING",
+
+        });
+
+    }
+
+
+    // =================================================
+    // CANONICAL REQUEST USER
+    // =================================================
+
+    req.user = {
+
+      userId:
+        userId.toString(),
+
+      tenantId:
+        tenantId.toString(),
+
+      role:
+        payload?.role ||
+        null,
+
+    };
+
+
+    console.log(
+      "[requireAuth] Authenticated user:",
+      req.user
+    );
+
+
+    return next();
+
+  }
+  catch (
+    error
+  ) {
+
+    console.error(
+      "[requireAuth] JWT error:",
+      error?.message
+    );
+
+
+    return res
+      .status(401)
+      .json({
+
+        success:
+          false,
+
+        error:
+          "INVALID_OR_EXPIRED_ACCESS_TOKEN",
+
+      });
+
+  }
 
 }
 
@@ -127,7 +375,7 @@ function getAuthenticatedTenantId(
 //   membership
 // }
 //
-// Permission examples:
+// Examples:
 //
 // canView
 // canEdit
@@ -135,6 +383,7 @@ function getAuthenticatedTenantId(
 // canManageData
 // canViewInterviews
 // canViewRecordings
+// canViewEvaluations
 //
 // =====================================================
 
@@ -144,12 +393,13 @@ export async function getProjectAccess(
   permission = "canView"
 ) {
 
-    console.log(
-  "🔥 PROJECT ACCESS FUNCTION CALLED"
-);
+  console.log(
+    "🔥 PROJECT ACCESS FUNCTION CALLED"
+  );
+
 
   // ===================================================
-  // AUTHENTICATED USER
+  // USER
   // ===================================================
 
   const userId =
@@ -201,10 +451,12 @@ export async function getProjectAccess(
 
 
   // ===================================================
-  // USER VALIDATION
+  // AUTH VALIDATION
   // ===================================================
 
-  if (!userId) {
+  if (
+    !userId
+  ) {
 
     return {
 
@@ -226,7 +478,9 @@ export async function getProjectAccess(
   // TENANT VALIDATION
   // ===================================================
 
-  if (!tenantId) {
+  if (
+    !tenantId
+  ) {
 
     return {
 
@@ -248,7 +502,9 @@ export async function getProjectAccess(
   // PROJECT ID VALIDATION
   // ===================================================
 
-  if (!projectId) {
+  if (
+    !projectId
+  ) {
 
     return {
 
@@ -267,22 +523,14 @@ export async function getProjectAccess(
 
 
   const normalizedProjectId =
-    projectId instanceof mongoose.Types.ObjectId
-
-      ? projectId
-
-      : (
-          isValidObjectId(
-            projectId
-          )
-            ? new mongoose.Types.ObjectId(
-                projectId
-              )
-            : null
-        );
+    normalizeObjectId(
+      projectId
+    );
 
 
-  if (!normalizedProjectId) {
+  if (
+    !normalizedProjectId
+  ) {
 
     return {
 
@@ -306,16 +554,18 @@ export async function getProjectAccess(
 
   const membership =
     await ProjectMembership
-      .findOne({
+      .findOne(
+        {
 
-        tenantId,
+          tenantId,
 
-        projectId:
-          normalizedProjectId,
+          projectId:
+            normalizedProjectId,
 
-        userId,
+          userId,
 
-      })
+        }
+      )
       .lean();
 
 
@@ -329,7 +579,6 @@ export async function getProjectAccess(
         ),
 
       membership:
-
         membership
           ? {
 
@@ -352,7 +601,6 @@ export async function getProjectAccess(
                 membership.permissions,
 
             }
-
           : null,
 
     }
@@ -360,7 +608,7 @@ export async function getProjectAccess(
 
 
   // ===================================================
-  // EXPLICIT MEMBERSHIP
+  // EXPLICIT PROJECT MEMBERSHIP
   // ===================================================
 
   if (
@@ -408,6 +656,55 @@ export async function getProjectAccess(
         error:
           "PROJECT_PERMISSION_DENIED",
 
+        project:
+          null,
+
+        membership,
+
+      };
+
+    }
+
+
+    // =================================================
+    // PROJECT LOOKUP
+    // =================================================
+
+    const project =
+      await Project
+        .findOne(
+          {
+            _id:
+              normalizedProjectId,
+
+            // IMPORTANT:
+            //
+            // Do not allow a project from another tenant
+            // to be returned accidentally.
+            //
+            // Project itself currently doesn't have tenantId,
+            // so the membership remains the tenant boundary.
+            //
+          }
+        )
+        .lean();
+
+
+    if (
+      !project
+    ) {
+
+      return {
+
+        allowed:
+          false,
+
+        status:
+          404,
+
+        error:
+          "PROJECT_NOT_FOUND",
+
         membership,
 
       };
@@ -420,6 +717,8 @@ export async function getProjectAccess(
       allowed:
         true,
 
+      project,
+
       membership,
 
     };
@@ -431,22 +730,23 @@ export async function getProjectAccess(
   // LEGACY OWNER FALLBACK
   // ===================================================
   //
-  // Existing projects may predate ProjectMembership.
+  // Some older projects may not have a ProjectMembership.
   //
-  // New projects should have a membership document.
   // ===================================================
 
   const ownedProject =
     await Project
-      .findOne({
+      .findOne(
+        {
 
-        _id:
-          normalizedProjectId,
+          _id:
+            normalizedProjectId,
 
-        ownerId:
-          userId,
+          ownerId:
+            userId,
 
-      })
+        }
+      )
       .lean();
 
 
@@ -472,6 +772,21 @@ export async function getProjectAccess(
         true,
 
       canViewRecordings:
+        true,
+
+      canViewEvaluations:
+        true,
+
+      canCreateData:
+        true,
+
+      canEditData:
+        true,
+
+      canDeleteData:
+        true,
+
+      canExportData:
         true,
 
     };
@@ -577,17 +892,17 @@ export async function getProjectAccess(
 
 
 // =====================================================
-// EXPRESS MIDDLEWARE
+// REQUIRE PROJECT PERMISSION
 // =====================================================
 //
-// Optional reusable middleware:
+// Usage:
 //
-// requireProjectPermission("canRun")
-//
-// It expects:
-// req.params.projectId
-// OR
-// req.params.id
+// router.get(
+//   "/projects/:projectId/interviews",
+//   requireAuth,
+//   requireProjectPermission("canViewInterviews"),
+//   controller
+// );
 //
 // =====================================================
 
@@ -603,12 +918,18 @@ export function requireProjectPermission(
 
     try {
 
+      // =================================================
+      // PROJECT ID
+      // =================================================
+
       const projectId =
-        req.params.projectId ||
-        req.params.id;
+        req.params?.projectId ||
+        req.params?.id;
 
 
-      if (!projectId) {
+      if (
+        !projectId
+      ) {
 
         return res
           .status(400)
@@ -625,6 +946,10 @@ export function requireProjectPermission(
       }
 
 
+      // =================================================
+      // PROJECT ACCESS
+      // =================================================
+
       const access =
         await getProjectAccess(
           req,
@@ -632,6 +957,10 @@ export function requireProjectPermission(
           permission
         );
 
+
+      // =================================================
+      // DENIED
+      // =================================================
 
       if (
         !access.allowed
@@ -656,13 +985,19 @@ export function requireProjectPermission(
       }
 
 
-      // Make access available to downstream handlers.
+      // =================================================
+      // ATTACH ACCESS CONTEXT
+      // =================================================
 
       req.projectAccess =
         access;
 
 
-      next();
+      // =================================================
+      // CONTINUE
+      // =================================================
+
+      return next();
 
     }
     catch (
@@ -693,3 +1028,17 @@ export function requireProjectPermission(
 
 }
 
+
+// =====================================================
+// DEFAULT EXPORT
+// =====================================================
+
+export default {
+
+  requireAuth,
+
+  getProjectAccess,
+
+  requireProjectPermission,
+
+};

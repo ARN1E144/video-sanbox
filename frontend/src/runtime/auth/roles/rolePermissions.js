@@ -38,6 +38,7 @@ export const ROLE_PERMISSIONS = {
     "interview.nextQuestion",
     "interview.submitAnswer",
     "interview.evaluate",
+    "interview.complete",
 
     "video.toggleMic",
     "video.toggleVideo",

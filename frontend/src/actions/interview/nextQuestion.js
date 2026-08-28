@@ -1,8 +1,4 @@
-
 // src/actions/interview/nextQuestion.js
-
-import api from "../../services/api";
-
 
 // =====================================================
 // NEXT QUESTION
@@ -15,11 +11,19 @@ import api from "../../services/api";
 // 3. If another question exists:
 //      update runtime question state.
 // 4. If no question remains:
-//      persist interview completion.
-//      update runtime completion state.
+//      DO NOT complete the interview.
+//      update runtime state to:
+//
+//        currentQuestion: "Interview Completed"
+//        status: "active"
+//        completed: false
+//
+// The actual interview completion is owned exclusively
+// by completeInterview.js.
 //
 // Answer persistence is owned by submitAnswer.js.
-// This action should NOT write answers.
+// This action should NOT write answers to the backend.
+//
 // =====================================================
 
 export default async function nextQuestion(
@@ -61,6 +65,16 @@ export default async function nextQuestion(
     // =================================================
     // VALIDATE ACTIVE INTERVIEW
     // =================================================
+    //
+    // IMPORTANT:
+    //
+    // The interview must remain active when the final
+    // question is reached.
+    //
+    // completeInterview.js is responsible for changing
+    // the interview to "completed".
+    //
+    // =================================================
 
     if (
       !interview.id ||
@@ -75,7 +89,8 @@ export default async function nextQuestion(
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "INTERVIEW_NOT_ACTIVE",
@@ -98,7 +113,9 @@ export default async function nextQuestion(
       null;
 
 
-    if (!projectId) {
+    if (
+      !projectId
+    ) {
 
       console.error(
         "[nextQuestion] Missing projectId",
@@ -111,7 +128,8 @@ export default async function nextQuestion(
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "PROJECT_ID_REQUIRED",
@@ -134,7 +152,8 @@ export default async function nextQuestion(
 
 
     if (
-      questions.length === 0
+      questions.length ===
+      0
     ) {
 
       console.warn(
@@ -144,7 +163,8 @@ export default async function nextQuestion(
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "NO_INTERVIEW_QUESTIONS",
@@ -174,13 +194,32 @@ export default async function nextQuestion(
 
 
     // =================================================
-    // INTERVIEW COMPLETE
+    // END OF QUESTION SET
     // =================================================
     //
-    // No question remains.
+    // IMPORTANT:
     //
-    // Persist completion FIRST.
-    // Only update runtime after the backend confirms it.
+    // Reaching the end of the question set does NOT
+    // complete the interview.
+    //
+    // We deliberately keep:
+    //
+    //   status:    "active"
+    //   completed: false
+    //
+    // This allows the Complete Interview button to
+    // become the single authoritative completion action.
+    //
+    // The existing TextLabel:
+    //
+    //   {{interview.currentQuestion}}
+    //
+    // will therefore display:
+    //
+    //   Interview Completed
+    //
+    // instead of falling back to "Text Label".
+    //
     // =================================================
 
     if (
@@ -189,48 +228,33 @@ export default async function nextQuestion(
     ) {
 
       console.log(
-        "[nextQuestion] Interview complete - persisting",
+        "[nextQuestion] Final question reached",
         {
-          projectId,
 
           interviewId:
             interview.id,
 
+          projectId,
+
           currentIndex,
 
+          nextIndex,
+
+          questionCount:
+            questions.length,
+
         }
       );
-
-
-      const response =
-        await api.post(
-          `/projects/${projectId}/interviews/${interview.id}/complete`
-        );
-
-
-      console.log(
-        "[nextQuestion] COMPLETE API RESPONSE",
-        {
-          status:
-            response.status,
-
-          data:
-            response.data,
-        }
-      );
-
-
-      const persistedInterview =
-        response.data?.interview;
-
-
-      const completedAt =
-        persistedInterview?.completedAt ||
-        new Date();
 
 
       // =================================================
-      // UPDATE RUNTIME
+      // UPDATE RUNTIME ONLY
+      // =================================================
+      //
+      // Do NOT call the backend completion endpoint here.
+      //
+      // The interview remains active.
+      //
       // =================================================
 
       ctx.patch?.(
@@ -238,40 +262,76 @@ export default async function nextQuestion(
         {
 
           status:
-            "completed",
+            "active",
 
           completed:
-            true,
+            false,
 
           currentQuestion:
-            null,
+            "Interview Completed",
+
+          // Keep the index pointing at the final
+          // real question rather than the non-existent
+          // next index.
 
           currentQuestionIndex:
             currentIndex,
 
-          completedAt:
-            completedAt,
+          answer: {
+
+            text:
+              "",
+
+            startedAt:
+              null,
+
+            completedAt:
+              null,
+
+          },
 
         }
       );
 
 
       console.log(
-        "[nextQuestion] INTERVIEW COMPLETE",
+        "[nextQuestion] Interview ready for completion",
         {
+
           interviewId:
             interview.id,
 
-          completedAt,
+          projectId,
+
+          status:
+            "active",
+
+          completed:
+            false,
+
+          currentQuestion:
+            "Interview Completed",
+
+          currentQuestionIndex:
+            currentIndex,
+
         }
       );
 
 
+      // =================================================
+      // RETURN
+      // =================================================
+
       return {
 
-        ok: true,
+        ok:
+          true,
 
         completed:
+          false,
+
+        finalQuestion:
           true,
 
         result: {
@@ -282,15 +342,19 @@ export default async function nextQuestion(
           projectId,
 
           status:
-            "completed",
+            "active",
+
+          completed:
+            false,
 
           currentQuestion:
-            null,
+            "Interview Completed",
 
           currentQuestionIndex:
             currentIndex,
 
-          completedAt,
+          finalQuestion:
+            true,
 
         },
 
@@ -307,6 +371,18 @@ export default async function nextQuestion(
       questions[nextIndex];
 
 
+    // =================================================
+    // VALIDATE NEXT QUESTION
+    // =================================================
+    //
+    // This remains an actual error condition.
+    //
+    // We should NOT use this block to represent the end
+    // of the interview because the end-of-set condition
+    // has already been handled above.
+    //
+    // =================================================
+
     if (
       !nextQuestionText
     ) {
@@ -314,14 +390,17 @@ export default async function nextQuestion(
       console.error(
         "[nextQuestion] Next question is empty",
         {
+
           nextIndex,
+
         }
       );
 
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "NEXT_QUESTION_NOT_FOUND",
@@ -338,12 +417,19 @@ export default async function nextQuestion(
     // The question list itself is already persisted as
     // part of the Interview snapshot.
     //
-    // We only need to advance the live runtime state.
+    // We only advance the live runtime state here.
+    //
     // =================================================
 
     ctx.patch?.(
       "interview",
       {
+
+        status:
+          "active",
+
+        completed:
+          false,
 
         currentQuestionIndex:
           nextIndex,
@@ -387,11 +473,19 @@ export default async function nextQuestion(
     );
 
 
+    // =================================================
+    // SUCCESS
+    // =================================================
+
     return {
 
-      ok: true,
+      ok:
+        true,
 
       completed:
+        false,
+
+      finalQuestion:
         false,
 
       result: {
@@ -400,6 +494,12 @@ export default async function nextQuestion(
           interview.id,
 
         projectId,
+
+        status:
+          "active",
+
+        completed:
+          false,
 
         currentQuestionIndex:
           nextIndex,
@@ -417,6 +517,10 @@ export default async function nextQuestion(
     err
   ) {
 
+    // =================================================
+    // ERROR
+    // =================================================
+
     console.error(
       "[nextQuestion] FAILED",
       {
@@ -433,7 +537,8 @@ export default async function nextQuestion(
 
     return {
 
-      ok: false,
+      ok:
+        false,
 
       error:
         err?.response?.data?.error ||
@@ -446,4 +551,3 @@ export default async function nextQuestion(
   }
 
 }
-

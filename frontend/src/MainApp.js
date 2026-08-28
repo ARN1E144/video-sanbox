@@ -15,7 +15,9 @@ import CallsPortal from "./components/CallsPortal";
 import { useAuth } from "./context/AuthContext";
 import SplitPreviewLayout from "./components/splitPreviewLayout";
 import { useCanvasState } from "./context/CanvasContext";
+import DataHub from "./components/DataHub";
 import InspectorContent from "./components/inspectorPanel/InspectorContent";
+import InterviewConfigurationPanel from "./components/projects/InterviewConfigurationPanel";
 
 
 function DraggablePanel({
@@ -589,6 +591,25 @@ export default function MainApp() {
           </div>
         )}
 
+        {/* =================================================
+                DATA HUB
+            ================================================= */}
+
+            {currentView ===
+              "data" && (
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  minHeight: 0,
+                  overflow: "hidden",
+                  backgroundColor: "#0f0f0f",
+                }}
+              >
+                <DataHub />
+              </div>
+            )}
+
 
         {/* =================================================
             BUILD
@@ -1112,28 +1133,8 @@ export default function MainApp() {
             SETTINGS
         ================================================= */}
 
-        {currentView ===
-          "settings" && (
-          <div
-            style={{
-              padding:
-                isMobile
-                  ? 16
-                  : 16,
-              color: "#aaa",
-              overflow: "auto",
-            }}
-          >
-            <h3>
-              Settings
-            </h3>
-
-            <p>
-              Coming soon –
-              configuration options
-              for your app builder.
-            </p>
-          </div>
+        {currentView === "settings" && (
+          <InterviewConfigurationPanel />
         )}
 
 

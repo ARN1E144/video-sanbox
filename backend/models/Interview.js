@@ -205,13 +205,12 @@ const interviewSchema = new mongoose.Schema(
 
     questionSource: {
       type: String,
-
       enum: [
-        "custom",
+        "manual",
         "ai_generated",
+        "imported",
         "project_default",
       ],
-
       default: "project_default",
     },
 
@@ -228,6 +227,17 @@ const interviewSchema = new mongoose.Schema(
     interview.
     -----------------------------------------------------
     */
+
+    questionSetId: {
+      type: String,
+      default: null,
+    },
+
+    questionSetName: {
+      type: String,
+      default: null,
+      trim: true,
+    },
 
     questions: {
       type: [String],

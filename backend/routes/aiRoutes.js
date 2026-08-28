@@ -12,38 +12,73 @@ import {
   evaluateInterview
 } from "../controllers/aiEvaluateInterview.js";
 
+import {
+  requireAuth
+} from "../middleware/requireAuth.js";
+
 
 const router =
   express.Router();
 
 
-router.get("/", (req, res) => {
+// =====================================================
+// TEST
+// =====================================================
 
-  console.log(
-    "AI Routes accessed"
-  );
+router.get(
+  "/",
+  requireAuth,
+  (req, res) => {
 
-  res.send(
-    "AI Routes are working"
-  );
+    console.log(
+      "[AI Routes] accessed",
+      {
+        userId:
+          req.user?.userId,
 
-});
+        tenantId:
+          req.user?.tenantId,
 
+      }
+    );
+
+    res.send(
+      "AI Routes are working"
+    );
+
+  }
+);
+
+
+// =====================================================
+// GENERATE TEMPLATE
+// =====================================================
 
 router.post(
   "/generateTemplate",
+  requireAuth,
   generateTemplates
 );
 
 
+// =====================================================
+// REFINE TEMPLATE
+// =====================================================
+
 router.post(
   "/refineTemplate",
+  requireAuth,
   refineTemplate
 );
 
 
+// =====================================================
+// EVALUATE INTERVIEW
+// =====================================================
+
 router.post(
   "/evaluateInterview",
+  requireAuth,
   evaluateInterview
 );
 

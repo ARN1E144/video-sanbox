@@ -1,4 +1,3 @@
-
 // backend/routes/interviewRoutes.js
 
 import express from "express";
@@ -46,9 +45,15 @@ function getUserId(
   const userId =
     req.user?.userId;
 
-  if (!userId) {
+
+  if (
+    !userId
+  ) {
+
     return null;
+
   }
+
 
   if (
     !isValidObjectId(
@@ -59,6 +64,7 @@ function getUserId(
     return null;
 
   }
+
 
   return new mongoose.Types.ObjectId(
     userId
@@ -74,9 +80,15 @@ function getTenantId(
   const tenantId =
     req.user?.tenantId;
 
-  if (!tenantId) {
+
+  if (
+    !tenantId
+  ) {
+
     return null;
+
   }
+
 
   if (
     !isValidObjectId(
@@ -87,6 +99,7 @@ function getTenantId(
     return null;
 
   }
+
 
   return new mongoose.Types.ObjectId(
     tenantId
@@ -104,6 +117,7 @@ function getProjectId(
   } =
     req.params;
 
+
   if (
     !isValidObjectId(
       projectId
@@ -113,6 +127,7 @@ function getProjectId(
     return null;
 
   }
+
 
   return new mongoose.Types.ObjectId(
     projectId
@@ -128,20 +143,30 @@ async function requireInterviewProjectAccess(
 ) {
 
   const projectId =
-    getProjectId(req);
+    getProjectId(
+      req
+    );
 
 
-  if (!projectId) {
+  if (
+    !projectId
+  ) {
 
     res
       .status(400)
       .json({
-        success: false,
+
+        success:
+          false,
+
         error:
           "INVALID_PROJECT_ID",
+
         message:
           "Invalid project ID.",
+
       });
+
 
     return null;
 
@@ -156,7 +181,9 @@ async function requireInterviewProjectAccess(
     );
 
 
-  if (!access.allowed) {
+  if (
+    !access.allowed
+  ) {
 
     res
       .status(
@@ -164,11 +191,16 @@ async function requireInterviewProjectAccess(
         403
       )
       .json({
-        success: false,
+
+        success:
+          false,
+
         error:
           access.error ||
           "PROJECT_ACCESS_DENIED",
+
       });
+
 
     return null;
 
@@ -176,24 +208,26 @@ async function requireInterviewProjectAccess(
 
 
   return {
+
     projectId,
+
     access,
+
   };
 
 }
+
 
 // =====================================================
 // FIND PROJECT INTERVIEW
 // =====================================================
 //
 // Ensures the interview belongs to:
-//   - the authenticated tenant
-//   - the requested project
-//   - the requested interview ID
 //
-// This prevents someone with access to one project from
-// attempting to upload against an interview belonging to
-// another project.
+// tenant
+// project
+// interview
+//
 // =====================================================
 
 async function findProjectInterview(
@@ -204,6 +238,7 @@ async function findProjectInterview(
 
   const tenantId =
     req.user?.tenantId;
+
 
   if (
     !tenantId ||
@@ -216,6 +251,7 @@ async function findProjectInterview(
 
   }
 
+
   if (
     !mongoose.Types.ObjectId.isValid(
       projectId
@@ -225,6 +261,7 @@ async function findProjectInterview(
     return null;
 
   }
+
 
   if (
     !mongoose.Types.ObjectId.isValid(
@@ -236,24 +273,191 @@ async function findProjectInterview(
 
   }
 
-  return (
-    await Interview.findOne({
-      _id:
-        interviewId,
 
-      tenantId:
-        new mongoose.Types.ObjectId(
-          tenantId
-        ),
+  return Interview.findOne({
 
-      projectId:
-        new mongoose.Types.ObjectId(
-          projectId
-        ),
-    })
+    _id:
+      interviewId,
+
+    tenantId:
+      new mongoose.Types.ObjectId(
+        tenantId
+      ),
+
+    projectId:
+      new mongoose.Types.ObjectId(
+        projectId
+      ),
+
+  });
+
+}
+
+
+// =====================================================
+// NORMALISE QUESTIONS
+// =====================================================
+
+function normaliseQuestions(
+  questions
+) {
+
+  if (
+    !Array.isArray(
+      questions
+    )
+  ) {
+
+    return [];
+
+  }
+
+
+  return questions
+    .map(
+      question =>
+        String(
+          question
+        ).trim()
+    )
+    .filter(
+      Boolean
+    );
+
+}
+
+
+// =====================================================
+// NORMALISE QUESTION SOURCE
+// =====================================================
+
+function isValidQuestionSource(
+  source
+) {
+
+  return [
+    "custom",
+    "ai_generated",
+    "project_default",
+    "manual",
+    "imported",
+  ].includes(
+    source
   );
 
 }
+
+
+// =====================================================
+// RESOLVE QUESTION SET AGAINST PROJECT
+// =====================================================
+//
+// The frontend resolves the question set, but the backend
+// performs a defensive validation when questionSetId is
+// supplied.
+//
+// This prevents an interview from claiming to use a
+// question set that isn't part of the current project.
+//
+// =====================================================
+
+function validateQuestionSetAgainstProject(
+  project,
+  questionSetId,
+  questionSetName
+) {
+
+  if (
+    !questionSetId
+  ) {
+
+    return {
+
+      valid:
+        true,
+
+      questionSet:
+        null,
+
+    };
+
+  }
+
+
+  const questionSets =
+    Array.isArray(
+      project?.interviewConfig?.questionSets
+    )
+
+      ? project.interviewConfig.questionSets
+
+      : [];
+
+
+  const questionSet =
+    questionSets.find(
+      item =>
+        String(
+          item?.id
+        ) ===
+        String(
+          questionSetId
+        )
+    );
+
+
+  if (
+    !questionSet
+  ) {
+
+    return {
+
+      valid:
+        false,
+
+      error:
+        "QUESTION_SET_NOT_FOUND",
+
+    };
+
+  }
+
+
+  if (
+    questionSetName &&
+    questionSet.name &&
+    String(
+      questionSetName
+    ) !==
+    String(
+      questionSet.name
+    )
+  ) {
+
+    return {
+
+      valid:
+        false,
+
+      error:
+        "QUESTION_SET_NAME_MISMATCH",
+
+    };
+
+  }
+
+
+  return {
+
+    valid:
+      true,
+
+    questionSet,
+
+  };
+
+}
+
 
 // =====================================================
 // CREATE / START INTERVIEW
@@ -262,13 +466,21 @@ async function findProjectInterview(
 // POST
 // /api/projects/:projectId/interviews
 //
-// Used when a candidate starts an interview.
-//
 // Requires:
 // canRun
 //
-// The question set and interview configuration are
-// snapshotted into the Interview document.
+// The Interview stores:
+//
+// questionSetId
+// questionSetName
+// questions[]
+//
+// IMPORTANT:
+//
+// questions[] is a snapshot.
+//
+// Future changes to the Project Question Set do NOT
+// alter historical Interviews.
 // =====================================================
 
 router.post(
@@ -281,6 +493,10 @@ router.post(
 
     try {
 
+      // =================================================
+      // PROJECT ACCESS
+      // =================================================
+
       const projectAccess =
         await requireInterviewProjectAccess(
           req,
@@ -289,16 +505,25 @@ router.post(
         );
 
 
-      if (!projectAccess) {
+      if (
+        !projectAccess
+      ) {
+
         return;
+
       }
 
 
       const userId =
-        getUserId(req);
+        getUserId(
+          req
+        );
+
 
       const tenantId =
-        getTenantId(req);
+        getTenantId(
+          req
+        );
 
 
       if (
@@ -310,7 +535,8 @@ router.post(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "IDENTITY_REQUIRED",
@@ -323,65 +549,72 @@ router.post(
       }
 
 
+      // =================================================
+      // PROJECT
+      // =================================================
+
+      const project =
+        projectAccess.access?.project;
+
+
+      /*
+      getProjectAccess() normally returns project in
+      membership access. For maximum compatibility,
+      use the project supplied by the access result.
+      */
+
+
+      // =================================================
+      // REQUEST BODY
+      // =================================================
+
       const {
+
         questions = [],
+
         questionSource =
           "project_default",
-        interviewConfig = {},
-        candidate = {},
+
+        questionSetId =
+          null,
+
+        questionSetName =
+          null,
+
+        interviewConfig =
+          {},
+
+        candidate =
+          {},
+
+        candidateUserId =
+          null,
+
       } =
-        req.body;
+        req.body || {};
 
 
-      // -------------------------------------------------
+      // =================================================
       // QUESTION VALIDATION
-      // -------------------------------------------------
-
-      if (
-        !Array.isArray(
-          questions
-        )
-      ) {
-
-        return res
-          .status(400)
-          .json({
-
-            success: false,
-
-            error:
-              "INVALID_QUESTIONS",
-
-            message:
-              "Questions must be an array.",
-
-          });
-
-      }
-
+      // =================================================
 
       const normalizedQuestions =
-        questions
-          .map(
-            question =>
-              String(
-                question
-              ).trim()
-          )
-          .filter(
-            Boolean
-          );
+        normaliseQuestions(
+          questions
+        );
 
 
       if (
-        normalizedQuestions.length === 0
+        normalizedQuestions.length ===
+        0
       ) {
 
         return res
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "NO_QUESTIONS",
@@ -394,19 +627,12 @@ router.post(
       }
 
 
-      // -------------------------------------------------
+      // =================================================
       // QUESTION SOURCE VALIDATION
-      // -------------------------------------------------
-
-      const allowedQuestionSources = [
-        "custom",
-        "ai_generated",
-        "project_default",
-      ];
-
+      // =================================================
 
       if (
-        !allowedQuestionSources.includes(
+        !isValidQuestionSource(
           questionSource
         )
       ) {
@@ -415,7 +641,8 @@ router.post(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "INVALID_QUESTION_SOURCE",
@@ -425,9 +652,100 @@ router.post(
       }
 
 
-      // -------------------------------------------------
+      // =================================================
+      // QUESTION SET VALIDATION
+      // =================================================
+
+      const questionSetValidation =
+        validateQuestionSetAgainstProject(
+          project,
+          questionSetId,
+          questionSetName
+        );
+
+
+      if (
+        !questionSetValidation.valid
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            error:
+              questionSetValidation.error,
+
+          });
+
+      }
+
+
+      const resolvedQuestionSet =
+        questionSetValidation.questionSet;
+
+
+      // =================================================
+      // QUESTION SET METADATA
+      // =================================================
+
+      const finalQuestionSetId =
+        questionSetId ||
+        resolvedQuestionSet?.id ||
+        null;
+
+
+      const finalQuestionSetName =
+        questionSetName ||
+        resolvedQuestionSet?.name ||
+        null;
+
+
+      // =================================================
+      // INTERVIEW CONFIG
+      // =================================================
+
+      const finalInterviewConfig = {
+
+        recordingEnabled:
+          interviewConfig
+            ?.recordingEnabled ??
+          true,
+
+        transcriptionEnabled:
+          interviewConfig
+            ?.transcriptionEnabled ??
+          true,
+
+        evaluationEnabled:
+          interviewConfig
+            ?.evaluationEnabled ??
+          true,
+
+      };
+
+
+      // =================================================
+      // CANDIDATE USER ID
+      // =================================================
+
+      const normalizedCandidateUserId =
+        isValidObjectId(
+          candidateUserId
+        )
+
+          ? new mongoose.Types.ObjectId(
+              candidateUserId
+            )
+
+          : userId;
+
+
+      // =================================================
       // CREATE INTERVIEW
-      // -------------------------------------------------
+      // =================================================
 
       const interview =
         await Interview.create({
@@ -440,20 +758,8 @@ router.post(
           createdByUserId:
             userId,
 
-          /*
-          Candidate may be anonymous in V1.
-          For authenticated candidates the runtime can
-          provide candidateUserId later.
-          */
-
           candidateUserId:
-            isValidObjectId(
-              req.body.candidateUserId
-            )
-              ? new mongoose.Types.ObjectId(
-                  req.body.candidateUserId
-                )
-              : userId,
+            normalizedCandidateUserId,
 
           candidate: {
 
@@ -461,89 +767,205 @@ router.post(
               String(
                 candidate?.name ||
                 ""
-              ).trim(),
+              )
+                .trim(),
 
             email:
               String(
                 candidate?.email ||
                 ""
-              ).trim()
-              .toLowerCase(),
+              )
+                .trim()
+                .toLowerCase(),
 
           },
+
+
+          // =================================================
+          // LIFECYCLE
+          // =================================================
 
           status:
             "active",
 
-          questionSource,
 
-          /*
-          CRITICAL:
+          // =================================================
+          // QUESTION SOURCE
+          // =================================================
 
-          Store a snapshot of the exact questions used
-          by THIS interview.
-          */
+          questionSource:
+
+
+            resolvedQuestionSet
+
+              ? (
+                  resolvedQuestionSet.source ||
+                  questionSource
+                )
+
+              : questionSource,
+
+
+          // =================================================
+          // QUESTION SET SNAPSHOT METADATA
+          // =================================================
+
+          questionSetId:
+            finalQuestionSetId,
+
+          questionSetName:
+            finalQuestionSetName,
+
+
+          // =================================================
+          // QUESTION SNAPSHOT
+          // =================================================
+          //
+          // THIS IS THE IMPORTANT HISTORICAL COPY.
+          //
+          // =================================================
 
           questions:
             normalizedQuestions,
 
-          interviewConfig: {
 
-            recordingEnabled:
-              interviewConfig
-                ?.recordingEnabled ??
-              true,
+          // =================================================
+          // INTERVIEW CONFIG SNAPSHOT
+          // =================================================
 
-            transcriptionEnabled:
-              interviewConfig
-                ?.transcriptionEnabled ??
-              true,
+          interviewConfig:
+            finalInterviewConfig,
 
-            evaluationEnabled:
-              interviewConfig
-                ?.evaluationEnabled ??
-              true,
 
-          },
+          // =================================================
+          // ANSWERS
+          // =================================================
 
-          answers: [],
+          answers:
+            [],
+
+
+          // =================================================
+          // RECORDING
+          // =================================================
 
           recording: {
 
             status:
-              interviewConfig
-                ?.recordingEnabled === false
-                ? "pending"
-                : "pending",
+              "pending",
+
+            storageProvider:
+              "s3",
+
+            s3Key:
+              null,
+
+            contentType:
+              null,
+
+            originalFileName:
+              null,
+
+            sizeBytes:
+              0,
+
+            durationSeconds:
+              0,
+
+            recordingStartedAt:
+              null,
+
+            recordingCompletedAt:
+              null,
+
+            uploadedAt:
+              null,
 
           },
+
+
+          // =================================================
+          // TRANSCRIPTION
+          // =================================================
 
           transcription: {
 
             status:
-              interviewConfig
-                ?.transcriptionEnabled === false
-                ? "pending"
-                : "pending",
+              "pending",
+
+            text:
+              "",
+
+            completedAt:
+              null,
 
           },
 
-          aiEvaluation: {},
+
+          // =================================================
+          // AI EVALUATION
+          // =================================================
+
+          aiEvaluation: {
+
+            overallScore:
+              null,
+
+            communicationScore:
+              null,
+
+            problemSolvingScore:
+              null,
+
+            technicalScore:
+              null,
+
+            strengths:
+              [],
+
+            weaknesses:
+              [],
+
+            questionFeedback:
+              [],
+
+            summary:
+              "",
+
+          },
+
+
+          // =================================================
+          // DATES
+          // =================================================
 
           startedAt:
             new Date(),
 
+          completedAt:
+            null,
+
+          retentionUntil:
+            null,
+
         });
 
+
+      // =================================================
+      // DEBUG
+      // =================================================
 
       console.log(
         "[Interviews] Created",
         {
+
           interviewId:
             interview._id,
 
           projectId:
             projectAccess.projectId,
+
+          tenantId,
 
           candidateUserId:
             interview.candidateUserId,
@@ -551,22 +973,43 @@ router.post(
           questionCount:
             normalizedQuestions.length,
 
+          questionSource:
+            interview.questionSource,
+
+          questionSetId:
+            interview.questionSetId,
+
+          questionSetName:
+            interview.questionSetName,
+
+          recordingEnabled:
+            interview
+              .interviewConfig
+              ?.recordingEnabled,
+
         }
       );
 
+
+      // =================================================
+      // RESPONSE
+      // =================================================
 
       return res
         .status(201)
         .json({
 
-          success: true,
+          success:
+            true,
 
           interview,
 
         });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[Interviews] POST create",
@@ -578,7 +1021,8 @@ router.post(
         .status(500)
         .json({
 
-          success: false,
+          success:
+            false,
 
           error:
             "INTERVIEW_CREATE_FAILED",
@@ -596,15 +1040,6 @@ router.post(
 
 // =====================================================
 // LIST PROJECT INTERVIEWS
-// =====================================================
-//
-// GET
-// /api/projects/:projectId/interviews
-//
-// Requires:
-// canViewInterviews
-//
-// Used by owner/admin review UI.
 // =====================================================
 
 router.get(
@@ -625,22 +1060,31 @@ router.get(
         );
 
 
-      if (!projectAccess) {
+      if (
+        !projectAccess
+      ) {
+
         return;
+
       }
 
 
       const tenantId =
-        getTenantId(req);
+        getTenantId(
+          req
+        );
 
 
-      if (!tenantId) {
+      if (
+        !tenantId
+      ) {
 
         return res
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "TENANT_REQUIRED",
@@ -662,8 +1106,10 @@ router.get(
           })
 
           .sort({
+
             createdAt:
               -1,
+
           })
 
           .lean();
@@ -673,14 +1119,17 @@ router.get(
         .status(200)
         .json({
 
-          success: true,
+          success:
+            true,
 
           interviews,
 
         });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[Interviews] GET list",
@@ -692,7 +1141,8 @@ router.get(
         .status(500)
         .json({
 
-          success: false,
+          success:
+            false,
 
           error:
             "INTERVIEW_LIST_FAILED",
@@ -707,13 +1157,6 @@ router.get(
 
 // =====================================================
 // GET SINGLE INTERVIEW
-// =====================================================
-//
-// GET
-// /api/projects/:projectId/interviews/:interviewId
-//
-// Requires:
-// canViewInterviews
 // =====================================================
 
 router.get(
@@ -734,8 +1177,12 @@ router.get(
         );
 
 
-      if (!projectAccess) {
+      if (
+        !projectAccess
+      ) {
+
         return;
+
       }
 
 
@@ -755,7 +1202,8 @@ router.get(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "INVALID_INTERVIEW_ID",
@@ -766,7 +1214,9 @@ router.get(
 
 
       const tenantId =
-        getTenantId(req);
+        getTenantId(
+          req
+        );
 
 
       const interview =
@@ -786,13 +1236,16 @@ router.get(
           .lean();
 
 
-      if (!interview) {
+      if (
+        !interview
+      ) {
 
         return res
           .status(404)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "INTERVIEW_NOT_FOUND",
@@ -806,14 +1259,17 @@ router.get(
         .status(200)
         .json({
 
-          success: true,
+          success:
+            true,
 
           interview,
 
         });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[Interviews] GET single",
@@ -825,7 +1281,8 @@ router.get(
         .status(500)
         .json({
 
-          success: false,
+          success:
+            false,
 
           error:
             "INTERVIEW_GET_FAILED",
@@ -840,16 +1297,6 @@ router.get(
 
 // =====================================================
 // SUBMIT ANSWER
-// =====================================================
-//
-// PATCH
-// /api/projects/:projectId/interviews/:interviewId/answers/:questionIndex
-//
-// Requires:
-// canRun
-//
-// Runtime submitAnswer will use this route.
-//
 // =====================================================
 
 router.patch(
@@ -870,8 +1317,12 @@ router.patch(
         );
 
 
-      if (!projectAccess) {
+      if (
+        !projectAccess
+      ) {
+
         return;
+
       }
 
 
@@ -892,7 +1343,8 @@ router.patch(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "INVALID_INTERVIEW_ID",
@@ -909,7 +1361,9 @@ router.patch(
 
 
       if (
-        !Number.isInteger(index) ||
+        !Number.isInteger(
+          index
+        ) ||
         index < 0
       ) {
 
@@ -917,7 +1371,8 @@ router.patch(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "INVALID_QUESTION_INDEX",
@@ -928,7 +1383,9 @@ router.patch(
 
 
       const tenantId =
-        getTenantId(req);
+        getTenantId(
+          req
+        );
 
 
       const interview =
@@ -945,13 +1402,16 @@ router.patch(
         });
 
 
-      if (!interview) {
+      if (
+        !interview
+      ) {
 
         return res
           .status(404)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "INTERVIEW_NOT_FOUND",
@@ -970,7 +1430,8 @@ router.patch(
           .status(409)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "INTERVIEW_NOT_ACTIVE",
@@ -986,13 +1447,16 @@ router.patch(
         ];
 
 
-      if (!question) {
+      if (
+        !question
+      ) {
 
         return res
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "QUESTION_NOT_FOUND",
@@ -1008,19 +1472,7 @@ router.patch(
         startedAt = null,
         completedAt = null,
       } =
-        req.body;
-
-
-      const normalizedText =
-        String(
-          text
-        );
-
-
-      const normalizedTranscript =
-        String(
-          transcript
-        );
+        req.body || {};
 
 
       const answer = {
@@ -1031,34 +1483,35 @@ router.patch(
         question,
 
         text:
-          normalizedText,
+          String(
+            text
+          ),
 
         transcript:
-          normalizedTranscript,
+          String(
+            transcript
+          ),
 
         startedAt:
           startedAt
+
             ? new Date(
                 startedAt
               )
+
             : null,
 
         completedAt:
           completedAt
+
             ? new Date(
                 completedAt
               )
+
             : new Date(),
 
       };
 
-
-      /*
-      ---------------------------------------------------
-      Replace an existing answer for the same question,
-      otherwise append it.
-      ---------------------------------------------------
-      */
 
       const existingIndex =
         interview.answers.findIndex(
@@ -1069,7 +1522,8 @@ router.patch(
 
 
       if (
-        existingIndex >= 0
+        existingIndex >=
+        0
       ) {
 
         interview.answers[
@@ -1093,9 +1547,12 @@ router.patch(
       console.log(
         "[Interviews] Answer saved",
         {
+
           interviewId,
+
           questionIndex:
             index,
+
         }
       );
 
@@ -1104,7 +1561,8 @@ router.patch(
         .status(200)
         .json({
 
-          success: true,
+          success:
+            true,
 
           answer,
 
@@ -1113,7 +1571,9 @@ router.patch(
         });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[Interviews] PATCH answer",
@@ -1125,7 +1585,8 @@ router.patch(
         .status(500)
         .json({
 
-          success: false,
+          success:
+            false,
 
           error:
             "INTERVIEW_ANSWER_SAVE_FAILED",
@@ -1140,17 +1601,6 @@ router.patch(
 
 // =====================================================
 // COMPLETE INTERVIEW
-// =====================================================
-//
-// POST
-// /api/projects/:projectId/interviews/:interviewId/complete
-//
-// Requires:
-// canRun
-//
-// This marks the interview lifecycle as completed.
-// Recording/transcription/evaluation can continue
-// processing independently.
 // =====================================================
 
 router.post(
@@ -1171,8 +1621,12 @@ router.post(
         );
 
 
-      if (!projectAccess) {
+      if (
+        !projectAccess
+      ) {
+
         return;
+
       }
 
 
@@ -1192,7 +1646,8 @@ router.post(
           .status(400)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "INVALID_INTERVIEW_ID",
@@ -1203,7 +1658,9 @@ router.post(
 
 
       const tenantId =
-        getTenantId(req);
+        getTenantId(
+          req
+        );
 
 
       const interview =
@@ -1220,13 +1677,16 @@ router.post(
         });
 
 
-      if (!interview) {
+      if (
+        !interview
+      ) {
 
         return res
           .status(404)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "INTERVIEW_NOT_FOUND",
@@ -1245,7 +1705,8 @@ router.post(
           .status(200)
           .json({
 
-            success: true,
+            success:
+              true,
 
             interview,
 
@@ -1266,7 +1727,8 @@ router.post(
           .status(409)
           .json({
 
-            success: false,
+            success:
+              false,
 
             error:
               "INTERVIEW_NOT_ACTIVE",
@@ -1279,6 +1741,7 @@ router.post(
       interview.status =
         "completed";
 
+
       interview.completedAt =
         new Date();
 
@@ -1289,9 +1752,12 @@ router.post(
       console.log(
         "[Interviews] Completed",
         {
+
           interviewId,
+
           projectId:
             projectAccess.projectId,
+
         }
       );
 
@@ -1300,14 +1766,17 @@ router.post(
         .status(200)
         .json({
 
-          success: true,
+          success:
+            true,
 
           interview,
 
         });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[Interviews] POST complete",
@@ -1319,7 +1788,8 @@ router.post(
         .status(500)
         .json({
 
-          success: false,
+          success:
+            false,
 
           error:
             "INTERVIEW_COMPLETE_FAILED",
@@ -1331,18 +1801,9 @@ router.post(
   }
 );
 
+
 // =====================================================
 // CREATE RECORDING UPLOAD URL
-// =====================================================
-//
-// POST
-// /projects/:projectId/interviews/:interviewId/recording/upload-url
-//
-// Permission:
-// canRun
-//
-// The backend generates the S3 key.
-// The client never supplies an arbitrary S3 key.
 // =====================================================
 
 router.post(
@@ -1358,12 +1819,9 @@ router.post(
       const {
         projectId,
         interviewId,
-      } = req.params;
+      } =
+        req.params;
 
-
-      // =================================================
-      // PROJECT ACCESS
-      // =================================================
 
       const access =
         await getProjectAccess(
@@ -1377,26 +1835,24 @@ router.post(
         !access.allowed
       ) {
 
-        return res.status(
-          access.status ||
-          403
-        ).json({
+        return res
+          .status(
+            access.status ||
+            403
+          )
+          .json({
 
-          success:
-            false,
+            success:
+              false,
 
-          error:
-            access.error ||
-            "PROJECT_ACCESS_DENIED",
+            error:
+              access.error ||
+              "PROJECT_ACCESS_DENIED",
 
-        });
+          });
 
       }
 
-
-      // =================================================
-      // FIND INTERVIEW
-      // =================================================
 
       const interview =
         await findProjectInterview(
@@ -1410,57 +1866,70 @@ router.post(
         !interview
       ) {
 
-        return res.status(
-          404
-        ).json({
+        return res
+          .status(404)
+          .json({
 
-          success:
-            false,
+            success:
+              false,
 
-          error:
-            "INTERVIEW_NOT_FOUND",
+            error:
+              "INTERVIEW_NOT_FOUND",
 
-        });
+          });
 
       }
 
-
-      // =================================================
-      // VALIDATE INTERVIEW STATUS
-      // =================================================
 
       if (
         interview.status !==
         "active"
       ) {
 
-        return res.status(
-          409
-        ).json({
+        return res
+          .status(409)
+          .json({
 
-          success:
-            false,
+            success:
+              false,
 
-          error:
-            "INTERVIEW_NOT_ACTIVE",
+            error:
+              "INTERVIEW_NOT_ACTIVE",
 
-        });
+          });
 
       }
 
 
-      // =================================================
-      // CONTENT TYPE
-      // =================================================
+      const recordingEnabled =
+        interview
+          ?.interviewConfig
+          ?.recordingEnabled !== false;
+
+
+      if (
+        !recordingEnabled
+      ) {
+
+        return res
+          .status(409)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "INTERVIEW_RECORDING_DISABLED",
+
+          });
+
+      }
+
 
       const contentType =
         req.body?.contentType ||
         "video/webm";
 
-
-      // =================================================
-      // CREATE PRESIGNED URL
-      // =================================================
 
       const upload =
         await createInterviewRecordingUploadUrl({
@@ -1477,9 +1946,46 @@ router.post(
         });
 
 
-      // =================================================
-      // UPDATE RECORDING STATE
-      // =================================================
+      if (
+        !interview.recording
+      ) {
+
+        interview.recording = {
+
+          status:
+            "pending",
+
+          storageProvider:
+            "s3",
+
+          s3Key:
+            null,
+
+          contentType:
+            null,
+
+          originalFileName:
+            null,
+
+          sizeBytes:
+            0,
+
+          durationSeconds:
+            0,
+
+          recordingStartedAt:
+            null,
+
+          recordingCompletedAt:
+            null,
+
+          uploadedAt:
+            null,
+
+        };
+
+      }
+
 
       interview.recording.status =
         "uploading";
@@ -1495,10 +2001,6 @@ router.post(
 
       await interview.save();
 
-
-      // =================================================
-      // RESPONSE
-      // =================================================
 
       console.log(
         "[Interviews] Recording upload URL created",
@@ -1517,29 +2019,29 @@ router.post(
       );
 
 
-      return res.status(
-        200
-      ).json({
+      return res
+        .status(200)
+        .json({
 
-        success:
-          true,
+          success:
+            true,
 
-        interviewId:
-          interview._id,
+          interviewId:
+            interview._id,
 
-        uploadUrl:
-          upload.uploadUrl,
+          uploadUrl:
+            upload.uploadUrl,
 
-        s3Key:
-          upload.key,
+          s3Key:
+            upload.key,
 
-        contentType:
-          upload.contentType,
+          contentType:
+            upload.contentType,
 
-        expiresIn:
-          upload.expiresIn,
+          expiresIn:
+            upload.expiresIn,
 
-      });
+        });
 
     }
     catch (
@@ -1552,36 +2054,27 @@ router.post(
       );
 
 
-      return res.status(
-        500
-      ).json({
+      return res
+        .status(500)
+        .json({
 
-        success:
-          false,
+          success:
+            false,
 
-        error:
-          error?.message ||
-          "RECORDING_UPLOAD_URL_FAILED",
+          error:
+            error?.message ||
+            "RECORDING_UPLOAD_URL_FAILED",
 
-      });
+        });
 
     }
 
   }
 );
 
+
 // =====================================================
 // COMPLETE RECORDING UPLOAD
-// =====================================================
-//
-// POST
-// /projects/:projectId/interviews/:interviewId/recording/complete
-//
-// Permission:
-// canRun
-//
-// Verifies the S3 object exists before marking the
-// Interview recording as uploaded.
 // =====================================================
 
 router.post(
@@ -1597,12 +2090,9 @@ router.post(
       const {
         projectId,
         interviewId,
-      } = req.params;
+      } =
+        req.params;
 
-
-      // =================================================
-      // PROJECT ACCESS
-      // =================================================
 
       const access =
         await getProjectAccess(
@@ -1616,26 +2106,24 @@ router.post(
         !access.allowed
       ) {
 
-        return res.status(
-          access.status ||
-          403
-        ).json({
+        return res
+          .status(
+            access.status ||
+            403
+          )
+          .json({
 
-          success:
-            false,
+            success:
+              false,
 
-          error:
-            access.error ||
-            "PROJECT_ACCESS_DENIED",
+            error:
+              access.error ||
+              "PROJECT_ACCESS_DENIED",
 
-        });
+          });
 
       }
 
-
-      // =================================================
-      // FIND INTERVIEW
-      // =================================================
 
       const interview =
         await findProjectInterview(
@@ -1649,24 +2137,20 @@ router.post(
         !interview
       ) {
 
-        return res.status(
-          404
-        ).json({
+        return res
+          .status(404)
+          .json({
 
-          success:
-            false,
+            success:
+              false,
 
-          error:
-            "INTERVIEW_NOT_FOUND",
+            error:
+              "INTERVIEW_NOT_FOUND",
 
-        });
+          });
 
       }
 
-
-      // =================================================
-      // GET STORED S3 KEY
-      // =================================================
 
       const s3Key =
         interview.recording?.s3Key;
@@ -1676,68 +2160,103 @@ router.post(
         !s3Key
       ) {
 
-        return res.status(
-          400
-        ).json({
+        return res
+          .status(400)
+          .json({
 
-          success:
-            false,
+            success:
+              false,
 
-          error:
-            "RECORDING_S3_KEY_MISSING",
+            error:
+              "RECORDING_S3_KEY_MISSING",
 
-        });
+          });
 
       }
 
 
       // =================================================
-      // VERIFY S3 OBJECT
+      // VERIFY OBJECT EXISTS
       // =================================================
 
       const object =
         await verifyInterviewRecordingObject({
+
           key:
             s3Key,
+
         });
 
 
       // =================================================
-      // CLIENT METADATA
+      // METADATA
       // =================================================
 
       const body =
-        req.body || {};
+        req.body ||
+        {};
 
 
-      const clientContentType =
+      const contentType =
         body.contentType ||
-        interview.recording.contentType ||
+
+        interview
+          .recording
+          ?.contentType ||
+
         object.contentType ||
+
         "video/webm";
 
 
       const sizeBytes =
         Number(
+
           body.sizeBytes ??
+
           object.sizeBytes ??
+
           0
+
         );
 
 
       const durationSeconds =
         Number(
+
           body.durationSeconds ??
           0
+
         );
 
 
+      const completedAt =
+        body.completedAt
+          ? new Date(
+              body.completedAt
+            )
+          : new Date();
+
+
       // =================================================
-      // UPDATE INTERVIEW RECORDING
+      // UPDATE RECORDING
       // =================================================
+
+      if (
+        !interview.recording
+      ) {
+
+        interview.recording = {};
+
+      }
+
 
       interview.recording.status =
         "uploaded";
+
+
+      interview.recording.storageProvider =
+        "s3";
 
 
       interview.recording.s3Key =
@@ -1745,7 +2264,7 @@ router.post(
 
 
       interview.recording.contentType =
-        clientContentType;
+        contentType;
 
 
       interview.recording.sizeBytes =
@@ -1756,16 +2275,16 @@ router.post(
         durationSeconds;
 
 
+      interview.recording.recordingCompletedAt =
+        completedAt;
+
+
       interview.recording.uploadedAt =
         new Date();
 
 
       await interview.save();
 
-
-      // =================================================
-      // RESPONSE
-      // =================================================
 
       console.log(
         "[Interviews] Recording upload completed",
@@ -1787,20 +2306,20 @@ router.post(
       );
 
 
-      return res.status(
-        200
-      ).json({
+      return res
+        .status(200)
+        .json({
 
-        success:
-          true,
+          success:
+            true,
 
-        interviewId:
-          interview._id,
+          interviewId:
+            interview._id,
 
-        recording:
-          interview.recording,
+          recording:
+            interview.recording,
 
-      });
+        });
 
     }
     catch (
@@ -1809,30 +2328,41 @@ router.post(
 
       console.error(
         "[Interviews] Recording completion failed",
-        error
+        {
+
+          error,
+
+          message:
+            error?.message,
+
+          stack:
+            error?.stack,
+
+        }
       );
 
 
-      return res.status(
-        500
-      ).json({
+      return res
+        .status(500)
+        .json({
 
-        success:
-          false,
+          success:
+            false,
 
-        error:
-          error?.message ||
-          "RECORDING_COMPLETION_FAILED",
+          error:
+            error?.message ||
+            "RECORDING_COMPLETION_FAILED",
 
-      });
+        });
 
     }
 
   }
 );
 
+
 // =====================================================
-// DEFAULT EXPORT
+// EXPORT
 // =====================================================
 
 export default router;
