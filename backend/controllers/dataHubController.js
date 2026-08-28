@@ -34,9 +34,8 @@ const s3Client =
 // =====================================================
 
 const RECORDINGS_BUCKET =
-  process.env.INTERVIEW_RECORDINGS_BUCKET ||
-  process.env.AWS_INTERVIEW_RECORDINGS_BUCKET ||
-  process.env.S3_INTERVIEW_RECORDINGS_BUCKET ||
+  process.env.AWS_S3_BUCKET ||
+  process.env.S3_BUCKET ||
   null;
 
 

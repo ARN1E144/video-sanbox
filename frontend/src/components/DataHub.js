@@ -9,6 +9,10 @@ import React, {
 
 import api from "../services/api";
 
+import {
+  useProjectContext,
+} from "../context/ProjectContext";
+
 
 // =====================================================
 // RESOURCE DEFINITIONS
@@ -100,19 +104,6 @@ const RESOURCE_META = {
 // =====================================================
 // HELPERS
 // =====================================================
-
-function getProjectId(
-  project
-) {
-
-  return (
-    project?._id ||
-    project?.id ||
-    null
-  );
-
-}
-
 
 function getProjectName(
   project
@@ -650,10 +641,6 @@ function InterviewRecordCard({
       }}
     >
 
-      {/* =================================================
-          HEADER
-      ================================================= */}
-
       <div
         style={{
           padding:
@@ -741,10 +728,6 @@ function InterviewRecordCard({
       </div>
 
 
-      {/* =================================================
-          SUMMARY GRID
-      ================================================= */}
-
       <div
         style={{
           padding:
@@ -831,9 +814,7 @@ function InterviewRecordCard({
         <SummaryItem
           label="Evaluation"
           value={
-
             evaluation?.available
-
               ? (
                   evaluation?.overallScore !=
                   null
@@ -842,9 +823,7 @@ function InterviewRecordCard({
 
                     : "Available"
                 )
-
               : "Not evaluated"
-
           }
 
           valueColor={
@@ -856,10 +835,6 @@ function InterviewRecordCard({
 
       </div>
 
-
-      {/* =================================================
-          ANSWERS
-      ================================================= */}
 
       {answers.length > 0 && (
 
@@ -904,9 +879,11 @@ function InterviewRecordCard({
 
             }}
           >
+
             {showAnswers
               ? "Hide answers"
               : `View answers (${answers.length})`}
+
           </button>
 
 
@@ -1061,10 +1038,6 @@ function InterviewRecordCard({
 
       )}
 
-
-      {/* =================================================
-          FOOTER
-      ================================================= */}
 
       <div
         style={{
@@ -1706,8 +1679,6 @@ function EvaluationRecordCard({
       }}
     >
 
-      {/* Header */}
-
       <div
         style={{
           display:
@@ -1788,8 +1759,6 @@ function EvaluationRecordCard({
       </div>
 
 
-      {/* Scores */}
-
       <div
         style={{
           display:
@@ -1835,8 +1804,6 @@ function EvaluationRecordCard({
 
       </div>
 
-
-      {/* Summary */}
 
       {evaluation?.summary && (
 
@@ -1895,8 +1862,6 @@ function EvaluationRecordCard({
       )}
 
 
-      {/* Strengths */}
-
       {strengths.length > 0 && (
 
         <EvaluationList
@@ -1909,8 +1874,6 @@ function EvaluationRecordCard({
       )}
 
 
-      {/* Weaknesses */}
-
       {weaknesses.length > 0 && (
 
         <EvaluationList
@@ -1922,8 +1885,6 @@ function EvaluationRecordCard({
 
       )}
 
-
-      {/* Question feedback */}
 
       {questionFeedback.length > 0 && (
 
@@ -2300,39 +2261,19 @@ function GenericRecordCard({
 export default function DataHub() {
 
   // ===================================================
-  // PROJECTS
+  // ACTIVE PROJECT
   // ===================================================
 
-  const [
-    projects,
-    setProjects,
-  ] =
-    useState([]);
+  const {
+    activeProject,
+    currentProject,
+  } =
+    useProjectContext();
 
 
-  const [
-    projectsLoading,
-    setProjectsLoading,
-  ] =
-    useState(true);
-
-
-  const [
-    projectsError,
-    setProjectsError,
-  ] =
-    useState(null);
-
-
-  // ===================================================
-  // SELECTED PROJECT
-  // ===================================================
-
-  const [
-    selectedProjectId,
-    setSelectedProjectId,
-  ] =
-    useState(null);
+  const projectId =
+    activeProject ||
+    null;
 
 
   // ===================================================
@@ -2393,116 +2334,44 @@ export default function DataHub() {
 
 
   // ===================================================
-  // LOAD PROJECTS
-  // ===================================================
-
-  const loadProjects =
-    useCallback(
-      async () => {
-
-        try {
-
-          setProjectsLoading(
-            true
-          );
-
-          setProjectsError(
-            null
-          );
-
-
-          const response =
-            await api.get(
-              "/data/projects"
-            );
-
-
-          const loadedProjects =
-            Array.isArray(
-              response?.data?.projects
-            )
-              ? response.data.projects
-              : [];
-
-
-          setProjects(
-            loadedProjects
-          );
-
-
-          console.log(
-            "[DataHub] Projects loaded",
-            loadedProjects
-          );
-
-        }
-        catch (
-          error
-        ) {
-
-          console.error(
-            "[DataHub] Failed to load projects",
-            error
-          );
-
-
-          setProjects(
-            []
-          );
-
-
-          setProjectsError(
-            error?.response?.data?.error ||
-            error?.response?.data?.message ||
-            error?.message ||
-            "Failed to load projects."
-          );
-
-        }
-        finally {
-
-          setProjectsLoading(
-            false
-          );
-
-        }
-
-      },
-      []
-    );
-
-
-  // ===================================================
-  // INITIAL PROJECT LOAD
-  // ===================================================
-
-  useEffect(
-    () => {
-
-      loadProjects();
-
-    },
-    [
-      loadProjects,
-    ]
-  );
-
-
-  // ===================================================
   // LOAD PROJECT SUMMARY
   // ===================================================
 
   const loadProjectData =
     useCallback(
       async (
-        projectId
+        nextProjectId
       ) => {
 
         if (
-          !projectId
+          !nextProjectId
         ) {
 
           setProjectData(
+            null
+          );
+
+          setProjectDataLoading(
+            false
+          );
+
+          setProjectDataError(
+            null
+          );
+
+          setSelectedResource(
+            null
+          );
+
+          setResourceRecords(
+            []
+          );
+
+          setResourceLoading(
+            false
+          );
+
+          setResourceError(
             null
           );
 
@@ -2521,6 +2390,12 @@ export default function DataHub() {
             null
           );
 
+
+          // ------------------------------------------------
+          // New project selection always resets the current
+          // resource view.
+          // ------------------------------------------------
+
           setSelectedResource(
             null
           );
@@ -2529,14 +2404,27 @@ export default function DataHub() {
             []
           );
 
+          setResourceLoading(
+            false
+          );
+
           setResourceError(
             null
           );
 
 
+          console.log(
+            "[DataHub] Loading active project",
+            {
+              projectId:
+                nextProjectId,
+            }
+          );
+
+
           const response =
             await api.get(
-              `/data/projects/${projectId}`
+              `/data/projects/${nextProjectId}`
             );
 
 
@@ -2550,13 +2438,26 @@ export default function DataHub() {
             data
           );
 
+
+          console.log(
+            "[DataHub] Active project loaded",
+            {
+              projectId:
+                nextProjectId,
+
+              project:
+                data,
+
+            }
+          );
+
         }
         catch (
           error
         ) {
 
           console.error(
-            "[DataHub] Failed to load project data",
+            "[DataHub] Failed to load active project data",
             error
           );
 
@@ -2588,65 +2489,26 @@ export default function DataHub() {
 
 
   // ===================================================
-  // PROJECT SELECTION
+  // ACTIVE PROJECT CHANGE
   // ===================================================
 
   useEffect(
     () => {
 
-      if (
-        !selectedProjectId
-      ) {
-
-        setProjectData(
-          null
-        );
-
-        return;
-
-      }
-
-
       loadProjectData(
-        selectedProjectId
+        projectId
       );
 
     },
     [
-      selectedProjectId,
+      projectId,
       loadProjectData,
     ]
   );
 
 
   // ===================================================
-  // SELECTED PROJECT
-  // ===================================================
-
-  const selectedProject =
-    useMemo(
-      () =>
-        projects.find(
-          project =>
-            String(
-              getProjectId(
-                project
-              )
-            ) ===
-            String(
-              selectedProjectId
-            )
-        ) ||
-        null,
-      [
-        projects,
-        selectedProjectId,
-      ]
-    );
-
-
-  // ===================================================
-  // RESOURCES
+  // AVAILABLE RESOURCES
   // ===================================================
 
   const availableResources =
@@ -2665,6 +2527,10 @@ export default function DataHub() {
 
         }
 
+
+        // ------------------------------------------------
+        // Array form
+        // ------------------------------------------------
 
         if (
           Array.isArray(
@@ -2724,6 +2590,10 @@ export default function DataHub() {
 
         }
 
+
+        // ------------------------------------------------
+        // Object form
+        // ------------------------------------------------
 
         if (
           typeof resources ===
@@ -2801,107 +2671,124 @@ export default function DataHub() {
   // ===================================================
 
   const handleResourceSelect =
-    async (
-      resourceType
-    ) => {
+    useCallback(
+      async (
+        resourceType
+      ) => {
 
-      if (
-        !selectedProjectId ||
-        !resourceType
-      ) {
+        if (
+          !projectId ||
+          !resourceType
+        ) {
 
-        return;
+          return;
 
-      }
-
-
-      try {
-
-        setSelectedResource(
-          resourceType
-        );
-
-        setResourceLoading(
-          true
-        );
-
-        setResourceError(
-          null
-        );
-
-        setResourceRecords(
-          []
-        );
+        }
 
 
-        const response =
-          await api.get(
-            `/data/projects/${selectedProjectId}/${resourceType}`
+        try {
+
+          setSelectedResource(
+            resourceType
+          );
+
+          setResourceLoading(
+            true
+          );
+
+          setResourceError(
+            null
+          );
+
+          setResourceRecords(
+            []
           );
 
 
-        const records =
-          Array.isArray(
-            response?.data?.records
-          )
-            ? response.data.records
-            : [];
+          console.log(
+            "[DataHub] Loading resource",
+            {
+              projectId,
+
+              resourceType,
+            }
+          );
 
 
-        setResourceRecords(
-          records
-        );
+          const response =
+            await api.get(
+              `/data/projects/${projectId}/${resourceType}`
+            );
 
 
-        console.log(
-          "[DataHub] Resource loaded",
-          {
+          const records =
+            Array.isArray(
+              response?.data?.records
+            )
+              ? response.data.records
+              : [];
 
-            resourceType,
 
-            count:
-              records.length,
+          setResourceRecords(
+            records
+          );
 
-          }
-        );
 
-      }
-      catch (
-        error
-      ) {
+          console.log(
+            "[DataHub] Resource loaded",
+            {
 
-        console.error(
-          "[DataHub] Resource load failed",
+              projectId,
+
+              resourceType,
+
+              count:
+                records.length,
+
+            }
+          );
+
+        }
+        catch (
           error
-        );
+        ) {
+
+          console.error(
+            "[DataHub] Resource load failed",
+            error
+          );
 
 
-        setResourceRecords(
-          []
-        );
+          setResourceRecords(
+            []
+          );
 
 
-        setResourceError(
-          error?.response?.data?.error ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "Failed to load resource."
-        );
+          setResourceError(
+            error?.response?.data?.error ||
+            error?.response?.data?.message ||
+            error?.message ||
+            "Failed to load resource."
+          );
 
-      }
-      finally {
+        }
+        finally {
 
-        setResourceLoading(
-          false
-        );
+          setResourceLoading(
+            false
+          );
 
-      }
+        }
 
-    };
+      },
+      [
+        projectId,
+      ]
+    );
 
 
   // ===================================================
-  // SELECTED RESOURCE META
+  // RESOURCE META
   // ===================================================
 
   const selectedResourceMeta =
@@ -3043,6 +2930,29 @@ export default function DataHub() {
 
 
   // ===================================================
+  // ACTIVE PROJECT DISPLAY
+  // ===================================================
+
+  const displayProject =
+    projectData ||
+    currentProject ||
+    null;
+
+
+  const displayProjectName =
+    getProjectName(
+      displayProject
+    );
+
+
+  const displayRole =
+    projectData?.role ||
+    currentProject?.access?.role ||
+    currentProject?.role ||
+    null;
+
+
+  // ===================================================
   // RENDER
   // ===================================================
 
@@ -3125,9 +3035,103 @@ export default function DataHub() {
 
           }}
         >
-          Access project data according to your
-          permissions.
+          Project data and resources for the active
+          project.
         </div>
+
+
+        {/* =================================================
+            ACTIVE PROJECT
+        ================================================= */}
+
+        {projectId && (
+
+          <div
+            style={{
+              marginTop:
+                12,
+
+              display:
+                "flex",
+
+              alignItems:
+                "center",
+
+              gap:
+                10,
+
+              flexWrap:
+                "wrap",
+
+            }}
+          >
+
+            <div
+              style={{
+                padding:
+                  "7px 10px",
+
+                borderRadius:
+                  8,
+
+                background:
+                  "#18243a",
+
+                border:
+                  "1px solid #29456f",
+
+                color:
+                  "#fff",
+
+                fontSize:
+                  12,
+
+                fontWeight:
+                  700,
+
+              }}
+            >
+              {displayProjectName}
+            </div>
+
+
+            {displayRole && (
+
+              <div
+                style={{
+                  padding:
+                    "5px 8px",
+
+                  borderRadius:
+                    999,
+
+                  background:
+                    "#1e293b",
+
+                  color:
+                    "#93c5fd",
+
+                  fontSize:
+                    11,
+
+                  fontWeight:
+                    600,
+
+                }}
+              >
+                Role:{" "}
+                {
+                  getRoleLabel(
+                    displayRole
+                  )
+                }
+              </div>
+
+            )}
+
+          </div>
+
+        )}
 
       </div>
 
@@ -3147,98 +3151,139 @@ export default function DataHub() {
           minHeight:
             0,
 
-          display:
-            "flex",
-
           overflow:
-            "hidden",
+            "auto",
+
+          padding:
+            20,
+
+          boxSizing:
+            "border-box",
 
         }}
       >
 
         {/* =================================================
-            PROJECTS
+            NO ACTIVE PROJECT
         ================================================= */}
 
-        <div
-          style={{
-            width:
-              280,
-
-            minWidth:
-              220,
-
-            borderRight:
-              "1px solid #222",
-
-            overflowY:
-              "auto",
-
-            padding:
-              12,
-
-            boxSizing:
-              "border-box",
-
-            background:
-              "#121212",
-
-          }}
-        >
+        {!projectId && (
 
           <div
             style={{
+              height:
+                "100%",
+
+              minHeight:
+                240,
+
+              display:
+                "flex",
+
+              alignItems:
+                "center",
+
+              justifyContent:
+                "center",
+
               color:
-                "#888",
+                "#666",
 
-              fontSize:
-                11,
-
-              fontWeight:
-                700,
-
-              textTransform:
-                "uppercase",
-
-              marginBottom:
-                10,
-
-              letterSpacing:
-                0.5,
+              textAlign:
+                "center",
 
             }}
           >
-            My Projects
+
+            <div>
+
+              <div
+                style={{
+                  fontSize:
+                    15,
+
+                  color:
+                    "#aaa",
+
+                  marginBottom:
+                    6,
+
+                }}
+              >
+                No active project
+              </div>
+
+
+              <div
+                style={{
+                  fontSize:
+                    12,
+
+                }}
+              >
+                Select a project from the Projects sidebar
+                to view its data.
+              </div>
+
+            </div>
+
           </div>
 
+        )}
 
-          {projectsLoading && (
+
+        {/* =================================================
+            PROJECT LOADING
+        ================================================= */}
+
+        {projectId &&
+          projectDataLoading && (
 
             <div
               style={{
-                color:
-                  "#777",
-
                 padding:
-                  "12px 4px",
+                  20,
 
-                fontSize:
-                  13,
+                border:
+                  "1px solid #242424",
+
+                borderRadius:
+                  10,
+
+                background:
+                  "#141414",
+
+                color:
+                  "#888",
 
               }}
             >
-              Loading projects...
+              Loading data for{" "}
+              <strong
+                style={{
+                  color:
+                    "#ccc",
+                }}
+              >
+                {displayProjectName}
+              </strong>
+              ...
             </div>
 
           )}
 
 
-          {projectsError && (
+        {/* =================================================
+            PROJECT ERROR
+        ================================================= */}
+
+        {projectId &&
+          projectDataError && (
 
             <div
               style={{
                 padding:
-                  10,
+                  14,
 
                 borderRadius:
                   8,
@@ -3252,379 +3297,345 @@ export default function DataHub() {
                 color:
                   "#fca5a5",
 
-                fontSize:
-                  12,
-
               }}
             >
-              {projectsError}
+              {projectDataError}
             </div>
 
           )}
-
-
-          {!projectsLoading &&
-            !projectsError &&
-            projects.length === 0 && (
-
-              <div
-                style={{
-                  color:
-                    "#666",
-
-                  padding:
-                    "12px 4px",
-
-                  fontSize:
-                    13,
-
-                }}
-              >
-                No projects available.
-              </div>
-
-            )}
-
-
-          {!projectsLoading &&
-            projects.map(
-              project => {
-
-                const projectId =
-                  getProjectId(
-                    project
-                  );
-
-
-                const isActive =
-                  String(
-                    projectId
-                  ) ===
-                  String(
-                    selectedProjectId
-                  );
-
-
-                return (
-
-                  <button
-                    key={
-                      projectId
-                    }
-
-                    type="button"
-
-                    onClick={() =>
-                      setSelectedProjectId(
-                        projectId
-                      )
-                    }
-
-                    style={{
-                      width:
-                        "100%",
-
-                      textAlign:
-                        "left",
-
-                      padding:
-                        12,
-
-                      marginBottom:
-                        7,
-
-                      borderRadius:
-                        8,
-
-                      border:
-                        isActive
-
-                          ? "1px solid #3b82f6"
-
-                          : "1px solid #282828",
-
-                      background:
-                        isActive
-
-                          ? "#1c2a44"
-
-                          : "#1a1a1a",
-
-                      color:
-                        "#fff",
-
-                      cursor:
-                        "pointer",
-
-                    }}
-                  >
-
-                    <div
-                      style={{
-                        fontWeight:
-                          600,
-
-                        fontSize:
-                          13,
-
-                      }}
-                    >
-                      {
-                        getProjectName(
-                          project
-                        )
-                      }
-                    </div>
-
-
-                    {project?.role && (
-
-                      <div
-                        style={{
-                          marginTop:
-                            4,
-
-                          color:
-                            isActive
-
-                              ? "#93c5fd"
-
-                              : "#777",
-
-                          fontSize:
-                            11,
-
-                        }}
-                      >
-                        Role:{" "}
-                        {
-                          getRoleLabel(
-                            project.role
-                          )
-                        }
-                      </div>
-
-                    )}
-
-                  </button>
-
-                );
-
-              }
-            )}
-
-        </div>
 
 
         {/* =================================================
-            PROJECT CONTENT
+            PROJECT DATA
         ================================================= */}
 
-        <div
-          style={{
-            flex:
-              1,
+        {projectId &&
+          !projectDataLoading &&
+          !projectDataError && (
 
-            minWidth:
-              0,
+            <>
 
-            minHeight:
-              0,
-
-            overflow:
-              "auto",
-
-            padding:
-              20,
-
-            boxSizing:
-              "border-box",
-
-          }}
-        >
-
-          {!selectedProject && (
-
-            <div
-              style={{
-                height:
-                  "100%",
-
-                display:
-                  "flex",
-
-                alignItems:
-                  "center",
-
-                justifyContent:
-                  "center",
-
-                color:
-                  "#666",
-
-                textAlign:
-                  "center",
-
-              }}
-            >
-              Select a project to view its data.
-            </div>
-
-          )}
-
-
-          {selectedProject &&
-            projectDataLoading && (
+              {/* =========================================
+                  RESOURCES
+              ========================================= */}
 
               <div
                 style={{
-                  color:
-                    "#888",
+                  display:
+                    "grid",
 
-                  padding:
-                    20,
+                  gridTemplateColumns:
+                    "repeat(auto-fill, minmax(220px, 1fr))",
 
-                }}
-              >
-                Loading project data...
-              </div>
-
-            )}
-
-
-          {selectedProject &&
-            projectDataError && (
-
-              <div
-                style={{
-                  padding:
-                    14,
-
-                  borderRadius:
-                    8,
-
-                  background:
-                    "#321515",
-
-                  border:
-                    "1px solid #6b1d1d",
-
-                  color:
-                    "#fca5a5",
+                  gap:
+                    12,
 
                 }}
               >
-                {projectDataError}
+
+                {availableResources.length ===
+                  0 && (
+
+                  <div
+                    style={{
+                      gridColumn:
+                        "1 / -1",
+
+                      padding:
+                        20,
+
+                      border:
+                        "1px solid #242424",
+
+                      borderRadius:
+                        10,
+
+                      background:
+                        "#141414",
+
+                      color:
+                        "#666",
+
+                    }}
+                  >
+                    This project currently has no
+                    viewable data resources.
+                  </div>
+
+                )}
+
+
+                {availableResources.map(
+                  resource => {
+
+                    const meta =
+                      RESOURCE_META[
+                        resource.type
+                      ] ||
+                      {
+
+                        label:
+                          resource.type,
+
+                        icon:
+                          "📁",
+
+                        description:
+                          "Project data.",
+
+                      };
+
+
+                    const active =
+                      selectedResource ===
+                      resource.type;
+
+
+                    return (
+
+                      <button
+                        key={
+                          resource.type
+                        }
+
+                        type="button"
+
+                        onClick={() =>
+                          handleResourceSelect(
+                            resource.type
+                          )
+                        }
+
+                        style={{
+                          textAlign:
+                            "left",
+
+                          padding:
+                            16,
+
+                          borderRadius:
+                            10,
+
+                          border:
+                            active
+
+                              ? "1px solid #3b82f6"
+
+                              : "1px solid #292929",
+
+                          background:
+                            active
+
+                              ? "#18243a"
+
+                              : "#151515",
+
+                          color:
+                            "#fff",
+
+                          cursor:
+                            "pointer",
+
+                        }}
+                      >
+
+                        <div
+                          style={{
+                            fontSize:
+                              22,
+
+                            marginBottom:
+                              9,
+
+                          }}
+                        >
+                          {
+                            meta.icon
+                          }
+                        </div>
+
+
+                        <div
+                          style={{
+                            fontWeight:
+                              700,
+
+                            fontSize:
+                              14,
+
+                          }}
+                        >
+                          {
+                            meta.label
+                          }
+                        </div>
+
+
+                        <div
+                          style={{
+                            marginTop:
+                              5,
+
+                            color:
+                              "#777",
+
+                            fontSize:
+                              11,
+
+                            minHeight:
+                              28,
+
+                          }}
+                        >
+                          {
+                            meta.description
+                          }
+                        </div>
+
+
+                        <div
+                          style={{
+                            marginTop:
+                              12,
+
+                            color:
+                              "#aaa",
+
+                            fontSize:
+                              12,
+
+                          }}
+                        >
+                          {
+                            resource.count
+                          }{" "}
+                          records
+                        </div>
+
+                      </button>
+
+                    );
+
+                  }
+                )}
+
               </div>
 
-            )}
 
+              {/* =========================================
+                  RECORDS
+              ========================================= */}
 
-          {selectedProject &&
-            !projectDataLoading &&
-            !projectDataError && (
-
-              <>
-
-                {/* =======================================
-                    PROJECT HEADER
-                ======================================= */}
+              {selectedResource && (
 
                 <div
                   style={{
-                    marginBottom:
-                      20,
+                    marginTop:
+                      28,
 
                   }}
                 >
 
                   <div
                     style={{
-                      fontSize:
-                        20,
-
-                      fontWeight:
-                        700,
+                      marginBottom:
+                        12,
 
                     }}
                   >
-                    {
-                      getProjectName(
-                        selectedProject
-                      )
-                    }
-                  </div>
 
+                    <div
+                      style={{
+                        fontSize:
+                          16,
 
-                  {projectData?.role && (
+                        fontWeight:
+                          700,
+
+                      }}
+                    >
+                      {
+                        selectedResourceMeta?.icon
+                      }{" "}
+                      {
+                        selectedResourceMeta?.label
+                      }
+                    </div>
+
 
                     <div
                       style={{
                         marginTop:
-                          7,
-
-                        display:
-                          "inline-flex",
-
-                        padding:
-                          "5px 8px",
-
-                        borderRadius:
-                          999,
-
-                        background:
-                          "#1e293b",
+                          3,
 
                         color:
-                          "#93c5fd",
+                          "#666",
 
                         fontSize:
-                          11,
-
-                        fontWeight:
-                          600,
+                          12,
 
                       }}
                     >
-                      Role:{" "}
                       {
-                        getRoleLabel(
-                          projectData.role
-                        )
+                        selectedResourceMeta?.description
                       }
+                    </div>
+
+                  </div>
+
+
+                  {resourceLoading && (
+
+                    <div
+                      style={{
+                        padding:
+                          20,
+
+                        color:
+                          "#777",
+
+                      }}
+                    >
+                      Loading records...
                     </div>
 
                   )}
 
-                </div>
 
-
-                {/* =======================================
-                    RESOURCES
-                ======================================= */}
-
-                <div
-                  style={{
-                    display:
-                      "grid",
-
-                    gridTemplateColumns:
-                      "repeat(auto-fill, minmax(220px, 1fr))",
-
-                    gap:
-                      12,
-
-                  }}
-                >
-
-                  {availableResources.length ===
-                    0 && (
+                  {resourceError && (
 
                     <div
                       style={{
-                        gridColumn:
-                          "1 / -1",
+                        padding:
+                          14,
 
+                        borderRadius:
+                          8,
+
+                        background:
+                          "#321515",
+
+                        border:
+                          "1px solid #6b1d1d",
+
+                        color:
+                          "#fca5a5",
+
+                      }}
+                    >
+                      {resourceError}
+                    </div>
+
+                  )}
+
+
+                  {!resourceLoading &&
+                    !resourceError &&
+                    resourceRecords.length ===
+                      0 && (
+
+                    <div
+                      style={{
                         padding:
                           20,
 
@@ -3642,343 +3653,47 @@ export default function DataHub() {
 
                       }}
                     >
-                      This project currently has no
-                      viewable data resources.
+                      No records available.
                     </div>
 
                   )}
 
 
-                  {availableResources.map(
-                    resource => {
-
-                      const meta =
-                        RESOURCE_META[
-                          resource.type
-                        ] ||
-                        {
-
-                          label:
-                            resource.type,
-
-                          icon:
-                            "📁",
-
-                          description:
-                            "Project data.",
-
-                        };
-
-
-                      const active =
-                        selectedResource ===
-                        resource.type;
-
-
-                      return (
-
-                        <button
-                          key={
-                            resource.type
-                          }
-
-                          type="button"
-
-                          onClick={() =>
-                            handleResourceSelect(
-                              resource.type
-                            )
-                          }
-
-                          style={{
-                            textAlign:
-                              "left",
-
-                            padding:
-                              16,
-
-                            borderRadius:
-                              10,
-
-                            border:
-                              active
-
-                                ? "1px solid #3b82f6"
-
-                                : "1px solid #292929",
-
-                            background:
-                              active
-
-                                ? "#18243a"
-
-                                : "#151515",
-
-                            color:
-                              "#fff",
-
-                            cursor:
-                              "pointer",
-
-                          }}
-                        >
-
-                          <div
-                            style={{
-                              fontSize:
-                                22,
-
-                              marginBottom:
-                                9,
-
-                            }}
-                          >
-                            {
-                              meta.icon
-                            }
-                          </div>
-
-
-                          <div
-                            style={{
-                              fontWeight:
-                                700,
-
-                              fontSize:
-                                14,
-
-                            }}
-                          >
-                            {
-                              meta.label
-                            }
-                          </div>
-
-
-                          <div
-                            style={{
-                              marginTop:
-                                5,
-
-                              color:
-                                "#777",
-
-                              fontSize:
-                                11,
-
-                              minHeight:
-                                28,
-
-                            }}
-                          >
-                            {
-                              meta.description
-                            }
-                          </div>
-
-
-                          <div
-                            style={{
-                              marginTop:
-                                12,
-
-                              color:
-                                "#aaa",
-
-                              fontSize:
-                                12,
-
-                            }}
-                          >
-                            {
-                              resource.count
-                            }{" "}
-                            records
-                          </div>
-
-                        </button>
-
-                      );
-
-                    }
-                  )}
-
-                </div>
-
-
-                {/* =======================================
-                    RECORDS
-                ======================================= */}
-
-                {selectedResource && (
-
-                  <div
-                    style={{
-                      marginTop:
-                        28,
-
-                    }}
-                  >
+                  {!resourceLoading &&
+                    !resourceError &&
+                    resourceRecords.length > 0 && (
 
                     <div
                       style={{
-                        marginBottom:
-                          12,
+                        display:
+                          "flex",
+
+                        flexDirection:
+                          "column",
+
+                        gap:
+                          10,
 
                       }}
                     >
 
-                      <div
-                        style={{
-                          fontSize:
-                            16,
-
-                          fontWeight:
-                            700,
-
-                        }}
-                      >
-                        {
-                          selectedResourceMeta?.icon
-                        }{" "}
-                        {
-                          selectedResourceMeta?.label
-                        }
-                      </div>
-
-
-                      <div
-                        style={{
-                          marginTop:
-                            3,
-
-                          color:
-                            "#666",
-
-                          fontSize:
-                            12,
-
-                        }}
-                      >
-                        {
-                          selectedResourceMeta?.description
-                        }
-                      </div>
+                      {
+                        resourceRecords.map(
+                          renderRecord
+                        )
+                      }
 
                     </div>
 
+                  )}
 
-                    {resourceLoading && (
+                </div>
 
-                      <div
-                        style={{
-                          padding:
-                            20,
+              )}
 
-                          color:
-                            "#777",
+            </>
 
-                        }}
-                      >
-                        Loading records...
-                      </div>
-
-                    )}
-
-
-                    {resourceError && (
-
-                      <div
-                        style={{
-                          padding:
-                            14,
-
-                          borderRadius:
-                            8,
-
-                          background:
-                            "#321515",
-
-                          border:
-                            "1px solid #6b1d1d",
-
-                          color:
-                            "#fca5a5",
-
-                        }}
-                      >
-                        {resourceError}
-                      </div>
-
-                    )}
-
-
-                    {!resourceLoading &&
-                      !resourceError &&
-                      resourceRecords.length === 0 && (
-
-                        <div
-                          style={{
-                            padding:
-                              20,
-
-                            border:
-                              "1px solid #242424",
-
-                            borderRadius:
-                              10,
-
-                            background:
-                              "#141414",
-
-                            color:
-                              "#666",
-
-                          }}
-                        >
-                          No records available.
-                        </div>
-
-                      )}
-
-
-                    {!resourceLoading &&
-                      !resourceError &&
-                      resourceRecords.length > 0 && (
-
-                        <div
-                          style={{
-                            display:
-                              "flex",
-
-                            flexDirection:
-                              "column",
-
-                            gap:
-                              10,
-
-                          }}
-                        >
-
-                          {
-                            resourceRecords.map(
-                              renderRecord
-                            )
-                          }
-
-                        </div>
-
-                      )}
-
-                  </div>
-
-                )}
-
-              </>
-
-            )}
-
-        </div>
+          )}
 
       </div>
 
