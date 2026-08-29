@@ -1,4 +1,4 @@
-// src/actions/call/startCall.js
+//src/actions/call/startCall.js
 
 import api from "../../services/api";
 
@@ -26,18 +26,24 @@ export default async function startCall(
     // =====================================================
     // INPUT
     // =====================================================
+    //
+    // recipientId is OPTIONAL.
+    //
+    // Targeted call:
+    //   recipientId supplied
+    //
+    // Queue call:
+    //   recipientId omitted
+    //
+    // ParticipantSelector writes the selected recipient
+    // into call.recipientId at runtime.
+    // =====================================================
 
     console.log(
       "[startCall] params",
       params
     );
 
-
-    // Resolve recipient from either:
-    // 1. Explicit action params
-    // 2. Runtime state
-    //
-    // Runtime state is what ParticipantSelector sets.
 
     const recipientId =
       params?.recipientId ||
@@ -47,37 +53,12 @@ export default async function startCall(
       null;
 
 
-    // =====================================================
-    // REQUIRE RECIPIENT
-    // =====================================================
-    //
-    // Remote Training currently requires a targeted
-    // participant.
-    //
-    // Do not create a queue call when no participant
-    // has been selected.
-
-    if (!recipientId) {
-
-      console.warn(
-        "[startCall] BLOCKED - no recipient selected"
-      );
-
-      ctx.notify?.(
-        "Select a participant before starting training."
-      );
-
-      return {
-
-        ok:
-          false,
-
-        error:
-          "MISSING_RECIPIENT",
-
-      };
-
-    }
+    console.log(
+      "[startCall] Resolved recipient",
+      {
+        recipientId,
+      }
+    );
 
 
     // =====================================================
@@ -110,7 +91,8 @@ export default async function startCall(
 
       return {
 
-        ok: true,
+        ok:
+          true,
 
         result: {
 
@@ -146,11 +128,13 @@ export default async function startCall(
       console.log(
         "[startCall] Existing call found - attempting join",
         {
+
           id:
             currentCall.id,
 
           channel:
             currentCall.channel,
+
         }
       );
 
@@ -159,13 +143,17 @@ export default async function startCall(
         await ctx.runAction?.(
           "call.joinCall",
           {
+
             channel:
               currentCall.channel,
+
           }
         );
 
 
-      if (!joinResult?.ok) {
+      if (
+        !joinResult?.ok
+      ) {
 
         console.error(
           "[startCall] Existing call join failed",
@@ -175,7 +163,8 @@ export default async function startCall(
 
         return {
 
-          ok: false,
+          ok:
+            false,
 
           error:
             "CALL_EXISTS_BUT_JOIN_FAILED",
@@ -187,7 +176,8 @@ export default async function startCall(
 
       return {
 
-        ok: true,
+        ok:
+          true,
 
         result: {
 
@@ -203,6 +193,9 @@ export default async function startCall(
           joined:
             true,
 
+          uid:
+            joinResult?.result?.uid,
+
         },
 
       };
@@ -211,19 +204,39 @@ export default async function startCall(
 
 
     // =====================================================
-    // CREATE NEW QUEUE CALL
+    // CREATE CALL
+    // =====================================================
+    //
+    // If recipientId exists:
+    //
+    //   backend creates targeted call
+    //   status = ringing
+    //
+    // If recipientId is null:
+    //
+    //   backend creates queue call
+    //   status = waiting
+    //
+    // startCall itself does not enforce either mode.
     // =====================================================
 
     console.log(
-      "[startCall] Creating new queue call",
+      "[startCall] Creating call",
       {
+
         recipientId,
+
+        mode:
+          recipientId
+            ? "targeted"
+            : "queue",
+
       }
     );
 
 
     const {
-      data
+      data,
     } =
       await api.post(
         "/calls",
@@ -260,7 +273,8 @@ export default async function startCall(
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "INVALID_CALL_RESPONSE",
@@ -271,7 +285,34 @@ export default async function startCall(
 
 
     // =====================================================
-    // STORE EXACT BACKEND CALL
+    // RESOLVE BACKEND CALL VALUES
+    // =====================================================
+
+    const callId =
+      call._id;
+
+
+    const channel =
+      call.channelName;
+
+
+    const callState =
+      call.status ||
+      (
+        call.recipientUserId
+          ? "ringing"
+          : "waiting"
+      );
+
+
+    const resolvedRecipientId =
+      call.recipientUserId ||
+      recipientId ||
+      null;
+
+
+    // =====================================================
+    // STORE RUNTIME CALL
     // =====================================================
 
     ctx.patch?.(
@@ -279,13 +320,12 @@ export default async function startCall(
       {
 
         id:
-          call._id,
+          callId,
 
-        channel:
-          call.channelName,
+        channel,
 
         state:
-          "ringing",
+          callState,
 
         joined:
           false,
@@ -296,7 +336,11 @@ export default async function startCall(
         participants:
           0,
 
+        recipientId:
+          resolvedRecipientId,
+
         createdAt:
+          call.createdAt ||
           Date.now(),
 
       }
@@ -306,11 +350,18 @@ export default async function startCall(
     console.log(
       "[startCall] Runtime call created",
       {
-        id:
-          call._id,
 
-        channel:
-          call.channelName,
+        id:
+          callId,
+
+        channel,
+
+        state:
+          callState,
+
+        recipientId:
+          resolvedRecipientId,
+
       }
     );
 
@@ -318,15 +369,26 @@ export default async function startCall(
     // =====================================================
     // JOIN EXACT CHANNEL
     // =====================================================
+    //
+    // The caller joins its own created session regardless
+    // of whether the call is targeted or queue-based.
+    //
+    // Targeted:
+    //   Host joins immediately
+    //
+    // Queue:
+    //   Caller joins immediately while waiting for responder
+    //
+    // =====================================================
 
     console.log(
       "[startCall] Joining created channel",
       {
-        callId:
-          call._id,
 
-        channel:
-          call.channelName,
+        callId,
+
+        channel,
+
       }
     );
 
@@ -335,8 +397,9 @@ export default async function startCall(
       await ctx.runAction?.(
         "call.joinCall",
         {
-          channel:
-            call.channelName,
+
+          channel,
+
         }
       );
 
@@ -347,7 +410,9 @@ export default async function startCall(
     );
 
 
-    if (!joinResult?.ok) {
+    if (
+      !joinResult?.ok
+    ) {
 
       console.error(
         "[startCall] Call created but join failed"
@@ -356,7 +421,8 @@ export default async function startCall(
 
       return {
 
-        ok: false,
+        ok:
+          false,
 
         error:
           "CALL_CREATED_BUT_JOIN_FAILED",
@@ -364,10 +430,12 @@ export default async function startCall(
         result: {
 
           id:
-            call._id,
+            callId,
 
-          channel:
-            call.channelName,
+          channel,
+
+          recipientId:
+            resolvedRecipientId,
 
         },
 
@@ -392,15 +460,18 @@ export default async function startCall(
       "=============================================="
     );
 
+
     console.log(
       "[startCall] Call identity",
       {
 
         id:
-          call._id,
+          callId,
 
-        channel:
-          call.channelName,
+        channel,
+
+        recipientId:
+          resolvedRecipientId,
 
         uid:
           joinResult?.result?.uid,
@@ -411,21 +482,24 @@ export default async function startCall(
 
     return {
 
-      ok: true,
+      ok:
+        true,
 
       result: {
 
         id:
-          call._id,
+          callId,
 
-        channel:
-          call.channelName,
+        channel,
 
         state:
           "joined",
 
         joined:
           true,
+
+        recipientId:
+          resolvedRecipientId,
 
         uid:
           joinResult?.result?.uid,
@@ -434,8 +508,10 @@ export default async function startCall(
 
     };
 
-
-  } catch (err) {
+  }
+  catch (
+    err
+  ) {
 
     console.error(
       "[startCall] FAILED",
@@ -451,7 +527,8 @@ export default async function startCall(
 
     return {
 
-      ok: false,
+      ok:
+        false,
 
       error:
         err?.response?.data?.error ||
