@@ -92,17 +92,23 @@
   },
 
   {
+    "id": "training-host-participant",
+    "type": "ParticipantSelector",
+    "role": "host",
+    "props": {
+      "label": "Invite Participant",
+      "placeholder": "Select participant"
+    }
+  },
+
+  {
     "id": "training-host-start",
     "type": "ControlButton",
     "role": "host",
     "props": {
       "label": "Start Training",
       "action": "call.startCall",
-      "targetId": "training-host-video",
-      "params": {
-        "recipientId": "69534eb360f225184124e21c"
-
-      }
+      "targetId": "training-host-video"
     }
   },
 
@@ -157,16 +163,12 @@
   },
 
   {
-    "id": "training-client-check",
-    "type": "ControlButton",
+    "id": "training-client-invitation",
+    "type": "TrainingInvitation",
     "role": "client",
-    "x": 40,
-    "y": 110,
-    "width": 180,
-    "height": 44,
     "props": {
-      "label": "Check for Training",
-      "action": "call.fetchPendingCalls"
+      "title": "Training invitation",
+      "waitingText": "Waiting for your training session..."
     }
   },
 

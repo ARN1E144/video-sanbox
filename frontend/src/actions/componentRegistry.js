@@ -12,6 +12,9 @@ import TextLabel from "../components/elements/TextLabel.js";
 import FetchCallsDebug from "../components/elements/FetchCallsDebug.js";
 import AvailabilityButton from "../components/elements/AvailabilityButton.js";
 import InterviewPanel from "../components/elements/InterviewPanel";
+import ParticipantSelector from "../components/elements/ParticipantSelector";
+import TrainingInvitation from "../components/elements/TrainingInvitation";
+
 
 
 import videoContract
@@ -55,6 +58,12 @@ import availabilityButtonContract
 
 import interviewPanelContract 
   from "../runtime/contracts/components/InterviewPanel.contract.js";
+
+import participantSelectorContract
+  from "../runtime/contracts/components/ParticipantSelector.contract.js";
+
+import trainingInvitationContract
+  from "../runtime/contracts/components/TrainingInvitation.contract.js";
 
 export const componentRegistry = {
 
@@ -127,6 +136,21 @@ AvailabilityButton: {
   component: AvailabilityButton,
   contract: availabilityButtonContract,
 },
+
+ParticipantSelector: {
+
+  component: ParticipantSelector,
+  contract: participantSelectorContract,
+
+},
+
+TrainingInvitation: {
+  
+  component: TrainingInvitation,
+  contract: trainingInvitationContract,
+
+},
+
 
 };
 

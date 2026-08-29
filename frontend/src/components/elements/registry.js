@@ -9,6 +9,7 @@ import Container from "./Container.js";
 import Text from "./Text.js";
 import ControlPanel from "./ControlPanel.js";
 import FetchCallsDebug from "./FetchCallsDebug.js";
+import ParticipantSelector from "./ParticipantSelector.js";
 
 
 
@@ -57,6 +58,9 @@ Text:{
 
 FetchCallsDebug:{
  component:FetchCallsDebug
+},
+ParticipantSelector:{
+ component:ParticipantSelector
 },
 
 };

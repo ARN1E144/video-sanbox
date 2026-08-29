@@ -912,6 +912,8 @@ router.get(
 // Only calls specifically addressed to the authenticated
 // user are returned.
 //
+// The caller/trainer is also included so the client can
+// display who invited them.
 // =====================================================
 
 router.get(
@@ -939,15 +941,93 @@ router.get(
 
         })
           .sort({
-
             createdAt:
               -1,
-
           })
           .limit(
             MAX_PENDING_CALLS
           )
           .lean();
+
+
+      // =================================================
+      // LOAD TRAINERS
+      // =================================================
+
+      const trainerIds = [
+        ...new Set(
+          calls
+            .map(
+              call =>
+                call?.clientUserId
+                  ? String(
+                      call.clientUserId
+                    )
+                  : null
+            )
+            .filter(Boolean)
+        ),
+      ];
+
+
+      let trainerMap =
+        new Map();
+
+
+      if (
+        trainerIds.length > 0
+      ) {
+
+        const trainers =
+          await User.find({
+
+            _id: {
+              $in:
+                trainerIds,
+            },
+
+          })
+            .select(
+              "_id firstName lastName email"
+            )
+            .lean();
+
+
+        trainerMap =
+          new Map(
+            trainers.map(
+              trainer => [
+                String(
+                  trainer._id
+                ),
+                trainer,
+              ]
+            )
+          );
+
+      }
+
+
+      // =================================================
+      // ENRICH INVITATIONS
+      // =================================================
+
+      const enrichedCalls =
+        calls.map(
+          call => ({
+
+            ...call,
+
+            trainer:
+              trainerMap.get(
+                String(
+                  call.clientUserId
+                )
+              ) ||
+              null,
+
+          })
+        );
 
 
       console.log(
@@ -960,7 +1040,7 @@ router.get(
             ),
 
           count:
-            calls.length,
+            enrichedCalls.length,
 
         }
       );
@@ -971,7 +1051,8 @@ router.get(
         ok:
           true,
 
-        calls,
+        calls:
+          enrichedCalls,
 
       });
 
@@ -992,6 +1073,187 @@ router.get(
 
           error:
             "Failed to load pending calls",
+
+        });
+
+    }
+
+  }
+);
+
+// =====================================================
+// GET CALL STATUS
+// =====================================================
+//
+// GET /api/calls/:callId
+//
+// Used by connected clients to detect when a training
+// session has ended.
+// =====================================================
+
+router.get(
+  "/:callId",
+  requireAuth,
+  requireTenant,
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const {
+        callId,
+      } =
+        req.params;
+
+
+      if (
+        !isValidObjectId(
+          callId
+        )
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            error:
+              "Invalid callId",
+
+          });
+
+      }
+
+
+      const call =
+        await Call.findOne({
+
+          _id:
+            callId,
+
+          tenantId:
+            req.user.tenantId,
+
+        })
+          .lean();
+
+
+      if (
+        !call
+      ) {
+
+        return res
+          .status(404)
+          .json({
+
+            error:
+              "Call not found",
+
+          });
+
+      }
+
+
+      // =================================================
+      // AUTHORISATION
+      // =================================================
+
+      const membership =
+        await requireMembership(
+          req,
+          res
+        );
+
+
+      if (
+        !membership
+      ) {
+
+        return;
+
+      }
+
+
+      const isOwnerAdmin =
+        membership.role === "owner" ||
+        membership.role === "admin";
+
+
+      const isCreator =
+        String(
+          call.clientUserId
+        ) ===
+        String(
+          req.user.userId
+        );
+
+
+      const isRecipient =
+        call.recipientUserId &&
+        String(
+          call.recipientUserId
+        ) ===
+        String(
+          req.user.userId
+        );
+
+
+      const isClaimedEmployee =
+        call.claimedByUserId &&
+        String(
+          call.claimedByUserId
+        ) ===
+        String(
+          req.user.userId
+        );
+
+
+      if (
+        !isOwnerAdmin &&
+        !isCreator &&
+        !isRecipient &&
+        !isClaimedEmployee
+      ) {
+
+        return res
+          .status(403)
+          .json({
+
+            error:
+              "Not allowed to view this call",
+
+          });
+
+      }
+
+
+      return res.json({
+
+        ok:
+          true,
+
+        call,
+
+      });
+
+    }
+    catch (
+      error
+    ) {
+
+      console.error(
+        "[Calls] Get call status failed",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          error:
+            "Failed to load call status",
 
         });
 

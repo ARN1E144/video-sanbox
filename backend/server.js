@@ -26,6 +26,7 @@ import videoRoutes from "./routes/videoRoutes.js";
 import projectRoutes from "./routes/projectRoutes.js";
 import interviewRoutes from "./routes/interviewRoutes.js";
 import dataHubRoutes from "./routes/dataHubRoutes.js"
+import tenantMemberRoutes from "./routes/tenantMemberRoutes.js";
 
 
 const app = express();
@@ -65,6 +66,7 @@ app.use("/api/videos", videoRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api", interviewRoutes);
 app.use("/api/data", dataHubRoutes);
+app.use("/api/data", tenantMemberRoutes);
 
 
 

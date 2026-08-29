@@ -33,11 +33,51 @@ export default async function startCall(
     );
 
 
-    // recipientId is optional for queue mode
+    // Resolve recipient from either:
+    // 1. Explicit action params
+    // 2. Runtime state
+    //
+    // Runtime state is what ParticipantSelector sets.
 
-    const {
-      recipientId = null
-    } = params;
+    const recipientId =
+      params?.recipientId ||
+      ctx.get?.(
+        "call.recipientId"
+      ) ||
+      null;
+
+
+    // =====================================================
+    // REQUIRE RECIPIENT
+    // =====================================================
+    //
+    // Remote Training currently requires a targeted
+    // participant.
+    //
+    // Do not create a queue call when no participant
+    // has been selected.
+
+    if (!recipientId) {
+
+      console.warn(
+        "[startCall] BLOCKED - no recipient selected"
+      );
+
+      ctx.notify?.(
+        "Select a participant before starting training."
+      );
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          "MISSING_RECIPIENT",
+
+      };
+
+    }
 
 
     // =====================================================

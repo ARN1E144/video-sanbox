@@ -34,29 +34,15 @@ import textLabel
 import interviewPanel
   from "./components/InterviewPanel.contract.js";
 
+import participantSelector
+  from "./components/ParticipantSelector.contract.js";
+
+import trainingInvitation
+  from "./components/TrainingInvitation.contract.js";
+
 
 // =====================================================
 // COMPONENT CONTRACT REGISTRY
-// =====================================================
-//
-// This is the runtime contract registry.
-//
-// IMPORTANT:
-//
-// This is separate from:
-//
-// frontend/src/actions/componentRegistry.js
-//
-// componentRegistry
-//     ↓
-// actual React component
-//
-// ComponentContract
-//     ↓
-// runtime contract / validation
-//
-// A component must exist in BOTH registries to be
-// considered a valid Confo component.
 // =====================================================
 
 const ComponentContract = {
@@ -96,6 +82,12 @@ const ComponentContract = {
 
   InterviewPanel:
     interviewPanel,
+
+  ParticipantSelector:
+    participantSelector,
+
+  TrainingInvitation:
+    trainingInvitation,
 
 };
 
