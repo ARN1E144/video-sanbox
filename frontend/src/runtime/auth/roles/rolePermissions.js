@@ -46,7 +46,15 @@ export const ROLE_PERMISSIONS = {
     "video.toggleVideo",
     "video.startRecording",
     "video.stopRecording",
-    "video.uploadRecording"
+    "video.uploadRecording",
+
+    "training.createSession",
+    "training.startSession",
+    "training.fetchPendingSessions",
+    "training.joinSession",
+    "training.endSession",
+
+    
   ]
 
 },

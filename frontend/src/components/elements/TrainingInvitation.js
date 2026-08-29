@@ -1,3 +1,5 @@
+// src/components/elements/TrainingInvitation.js
+
 import React, {
   useCallback,
   useEffect,
@@ -20,8 +22,11 @@ import {
 // POLLING
 // =====================================================
 
-const PENDING_POLL_INTERVAL_MS = 5000;
-const SESSION_POLL_INTERVAL_MS = 3000;
+const PENDING_POLL_INTERVAL_MS =
+  5000;
+
+const SESSION_POLL_INTERVAL_MS =
+  3000;
 
 
 // =====================================================
@@ -30,26 +35,35 @@ const SESSION_POLL_INTERVAL_MS = 3000;
 //
 // Client-side Remote Training lifecycle:
 //
-//   WAITING
-//      ↓
-//   INVITED
-//      ↓
-//   CONNECTED
-//      ↓
+//   NO SESSION
+//        ↓
+//   INVITED / WAITING
+//        ↓
+//   ACTIVE / READY
+//        ↓
+//   JOINED
+//        ↓
 //   ENDED
 //
-// Runtime state:
+// Runtime namespace:
 //
-//   call.pendingInvitation
-//   call.hasPendingInvitation
-//   call.joined
-//   call.id
-//   call.state
+//   training.pendingSessions
+//   training.pendingSession
+//   training.hasPendingSession
+//   training.sessionId
+//   training.status
+//   training.channel
+//   training.joined
 //
 // Runtime actions:
 //
-//   call.fetchPendingCalls
-//   call.joinInvitedCall
+//   training.fetchPendingSessions
+//   training.joinSession
+//
+// Temporary Agora bridge:
+//
+//   call.joinCall
+//   call.leaveCall
 //
 // =====================================================
 
@@ -77,28 +91,34 @@ export default function TrainingInvitation({
   // INITIAL RUNTIME STATE
   // ===================================================
 
-  const initialInvitation =
+  const initialPendingSession =
     runtime.get?.(
-      "call.pendingInvitation"
+      "training.pendingSession"
     ) || null;
+
+
+  const initialHasPendingSession =
+    !!runtime.get?.(
+      "training.hasPendingSession"
+    );
 
 
   const initialJoined =
     !!runtime.get?.(
-      "call.joined"
+      "training.joined"
     );
 
 
-  const initialCallId =
+  const initialSessionId =
     runtime.get?.(
-      "call.id"
+      "training.sessionId"
     ) || null;
 
 
-  const initialHasInvitation =
-    !!runtime.get?.(
-      "call.hasPendingInvitation"
-    );
+  const initialStatus =
+    runtime.get?.(
+      "training.status"
+    ) || null;
 
 
   // ===================================================
@@ -110,7 +130,7 @@ export default function TrainingInvitation({
     setInvitation,
   ] =
     useState(
-      initialInvitation
+      initialPendingSession
     );
 
 
@@ -119,8 +139,8 @@ export default function TrainingInvitation({
     setHasInvitation,
   ] =
     useState(
-      initialHasInvitation ||
-      !!initialInvitation
+      initialHasPendingSession ||
+      !!initialPendingSession
     );
 
 
@@ -134,11 +154,20 @@ export default function TrainingInvitation({
 
 
   const [
-    callId,
-    setCallId,
+    sessionId,
+    setSessionId,
   ] =
     useState(
-      initialCallId
+      initialSessionId
+    );
+
+
+  const [
+    sessionStatus,
+    setSessionStatus,
+  ] =
+    useState(
+      initialStatus
     );
 
 
@@ -146,7 +175,10 @@ export default function TrainingInvitation({
     ended,
     setEnded,
   ] =
-    useState(false);
+    useState(
+      initialStatus ===
+      "ended"
+    );
 
 
   const [
@@ -156,46 +188,112 @@ export default function TrainingInvitation({
     useState(false);
 
 
+  const [
+    joining,
+    setJoining,
+  ] =
+    useState(false);
+
+
+  const [
+    ending,
+    setEnding,
+  ] =
+    useState(false);
+
+
   // ===================================================
-  // REQUEST LOCK
-  // ===================================================
-  //
-  // IMPORTANT:
-  //
-  // Do not use `checking` to control request overlap.
-  // `checking` changes React state and can recreate
-  // callbacks/effects.
-  //
-  // This ref prevents overlapping network requests
-  // without participating in React's render cycle.
+  // REQUEST LOCKS
   // ===================================================
 
   const checkingRef =
     useRef(false);
 
 
+  const joiningRef =
+    useRef(false);
+
+
+  const sessionCheckingRef =
+    useRef(false);
+
+
   // ===================================================
-  // RUNTIME STATE SUBSCRIPTIONS
+  // RUNTIME SUBSCRIPTIONS
   // ===================================================
 
   useEffect(() => {
 
-    const unsubscribeInvitation =
+    const unsubscribePendingSessions =
       runtime.subscribe(
-        "call.pendingInvitation",
+        "training.pendingSessions",
         value => {
 
-          setInvitation(
-            value || null
+          const sessions =
+            Array.isArray(
+              value
+            )
+              ? value
+              : [];
+
+
+          setHasInvitation(
+            sessions.length >
+            0
           );
 
         }
       );
 
 
-    const unsubscribeHasInvitation =
+    const unsubscribePendingSession =
       runtime.subscribe(
-        "call.hasPendingInvitation",
+        "training.pendingSession",
+        value => {
+
+          const nextSession =
+            value ||
+            null;
+
+
+          setInvitation(
+            nextSession
+          );
+
+
+          setHasInvitation(
+            !!nextSession
+          );
+
+
+          if (
+            nextSession?.id
+          ) {
+
+            setSessionId(
+              nextSession.id
+            );
+
+          }
+
+
+          if (
+            nextSession?.status
+          ) {
+
+            setSessionStatus(
+              nextSession.status
+            );
+
+          }
+
+        }
+      );
+
+
+    const unsubscribeHasPending =
+      runtime.subscribe(
+        "training.hasPendingSession",
         value => {
 
           setHasInvitation(
@@ -206,9 +304,70 @@ export default function TrainingInvitation({
       );
 
 
+    const unsubscribeSessionId =
+      runtime.subscribe(
+        "training.sessionId",
+        value => {
+
+          setSessionId(
+            value ||
+            null
+          );
+
+        }
+      );
+
+
+    const unsubscribeStatus =
+      runtime.subscribe(
+        "training.status",
+        value => {
+
+          const nextStatus =
+            value ||
+            null;
+
+
+          setSessionStatus(
+            nextStatus
+          );
+
+
+          if (
+            nextStatus ===
+            "ended"
+          ) {
+
+            setEnded(
+              true
+            );
+
+            setJoined(
+              false
+            );
+
+          }
+
+          if (
+            nextStatus ===
+              "inviting" ||
+            nextStatus ===
+              "active"
+          ) {
+
+            setEnded(
+              false
+            );
+
+          }
+
+        }
+      );
+
+
     const unsubscribeJoined =
       runtime.subscribe(
-        "call.joined",
+        "training.joined",
         value => {
 
           const isJoined =
@@ -234,55 +393,19 @@ export default function TrainingInvitation({
       );
 
 
-    const unsubscribeCallId =
-      runtime.subscribe(
-        "call.id",
-        value => {
-
-          setCallId(
-            value ||
-            null
-          );
-
-        }
-      );
-
-
-    const unsubscribeCallState =
-      runtime.subscribe(
-        "call.state",
-        value => {
-
-          if (
-            value ===
-            "ended"
-          ) {
-
-            setEnded(
-              true
-            );
-
-            setJoined(
-              false
-            );
-
-          }
-
-        }
-      );
-
-
     return () => {
 
-      unsubscribeInvitation?.();
+      unsubscribePendingSessions?.();
 
-      unsubscribeHasInvitation?.();
+      unsubscribePendingSession?.();
+
+      unsubscribeHasPending?.();
+
+      unsubscribeSessionId?.();
+
+      unsubscribeStatus?.();
 
       unsubscribeJoined?.();
-
-      unsubscribeCallId?.();
-
-      unsubscribeCallState?.();
 
     };
 
@@ -292,16 +415,12 @@ export default function TrainingInvitation({
 
 
   // ===================================================
-  // FETCH PENDING TRAINING
+  // FETCH PENDING SESSIONS
   // ===================================================
 
   const checkForTraining =
     useCallback(
       async () => {
-
-        // ---------------------------------------------
-        // No need to check while connected or ended
-        // ---------------------------------------------
 
         if (
           joined ||
@@ -312,10 +431,6 @@ export default function TrainingInvitation({
 
         }
 
-
-        // ---------------------------------------------
-        // Prevent overlapping requests
-        // ---------------------------------------------
 
         if (
           checkingRef.current
@@ -339,14 +454,70 @@ export default function TrainingInvitation({
 
           const result =
             await runAction(
-              "call.fetchPendingCalls"
+              "training.fetchPendingSessions"
             );
 
 
           console.log(
-            "[TrainingInvitation] Pending check",
+            "[TrainingInvitation] Pending session check",
             result
           );
+
+
+          // ---------------------------------------------
+          // Keep local state immediately synchronised
+          // even if runtime notifications are delayed.
+          // ---------------------------------------------
+
+          const pendingSession =
+            result?.result?.pendingSession ||
+            null;
+
+
+          const sessions =
+            Array.isArray(
+              result?.result?.sessions
+            )
+              ? result.result.sessions
+              : [];
+
+
+          if (
+            pendingSession
+          ) {
+
+            setInvitation(
+              pendingSession
+            );
+
+
+            setHasInvitation(
+              true
+            );
+
+
+            setSessionId(
+              pendingSession.id
+            );
+
+
+            setSessionStatus(
+              pendingSession.status
+            );
+
+          }
+          else {
+
+            setInvitation(
+              null
+            );
+
+
+            setHasInvitation(
+              false
+            );
+
+          }
 
         }
         catch (
@@ -354,7 +525,7 @@ export default function TrainingInvitation({
         ) {
 
           console.error(
-            "[TrainingInvitation] Pending check failed",
+            "[TrainingInvitation] Pending session check failed",
             error
           );
 
@@ -380,7 +551,18 @@ export default function TrainingInvitation({
 
 
   // ===================================================
-  // AUTOMATIC PENDING POLLING
+  // PENDING SESSION POLLING
+  // ===================================================
+  //
+  // Runs while:
+  //
+  //   - not joined
+  //   - session has not ended
+  //
+  // This allows Bob to detect when Anish changes:
+  //
+  //   inviting → active
+  //
   // ===================================================
 
   useEffect(() => {
@@ -461,17 +643,38 @@ export default function TrainingInvitation({
   // SESSION STATUS POLLING
   // ===================================================
   //
-  // Once connected, the client polls the backend to
-  // detect when the host ends the training session.
+  // GET /api/training/sessions/:sessionId
+  //
+  // Used once we have a known training session.
+  //
+  // This detects:
+  //
+  //   active → ended
   //
   // ===================================================
 
   useEffect(() => {
 
     if (
-      !joined ||
-      !callId ||
+      !sessionId ||
       ended
+    ) {
+
+      return;
+
+    }
+
+
+    // -------------------------------------------------
+    // The pending-session polling already handles the
+    // inviting → active transition.
+    //
+    // Once joined, this polling becomes responsible
+    // for active → ended.
+    // -------------------------------------------------
+
+    if (
+      !joined
     ) {
 
       return;
@@ -486,21 +689,49 @@ export default function TrainingInvitation({
     const checkSession =
       async () => {
 
+        if (
+          cancelled ||
+          sessionCheckingRef.current
+        ) {
+
+          return;
+
+        }
+
+
+        sessionCheckingRef.current =
+          true;
+
+
         try {
+
+          console.log(
+            "[TrainingInvitation] Checking training session",
+            {
+
+              sessionId,
+
+            }
+          );
+
 
           const response =
             await api.get(
-              `/calls/${callId}`
+              `/training/sessions/${sessionId}`
             );
 
 
-          const call =
-            response?.data?.call;
+          const session =
+            response?.data?.session;
+
+
+          const participant =
+            response?.data?.participant;
 
 
           if (
             cancelled ||
-            !call
+            !session
           ) {
 
             return;
@@ -508,12 +739,34 @@ export default function TrainingInvitation({
           }
 
 
+          console.log(
+            "[TrainingInvitation] Session status",
+            {
+
+              sessionId:
+                session.id,
+
+              status:
+                session.status,
+
+              participantStatus:
+                participant?.status,
+
+            }
+          );
+
+
+          setSessionStatus(
+            session.status
+          );
+
+
           // -------------------------------------------
           // SESSION ENDED
           // -------------------------------------------
 
           if (
-            call.status ===
+            session.status ===
             "ended"
           ) {
 
@@ -529,6 +782,37 @@ export default function TrainingInvitation({
 
             setJoined(
               false
+            );
+
+
+            runtime.patch?.(
+              "training",
+              {
+
+                sessionId:
+                  session.id,
+
+                channel:
+                  session.channelName,
+
+                status:
+                  "ended",
+
+                joined:
+                  false,
+
+                hostUserId:
+                  session.hostUserId,
+
+                startedAt:
+                  session.startedAt ||
+                  null,
+
+                endedAt:
+                  session.endedAt ||
+                  Date.now(),
+
+              }
             );
 
 
@@ -567,9 +851,19 @@ export default function TrainingInvitation({
           );
 
         }
+        finally {
+
+          sessionCheckingRef.current =
+            false;
+
+        }
 
       };
 
+
+    // -----------------------------------------------
+    // Check immediately
+    // -----------------------------------------------
 
     checkSession();
 
@@ -594,7 +888,7 @@ export default function TrainingInvitation({
 
   }, [
     joined,
-    callId,
+    sessionId,
     ended,
     runtime,
   ]);
@@ -609,8 +903,11 @@ export default function TrainingInvitation({
       async () => {
 
         if (
+          joiningRef.current ||
+          joined ||
           !invitation ||
-          joined
+          sessionStatus !==
+            "active"
         ) {
 
           return;
@@ -618,10 +915,30 @@ export default function TrainingInvitation({
         }
 
 
+        joiningRef.current =
+          true;
+
+
+        setJoining(
+          true
+        );
+
+
+        const invitationSessionId =
+          invitation?.id ||
+          sessionId ||
+          null;
+
+
         console.log(
-          "[TrainingInvitation] Joining training",
+          "[TrainingInvitation] Joining training session",
           {
+
+            sessionId:
+              invitationSessionId,
+
             invitation,
+
           }
         );
 
@@ -630,7 +947,13 @@ export default function TrainingInvitation({
 
           const result =
             await runAction(
-              "call.joinInvitedCall"
+              "training.joinSession",
+              {
+
+                sessionId:
+                  invitationSessionId,
+
+              }
             );
 
 
@@ -644,37 +967,30 @@ export default function TrainingInvitation({
             result?.ok
           ) {
 
-            // -----------------------------------------
-            // joinInvitedCall already clears:
-            //
-            // pendingInvitation
-            // hasPendingInvitation
-            //
-            // and joinCall sets:
-            //
-            // call.joined = true
-            //
-            // The runtime subscription above will
-            // transition this component to CONNECTED.
-            // -----------------------------------------
+            const joinedSessionId =
+              result?.result?.sessionId ||
+              invitationSessionId ||
+              null;
+
+
+            setSessionId(
+              joinedSessionId
+            );
+
+
+            setSessionStatus(
+              "active"
+            );
+
 
             setInvitation(
               null
             );
 
+
             setHasInvitation(
               false
             );
-
-            if (
-              result?.result?.callId
-            ) {
-
-              setCallId(
-                result.result.callId
-              );
-
-            }
 
           }
 
@@ -689,12 +1005,24 @@ export default function TrainingInvitation({
           );
 
         }
+        finally {
+
+          joiningRef.current =
+            false;
+
+          setJoining(
+            false
+          );
+
+        }
 
       },
       [
         invitation,
         joined,
         runAction,
+        sessionId,
+        sessionStatus,
       ]
     );
 
@@ -708,11 +1036,30 @@ export default function TrainingInvitation({
     !ended;
 
 
-  const isInvited =
+  const isWaitingForHost =
     !joined &&
     !ended &&
     hasInvitation &&
-    !!invitation;
+    !!invitation &&
+    (
+      sessionStatus ===
+        "inviting" ||
+      invitation.status ===
+        "inviting"
+    );
+
+
+  const isReady =
+    !joined &&
+    !ended &&
+    hasInvitation &&
+    !!invitation &&
+    (
+      sessionStatus ===
+        "active" ||
+      invitation.status ===
+        "active"
+    );
 
 
   // ===================================================
@@ -818,11 +1165,121 @@ export default function TrainingInvitation({
 
 
   // ===================================================
-  // WAITING
+  // INVITED / WAITING FOR TRAINER
   // ===================================================
 
   if (
-    !isInvited
+    isWaitingForHost
+  ) {
+
+    const host =
+      invitation?.host ||
+      null;
+
+
+    const hostName =
+      host
+        ? `${host.firstName || ""} ${host.lastName || ""}`
+            .trim()
+        : "Your trainer";
+
+
+    return (
+
+      <div
+        style={{
+          width:
+            "100%",
+
+          boxSizing:
+            "border-box",
+
+          padding:
+            14,
+
+          border:
+            "1px solid #334155",
+
+          borderRadius:
+            10,
+
+          background:
+            "#111827",
+
+          color:
+            "#fff",
+
+        }}
+      >
+
+        <div
+          style={{
+            fontSize:
+              14,
+
+            fontWeight:
+              700,
+
+            marginBottom:
+              5,
+
+          }}
+        >
+
+          {title}
+
+        </div>
+
+
+        <div
+          style={{
+            color:
+              "#cbd5e1",
+
+            fontSize:
+              12,
+
+            marginBottom:
+              5,
+
+          }}
+        >
+
+          {hostName} has invited you
+          to a training session.
+
+        </div>
+
+
+        <div
+          style={{
+            color:
+              "#94a3b8",
+
+            fontSize:
+              11,
+
+          }}
+        >
+
+          Waiting for your trainer to
+          start the session...
+
+        </div>
+
+      </div>
+
+    );
+
+  }
+
+
+  // ===================================================
+  // WAITING / NO INVITATION
+  // ===================================================
+
+  if (
+    !isReady
   ) {
 
     return (
@@ -868,23 +1325,23 @@ export default function TrainingInvitation({
 
 
   // ===================================================
-  // TRAINER
+  // TRAINER INFORMATION
   // ===================================================
 
-  const trainer =
-    invitation?.trainer ||
+  const host =
+    invitation?.host ||
     null;
 
 
-  const trainerName =
-    trainer
-      ? `${trainer.firstName || ""} ${trainer.lastName || ""}`
+  const hostName =
+    host
+      ? `${host.firstName || ""} ${host.lastName || ""}`
           .trim()
       : "Your trainer";
 
 
   // ===================================================
-  // INVITATION
+  // READY
   // ===================================================
 
   return (
@@ -948,8 +1405,8 @@ export default function TrainingInvitation({
         }}
       >
 
-        {trainerName} has invited you
-        to a training session.
+        {hostName} has started
+        your training session.
 
       </div>
 
@@ -980,6 +1437,10 @@ export default function TrainingInvitation({
           handleJoin
         }
 
+        disabled={
+          joining
+        }
+
         style={{
           width:
             "100%",
@@ -994,7 +1455,9 @@ export default function TrainingInvitation({
             7,
 
           background:
-            "#2563eb",
+            joining
+              ? "#334155"
+              : "#2563eb",
 
           color:
             "#fff",
@@ -1003,12 +1466,16 @@ export default function TrainingInvitation({
             600,
 
           cursor:
-            "pointer",
+            joining
+              ? "default"
+              : "pointer",
 
         }}
       >
 
-        Join Training
+        {joining
+          ? "Joining Training..."
+          : "Join Training"}
 
       </button>
 

@@ -155,6 +155,8 @@ function AuthenticatedApp() {
 
                     <ConfoRenderer />
 
+                    <RuntimeTestPanel />
+
                     <ConfoTest />
 
                   </PreviewProvider>

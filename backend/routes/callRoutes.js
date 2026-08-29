@@ -23,25 +23,25 @@ const router =
 // CALL POLICY
 // =====================================================
 //
-// Queue mode:
+// Queue:
 //
-//   client creates call
+//   client creates
 //        ↓
-//   waiting
-//        ↓
-//   employee sees /available
+//     waiting
 //        ↓
 //   employee accepts
-//
-// Targeted mode:
-//
-//   caller creates call with recipientId
 //        ↓
-//   ringing
+//     claimed
+//
+// Targeted:
+//
+//   host creates with recipient
 //        ↓
-//   recipient sees /pending
+//      ringing
 //        ↓
 //   recipient joins
+//        ↓
+//      active
 //
 // =====================================================
 
@@ -73,6 +73,9 @@ const DEFAULT_CALL_POLICY = {
 // =====================================================
 
 const WAITING_CALL_EXPIRY_MINUTES =
+  5;
+
+const RINGING_CALL_EXPIRY_MINUTES =
   5;
 
 const MAX_AVAILABLE_CALLS =
@@ -213,23 +216,20 @@ async function requireMembership(
 
 
 // =====================================================
-// EXPIRE WAITING CALLS
-// =====================================================
-//
-// Queue calls only.
-//
-// Targeted calls use "ringing" and therefore remain
-// outside this expiry process for now.
-//
+// EXPIRE WAITING QUEUE CALLS
 // =====================================================
 
 async function expireWaitingCalls(
   tenantId
 ) {
 
+  const now =
+    new Date();
+
+
   const expiryDate =
     new Date(
-      Date.now() -
+      now.getTime() -
       WAITING_CALL_EXPIRY_MINUTES *
       60 *
       1000
@@ -261,7 +261,7 @@ async function expireWaitingCalls(
             "expired",
 
           expiredAt:
-            new Date(),
+            now,
 
         },
 
@@ -277,6 +277,128 @@ async function expireWaitingCalls(
 
     console.log(
       "[Calls] Expired waiting calls",
+      {
+
+        tenantId:
+          String(
+            tenantId
+          ),
+
+        count:
+          result.modifiedCount,
+
+      }
+    );
+
+  }
+
+
+  return result.modifiedCount;
+
+}
+
+
+// =====================================================
+// EXPIRE STALE TARGETED INVITATIONS
+// =====================================================
+//
+// New invitations use invitationExpiresAt.
+//
+// The fallback for invitationExpiresAt = null exists
+// specifically to clean up older test records created
+// before invitationExpiresAt was persisted.
+//
+// =====================================================
+
+async function expireRingingInvitations(
+  tenantId
+) {
+
+  const now =
+    new Date();
+
+
+  const legacyExpiryDate =
+    new Date(
+      now.getTime() -
+      RINGING_CALL_EXPIRY_MINUTES *
+      60 *
+      1000
+    );
+
+
+  const result =
+    await Call.updateMany(
+
+      {
+
+        tenantId,
+
+        status:
+          "ringing",
+
+        recipientUserId: {
+          $ne:
+            null,
+        },
+
+        $or: [
+
+          // -------------------------------------------
+          // Current records
+          // -------------------------------------------
+
+          {
+            invitationExpiresAt: {
+              $lte:
+                now,
+            },
+          },
+
+          // -------------------------------------------
+          // Legacy records created before the expiry
+          // field was populated
+          // -------------------------------------------
+
+          {
+            invitationExpiresAt:
+              null,
+
+            createdAt: {
+              $lt:
+                legacyExpiryDate,
+            },
+
+          },
+
+        ],
+
+      },
+
+      {
+
+        $set: {
+
+          status:
+            "expired",
+
+          expiredAt:
+            now,
+
+        },
+
+      }
+
+    );
+
+
+  if (
+    result.modifiedCount >
+    0
+  ) {
+
+    console.log(
+      "[Calls] Expired stale training invitations",
       {
 
         tenantId:
@@ -337,7 +459,8 @@ async function enrichCallsWithClients(
 
 
   if (
-    clientIds.length === 0
+    clientIds.length ===
+    0
   ) {
 
     return calls;
@@ -480,10 +603,6 @@ router.post(
         recipientId
       ) {
 
-        // -------------------------------------------------
-        // VALIDATE OBJECT ID
-        // -------------------------------------------------
-
         if (
           !isValidObjectId(
             recipientId
@@ -518,9 +637,9 @@ router.post(
         );
 
 
-        // -------------------------------------------------
+        // ---------------------------------------------
         // FIND USER
-        // -------------------------------------------------
+        // ---------------------------------------------
 
         const recipient =
           await User.findById(
@@ -530,12 +649,6 @@ router.post(
               "_id firstName lastName email"
             )
             .lean();
-
-
-        console.log(
-          "[Calls] Targeted recipient lookup result",
-          recipient
-        );
 
 
         if (
@@ -554,9 +667,9 @@ router.post(
         }
 
 
-        // -------------------------------------------------
+        // ---------------------------------------------
         // VERIFY TENANT MEMBERSHIP
-        // -------------------------------------------------
+        // ---------------------------------------------
 
         const recipientMembership =
           await Membership.findOne({
@@ -640,6 +753,21 @@ router.post(
 
 
       // =================================================
+      // INVITATION EXPIRY
+      // =================================================
+
+      const invitationExpiresAt =
+        recipientUserId
+          ? new Date(
+              Date.now() +
+              RINGING_CALL_EXPIRY_MINUTES *
+              60 *
+              1000
+            )
+          : null;
+
+
+      // =================================================
       // CREATE CALL
       // =================================================
 
@@ -660,6 +788,8 @@ router.post(
             recipientUserId
               ? "ringing"
               : "waiting",
+
+          invitationExpiresAt,
 
         });
 
@@ -690,6 +820,9 @@ router.post(
 
           channelName:
             call.channelName,
+
+          invitationExpiresAt:
+            call.invitationExpiresAt,
 
         }
       );
@@ -734,12 +867,6 @@ router.post(
 
 // =====================================================
 // GET AVAILABLE QUEUE CALLS
-// =====================================================
-//
-// GET /api/calls/available
-//
-// Targeted ringing calls never appear here.
-//
 // =====================================================
 
 router.get(
@@ -787,10 +914,6 @@ router.get(
       }
 
 
-      // =================================================
-      // AVAILABILITY
-      // =================================================
-
       if (
         !membership.isAvailable
       ) {
@@ -807,18 +930,10 @@ router.get(
       }
 
 
-      // =================================================
-      // EXPIRE OLD WAITING CALLS
-      // =================================================
-
       await expireWaitingCalls(
         req.user.tenantId
       );
 
-
-      // =================================================
-      // FETCH QUEUE
-      // =================================================
 
       const calls =
         await Call.find({
@@ -906,15 +1021,6 @@ router.get(
 // =====================================================
 // GET TARGETED CALL INVITATIONS
 // =====================================================
-//
-// GET /api/calls/pending
-//
-// Only calls specifically addressed to the authenticated
-// user are returned.
-//
-// The caller/trainer is also included so the client can
-// display who invited them.
-// =====================================================
 
 router.get(
   "/pending",
@@ -926,6 +1032,16 @@ router.get(
   ) => {
 
     try {
+
+      // -----------------------------------------------
+      // Remove stale invitations before returning the
+      // pending list.
+      // -----------------------------------------------
+
+      await expireRingingInvitations(
+        req.user.tenantId
+      );
+
 
       const calls =
         await Call.find({
@@ -939,10 +1055,17 @@ router.get(
           status:
             "ringing",
 
+          invitationExpiresAt: {
+            $gt:
+              new Date(),
+          },
+
         })
           .sort({
+
             createdAt:
               -1,
+
           })
           .limit(
             MAX_PENDING_CALLS
@@ -956,6 +1079,7 @@ router.get(
 
       const trainerIds = [
         ...new Set(
+
           calls
             .map(
               call =>
@@ -966,6 +1090,7 @@ router.get(
                   : null
             )
             .filter(Boolean)
+
         ),
       ];
 
@@ -975,7 +1100,8 @@ router.get(
 
 
       if (
-        trainerIds.length > 0
+        trainerIds.length >
+        0
       ) {
 
         const trainers =
@@ -995,6 +1121,7 @@ router.get(
 
         trainerMap =
           new Map(
+
             trainers.map(
               trainer => [
                 String(
@@ -1003,6 +1130,7 @@ router.get(
                 trainer,
               ]
             )
+
           );
 
       }
@@ -1081,14 +1209,9 @@ router.get(
   }
 );
 
+
 // =====================================================
 // GET CALL STATUS
-// =====================================================
-//
-// GET /api/calls/:callId
-//
-// Used by connected clients to detect when a training
-// session has ended.
 // =====================================================
 
 router.get(
@@ -1124,6 +1247,15 @@ router.get(
           });
 
       }
+
+
+      // -----------------------------------------------
+      // Keep stale targeted invitations consistent.
+      // -----------------------------------------------
+
+      await expireRingingInvitations(
+        req.user.tenantId
+      );
 
 
       const call =
@@ -1176,8 +1308,10 @@ router.get(
 
 
       const isOwnerAdmin =
-        membership.role === "owner" ||
-        membership.role === "admin";
+        membership.role ===
+          "owner" ||
+        membership.role ===
+          "admin";
 
 
       const isCreator =
@@ -1190,7 +1324,9 @@ router.get(
 
 
       const isRecipient =
-        call.recipientUserId &&
+        Boolean(
+          call.recipientUserId
+        ) &&
         String(
           call.recipientUserId
         ) ===
@@ -1200,7 +1336,9 @@ router.get(
 
 
       const isClaimedEmployee =
-        call.claimedByUserId &&
+        Boolean(
+          call.claimedByUserId
+        ) &&
         String(
           call.claimedByUserId
         ) ===
@@ -1266,12 +1404,6 @@ router.get(
 // =====================================================
 // JOIN TARGETED CALL
 // =====================================================
-//
-// POST /api/calls/:callId/join
-//
-// Only the designated recipient can perform this action.
-//
-// =====================================================
 
 router.post(
   "/:callId/join",
@@ -1308,8 +1440,22 @@ router.post(
       }
 
 
+      // -----------------------------------------------
+      // Expire stale invitations before attempting
+      // the actual join.
+      // -----------------------------------------------
+
+      await expireRingingInvitations(
+        req.user.tenantId
+      );
+
+
+      const now =
+        new Date();
+
+
       // =================================================
-      // FIND TARGETED INVITATION
+      // FIND VALID INVITATION
       // =================================================
 
       const call =
@@ -1326,6 +1472,12 @@ router.post(
 
           status:
             "ringing",
+
+          invitationExpiresAt: {
+            $gt:
+              now,
+
+          },
 
         });
 
@@ -1365,7 +1517,13 @@ router.post(
 
 
       call.claimedAt =
-        new Date();
+        now;
+
+
+      // Invitation has now been consumed.
+
+      call.invitationExpiresAt =
+        null;
 
 
       await call.save();
@@ -1429,14 +1587,6 @@ router.post(
 
 // =====================================================
 // ACCEPT QUEUE CALL
-// =====================================================
-//
-// POST /api/calls/:callId/accept
-//
-// Atomic claim of a waiting queue call.
-//
-// Targeted ringing calls cannot be accepted here.
-//
 // =====================================================
 
 router.post(
@@ -1507,10 +1657,6 @@ router.post(
 
       }
 
-
-      // =================================================
-      // ATOMIC CLAIM
-      // =================================================
 
       const call =
         await Call.findOneAndUpdate(
@@ -1639,10 +1785,6 @@ router.post(
 // =====================================================
 // RELEASE CLAIMED QUEUE CALL
 // =====================================================
-//
-// POST /api/calls/:callId/release
-//
-// =====================================================
 
 router.post(
   "/:callId/release",
@@ -1712,10 +1854,6 @@ router.post(
 
       }
 
-
-      // =================================================
-      // ATOMIC RELEASE
-      // =================================================
 
       const call =
         await Call.findOneAndUpdate(
@@ -1838,17 +1976,6 @@ router.post(
 
 // =====================================================
 // END CALL
-// =====================================================
-//
-// POST /api/calls/:callId/end
-//
-// Allowed:
-//
-// - owner/admin
-// - original creator
-// - claimed queue employee
-// - targeted recipient
-//
 // =====================================================
 
 router.post(
@@ -1996,7 +2123,8 @@ router.post(
       // =================================================
 
       if (
-        call.status === "ended"
+        call.status ===
+        "ended"
       ) {
 
         return res.json({
@@ -2020,6 +2148,12 @@ router.post(
 
       call.endedAt =
         new Date();
+
+
+      // Any outstanding invitation is no longer valid.
+
+      call.invitationExpiresAt =
+        null;
 
 
       await call.save();

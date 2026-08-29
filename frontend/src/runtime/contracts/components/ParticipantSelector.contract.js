@@ -89,21 +89,22 @@ const ParticipantSelectorContract = {
 
   runtime: {
 
-    state: {
+  state: {
 
-      reads: [
-        "call.recipientId",
-      ],
+    reads: [
+      "call.recipientIds",
+    ],
 
-      writes: [
-        "call.recipientId",
-      ],
-
-    },
-
-    actions: [],
+    writes: [
+      "call.recipientIds",
+      "call.recipientId",
+    ],
 
   },
+
+  actions: [],
+
+},
 
 
   // =====================================================

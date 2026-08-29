@@ -83,6 +83,21 @@ import completeInterview
 import fetchPendingCalls
   from "./call/fetchPendingCalls";
 
+import startTrainingSession
+  from "./training/startTrainingSession";
+
+import createTrainingSession
+  from "./training/createTrainingSession";
+
+import fetchPendingSessions
+  from "./training/fetchPendingSessions";
+
+import joinTrainingSession
+  from "./training/joinTrainingSession";
+
+import endTrainingSession
+  from "./training/endTrainingSession";
+
 
 import {
   setColor,
@@ -195,6 +210,27 @@ export const ACTIONS = {
 
   INTERVIEW_COMPLETE:
     "interview.complete",
+
+  
+  // =======================================================
+  // REMOTE TRAINING
+  // =======================================================
+
+  
+  TRAINING_START_SESSION:
+    "training.startSession",
+  
+  TRAINING_CREATE_SESSION:
+    "training.createSession",
+
+  TRAINING_FETCH_PENDING_SESSIONS:
+  "training.fetchPendingSessions",
+
+  TRAINING_JOIN_SESSION:
+    "training.joinSession",
+  
+  TRAINING_END_SESSION:
+    "training.endSession",
 
 
   // =======================================================
@@ -780,6 +816,120 @@ export const actionRegistry = {
 
   },
 
+  // =======================================================
+  // REMOTE TRAINING SYSTEM
+  // =======================================================
+
+
+  training: {
+
+  createSession: createAction({
+
+    value:
+      ACTIONS.TRAINING_CREATE_SESSION,
+
+    label:
+      "Create Training Session",
+
+    category:
+      "training",
+
+    run:
+      createTrainingSession,
+
+    targets: [
+      "ParticipantSelector",
+    ],
+
+  }),
+
+
+  startSession: createAction({
+
+    value:
+      ACTIONS.TRAINING_START_SESSION,
+
+    label:
+      "Start Training Session",
+
+    category:
+      "training",
+
+    run:
+      startTrainingSession,
+
+    targets: [
+      "AgoraFeed",
+    ],
+
+  }),
+
+
+  fetchPendingSessions: createAction({
+
+    value:
+      ACTIONS.TRAINING_FETCH_PENDING_SESSIONS,
+
+    label:
+      "Fetch Pending Training Sessions",
+
+    category:
+      "training",
+
+    run:
+      fetchPendingSessions,
+
+    targets: [
+      "TrainingInvitation",
+    ],
+
+  }),
+
+
+  joinSession: createAction({
+
+    value:
+      ACTIONS.TRAINING_JOIN_SESSION,
+
+    label:
+      "Join Training Session",
+
+    category:
+      "training",
+
+    run:
+      joinTrainingSession,
+
+    targets: [
+      "TrainingInvitation",
+      "AgoraFeed",
+    ],
+
+  }),
+
+  endSession: createAction({
+
+    value:
+      ACTIONS.TRAINING_END_SESSION,
+
+    label:
+      "End Training Session",
+
+    category:
+      "training",
+
+    run:
+      endTrainingSession,
+
+    targets: [
+      "AgoraFeed",
+      "TrainingInvitation",
+    ],
+
+  }),
+
+},
+
 
   // =======================================================
   // AI INTERVIEW SYSTEM
@@ -892,6 +1042,8 @@ export const actionRegistry = {
     }),
 
   },
+  
+
 
 
   // =======================================================
@@ -1010,15 +1162,27 @@ console.log(
 
 
 console.log(
-  "[CALL TARGETED ACTION DEBUG]",
+  "[ACTIONS REGISTRY LOADED]",
   {
+    callActions:
+      Object.keys(
+        actionRegistry.call || {}
+      ),
 
-    joinInvitedCall:
-      actionRegistry.call?.joinInvitedCall,
+    videoActions:
+      Object.keys(
+        actionRegistry.video || {}
+      ),
 
-    joinInvitedCallRun:
-      typeof actionRegistry.call?.joinInvitedCall?.run,
+    trainingActions:
+      Object.keys(
+        actionRegistry.training || {}
+      ),
 
+    interviewActions:
+      Object.keys(
+        actionRegistry.interview || {}
+      ),
   }
 );
 

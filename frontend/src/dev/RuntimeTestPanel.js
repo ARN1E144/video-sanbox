@@ -1,5 +1,4 @@
-
-// src/dev/RuntimeTestPanel.js
+//src/dev/RuntimeTestPanel.js
 
 import React, {
   useState,
@@ -78,10 +77,7 @@ function findElementBySourceId(
 
 
   // ---------------------------------------------------
-  // Some older installed structures may preserve the
-  // source ID in props.metadata.
-  //
-  // This is only a diagnostic fallback.
+  // Older installed structures
   // ---------------------------------------------------
 
   if (
@@ -159,17 +155,6 @@ export default function RuntimeTestPanel() {
   // =====================================================
   // PROJECT RUNTIME DIAGNOSTIC
   // =====================================================
-  //
-  // This is deliberately here while we stabilise the
-  // project → runtime identity flow.
-  //
-  // Expected:
-  //
-  // activeProject
-  //       ===
-  // runtime.project.id
-  //
-  // =====================================================
 
   const runtimeProject =
     runtime.get?.(
@@ -186,6 +171,7 @@ export default function RuntimeTestPanel() {
   console.log(
     "[PROJECT RUNTIME TEST]",
     {
+
       activeProject,
 
       runtimeProject,
@@ -307,6 +293,37 @@ export default function RuntimeTestPanel() {
 
   }, []);
 
+  useEffect(() => {
+
+    const unsubscribe =
+      runtime.subscribe(
+        "training.participantIds",
+        value => {
+
+          const ids =
+            Array.isArray(value)
+              ? value
+              : [];
+
+
+          setTrainingParticipantIds(
+            ids
+          );
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    runtime,
+  ]);
+
 
   // =====================================================
   // DRAGGING
@@ -329,6 +346,16 @@ export default function RuntimeTestPanel() {
       80,
 
   });
+
+  const [
+    trainingParticipantIds,
+    setTrainingParticipantIds,
+  ] = useState(
+    () =>
+      runtime.get?.(
+        "training.participantIds"
+      ) || []
+  );
 
 
   const dragRef =
@@ -529,6 +556,130 @@ export default function RuntimeTestPanel() {
 
 
       console.groupEnd();
+
+    };
+
+
+  // =====================================================
+  // TRAINING RUNTIME STATE
+  // =====================================================
+
+  const getTrainingParticipantIds =
+  () => {
+
+    return [
+      ...new Set(
+
+        trainingParticipantIds
+
+          .map(
+            id =>
+              String(id).trim()
+          )
+
+          .filter(Boolean)
+
+      ),
+    ];
+
+  };
+
+  // =====================================================
+  // CREATE TRAINING SESSION
+  // =====================================================
+
+
+  const createTrainingSession =
+  async () => {
+
+    const participantIds =
+      getTrainingParticipantIds();
+
+    console.log(
+      "[RuntimeTest] Creating training session",
+      {
+        participantIds,
+        count:
+          participantIds.length,
+      }
+    );
+
+    if (
+      participantIds.length === 0
+    ) {
+
+      console.warn(
+        "[RuntimeTest] Cannot create training session - no participants selected"
+      );
+
+      return;
+    }
+
+    const result =
+      await runAction(
+        "training.createSession",
+        {
+          participantIds,
+        }
+      );
+
+    console.log(
+      "[RuntimeTest] training.createSession result:",
+      result
+    );
+
+  };
+
+
+  // =====================================================
+  // START TRAINING SESSION
+  // =====================================================
+
+  const startTrainingSession =
+    async () => {
+
+      const participantIds =
+        getTrainingParticipantIds();
+
+
+      console.log(
+        "[RuntimeTest] Starting training session",
+        {
+          participantIds,
+          count:
+            participantIds.length,
+        }
+      );
+
+
+      if (
+        participantIds.length ===
+        0
+      ) {
+
+        console.warn(
+          "[RuntimeTest] Cannot start training session - no participants selected"
+        );
+
+
+        return;
+
+      }
+
+
+      const result =
+        await runAction(
+          "training.startSession",
+          {
+            participantIds,
+          }
+        );
+
+
+      console.log(
+        "[RuntimeTest] training.startSession result:",
+        result
+      );
 
     };
 
@@ -786,12 +937,19 @@ export default function RuntimeTestPanel() {
 
 
   // =====================================================
+  // TRAINING PARTICIPANT COUNT
+  // =====================================================
+
+  const trainingParticipantCount =
+    getTrainingParticipantIds().length;
+
+
+  // =====================================================
   // MOBILE DEBUG BUTTON
   // =====================================================
 
   if (
-    isMobile &&
-    !isOpen
+  !isOpen
   ) {
 
     return (
@@ -946,103 +1104,124 @@ export default function RuntimeTestPanel() {
     >
 
       {/* =================================================
-          HEADER
-      ================================================= */}
+              HEADER
+          ================================================= */}
 
-      <div
+          <div
 
-        onPointerDown={
-          isMobile
-            ? undefined
-            : handleDragStart
-        }
-
-        style={{
-
-          cursor:
-            isMobile
-              ? "default"
-              : "move",
-
-          userSelect:
-            "none",
-
-          fontWeight:
-            "bold",
-
-          marginBottom:
-            12,
-
-          display:
-            "flex",
-
-          alignItems:
-            "center",
-
-          justifyContent:
-            "space-between",
-
-        }}
-
-      >
-
-        <span>
-          Runtime Test Panel
-        </span>
-
-
-        {isMobile && (
-
-          <button
-
-            data-debug-close
-
-            onClick={() => {
-              setIsOpen(
-                false
-              );
-            }}
+            onPointerDown={
+              isMobile
+                ? undefined
+                : handleDragStart
+            }
 
             style={{
 
-              border:
+              cursor:
+                isMobile
+                  ? "default"
+                  : "move",
+
+              userSelect:
                 "none",
 
-              background:
-                "rgba(255,255,255,.08)",
+              fontWeight:
+                "bold",
 
-              color:
-                "#fff",
+              marginBottom:
+                12,
 
-              borderRadius:
-                6,
+              display:
+                "flex",
 
-              width:
-                32,
+              alignItems:
+                "center",
 
-              height:
-                32,
+              justifyContent:
+                "space-between",
 
-              cursor:
-                "pointer",
-
-              fontSize:
-                18,
+              gap:
+                8,
 
             }}
 
-            aria-label=
-              "Close Runtime Test Panel"
-
           >
 
-            ×
+            <span>
+              Runtime Test Panel
+            </span>
 
-          </button>
 
-        )}
+            <button
 
-      </div>
+              data-debug-close
+
+              onPointerDown={
+                event =>
+                  event.stopPropagation()
+              }
+
+              onClick={() => {
+
+                setIsOpen(
+                  false
+                );
+
+              }}
+
+              style={{
+
+                border:
+                  "none",
+
+                background:
+                  "rgba(255,255,255,.08)",
+
+                color:
+                  "#fff",
+
+                borderRadius:
+                  6,
+
+                width:
+                  30,
+
+                height:
+                  30,
+
+                cursor:
+                  "pointer",
+
+                fontSize:
+                  16,
+
+                display:
+                  "flex",
+
+                alignItems:
+                  "center",
+
+                justifyContent:
+                  "center",
+
+                flexShrink:
+                  0,
+
+              }}
+
+              aria-label=
+                "Minimise Runtime Test Panel"
+
+              title=
+                "Minimise Runtime Test Panel"
+
+            >
+
+              −
+
+            </button>
+
+          </div>
 
 
       {/* =================================================
@@ -1172,8 +1351,12 @@ export default function RuntimeTestPanel() {
 
               color:
                 activeProject &&
-                runtimeProjectId ===
-                  activeProject
+                String(
+                  runtimeProjectId
+                ) ===
+                  String(
+                    activeProject
+                  )
 
                   ? "#86efac"
 
@@ -1208,6 +1391,171 @@ export default function RuntimeTestPanel() {
         ================================================= */}
 
         <CallControlsPanel />
+
+        <hr />
+
+
+        {/* =================================================
+            TRAINING CONTROLS
+        ================================================= */}
+
+        <div>
+
+          <div
+            style={{
+              fontWeight:
+                "bold",
+
+              marginBottom:
+                8,
+            }}
+          >
+            Training Controls
+          </div>
+
+
+          <div
+            style={{
+              fontSize:
+                11,
+
+              color:
+                "#aaa",
+
+              marginBottom:
+                10,
+
+              lineHeight:
+                1.5,
+            }}
+          >
+
+            Selected participants:
+            {" "}
+            {trainingParticipantCount}
+
+            <br />
+
+            Runtime namespace:
+            {" "}
+            training
+
+            <br />
+
+            Action:
+            {" "}
+            training.startSession
+
+          </div>
+
+
+          <button
+
+            onClick={
+              startTrainingSession
+            }
+
+            disabled={
+              trainingParticipantCount ===
+              0
+            }
+
+            style={{
+
+              width:
+                "100%",
+
+              minHeight:
+                36,
+
+              marginBottom:
+                8,
+
+              cursor:
+                trainingParticipantCount > 0
+                  ? "pointer"
+                  : "not-allowed",
+
+              opacity:
+                trainingParticipantCount > 0
+                  ? 1
+                  : 0.55,
+
+            }}
+
+          >
+
+            Test Start Training Session
+            {" "}
+            (
+            {trainingParticipantCount}
+            )
+
+          </button>
+
+          <button
+            onClick={
+              createTrainingSession
+            }
+
+            disabled={
+              trainingParticipantCount === 0
+            }
+
+            style={{
+              width:
+                "100%",
+
+              minHeight:
+                36,
+
+              marginBottom:
+                8,
+
+              cursor:
+                trainingParticipantCount > 0
+                  ? "pointer"
+                  : "not-allowed",
+
+              opacity:
+                trainingParticipantCount > 0
+                  ? 1
+                  : 0.55,
+            }}
+          >
+            Test Create Training Session
+            {" "}
+            (
+            {trainingParticipantCount}
+            )
+          </button>
+
+
+          <div
+            style={{
+              fontSize:
+                10,
+
+              color:
+                trainingParticipantCount > 0
+                  ? "#86efac"
+                  : "#777",
+
+              lineHeight:
+                1.5,
+            }}
+          >
+
+            {trainingParticipantCount > 0
+
+              ? "✓ Participants ready for training.startSession"
+
+              : "Select one or more participants first"}
+
+          </div>
+
+        </div>
+
 
         <hr />
 
@@ -1541,4 +1889,3 @@ export default function RuntimeTestPanel() {
   );
 
 }
-
