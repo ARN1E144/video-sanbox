@@ -1,79 +1,334 @@
-import React, { useMemo } from "react";
-import InspectorSection from "./InspectorSection";
-import FieldRenderer from "./FieldRenderer";
+// src/components/inspectorPanel/InspectorSchemaPanel.js
+
+import React, {
+  useMemo,
+} from "react";
+
+import InspectorSection
+  from "./InspectorSection";
+
+import FieldRenderer
+  from "./FieldRenderer";
+
+
+// =====================================================
+// ACTION-OWNED PROPERTIES
+// =====================================================
+//
+// These are no longer rendered by the generic schema
+// inspector.
+//
+// InspectorActionPanel owns them.
+//
+// =====================================================
+
+const ACTION_PROPS = new Set([
+
+  "action",
+
+  "targetId",
+
+  "params",
+
+  "actionParams",
+
+  "condition",
+
+  "nextActions",
+
+]);
+
+
+// =====================================================
+// INSPECTOR SCHEMA PANEL
+// =====================================================
 
 export default function InspectorSchemaPanel({
+
   schema = {},
+
   props = {},
+
   onChange,
-  filterMode = "build",
+
+  filterMode =
+    "build",
+
   elements = [],
-  selectedElement = null,
+
+  selectedElement =
+    null,
+
 }) {
-  const grouped = useMemo(() => {
-    const g = {};
 
-    Object.entries(schema).forEach(([key, cfg]) => {
-      const filter = cfg.filter || "build";
+  // ===================================================
+  // FILTER + GROUP
+  // ===================================================
 
-      // 🔥 FILTER RULE (CORE V1 BEHAVIOUR)
-      if (filter === "runtime") return;
-      if (filterMode === "build" && filter === "advanced") return;
+  const grouped =
+    useMemo(
+      () => {
 
-      const group = cfg.group || "general";
-      if (!g[group]) g[group] = [];
+        const groups =
+          {};
 
-      g[group].push({ key, ...cfg });
-    });
 
-    return g;
-  }, [schema, filterMode]);
+        Object.entries(
+          schema
+        ).forEach(
+          (
+            [
+              key,
+              cfg = {},
+            ]
+          ) => {
 
-  return Object.entries(grouped).map(([group, fields]) => (
-    <InspectorSection key={group} title={group}>
-      {fields.map((field) => {
-        const value = props[field.key];
+            // -----------------------------------------
+            // ACTION PROPERTIES BELONG TO THE ACTION
+            // PANEL.
+            // -----------------------------------------
 
-        const visible =
-          !field.visibleWhen ||
-          Object.entries(field.visibleWhen).every(
-            ([k, v]) => props[k] === v
-          );
+            if (
+              ACTION_PROPS.has(
+                key
+              )
+            ) {
 
-        if (!visible) return null;
+              return;
 
-        
-
-        return (
-
-          console.log(
-            "[INSPECTOR FIELD DEBUG]",
-            {
-              selectedElement,
-              elements,
-              fieldKey: field.key,
-              fieldType: field.type
             }
-          ),
-          <div
-            key={field.key}
-            className="inspector-field-row"
-          >
-            <label className="inspector-field-label">
-              {field.label || field.key}
-            </label>
 
-            <FieldRenderer
-              schema={field}
-              value={value}
-              propKey={field.key}
-              onChange={onChange}
-              elements={elements}
-              selectedElement={selectedElement}
-            />
-          </div>
+
+            const filter =
+              cfg.filter ||
+              "build";
+
+
+            // -----------------------------------------
+            // Runtime-only fields
+            // -----------------------------------------
+
+            if (
+              filter ===
+                "runtime"
+            ) {
+
+              return;
+
+            }
+
+
+            // -----------------------------------------
+            // Advanced fields are hidden in normal
+            // builder mode.
+            // -----------------------------------------
+
+            if (
+              filterMode ===
+                "build" &&
+              filter ===
+                "advanced"
+            ) {
+
+              return;
+
+            }
+
+
+            const group =
+              cfg.group ||
+              "general";
+
+
+            if (
+              !groups[group]
+            ) {
+
+              groups[group] =
+                [];
+
+            }
+
+
+            groups[group].push(
+              {
+                key,
+                ...cfg,
+              }
+            );
+
+          }
         );
-      })}
-    </InspectorSection>
-  ));
+
+
+        return groups;
+
+      },
+      [
+        schema,
+        filterMode,
+      ]
+    );
+
+
+  // ===================================================
+  // RENDER
+  // ===================================================
+
+  return (
+
+    <>
+
+      {Object.entries(
+        grouped
+      ).map(
+        (
+          [
+            group,
+            fields,
+          ]
+        ) => (
+
+          <InspectorSection
+
+            key={
+              group
+            }
+
+            title={
+              group
+            }
+
+          >
+
+            {fields.map(
+              field => {
+
+                const value =
+                  props[
+                    field.key
+                  ];
+
+
+                // ---------------------------------------
+                // VISIBLE WHEN
+                // ---------------------------------------
+
+                const visible =
+                  !field.visibleWhen ||
+                  Object.entries(
+                    field.visibleWhen
+                  ).every(
+                    (
+                      [
+                        key,
+                        expected,
+                      ]
+                    ) =>
+                      props[key] ===
+                      expected
+                  );
+
+
+                if (
+                  !visible
+                ) {
+
+                  return null;
+
+                }
+
+
+                console.log(
+                  "[INSPECTOR FIELD DEBUG]",
+                  {
+
+                    selectedElement,
+
+                    elements,
+
+                    fieldKey:
+                      field.key,
+
+                    fieldType:
+                      field.type,
+
+                    value,
+
+                  }
+                );
+
+
+                return (
+
+                  <div
+
+                    key={
+                      field.key
+                    }
+
+                    className="
+                      inspector-field-row
+                    "
+
+                  >
+
+                    <label
+                      className="
+                        inspector-field-label
+                      "
+                    >
+
+                      {
+                        field.label ||
+                        field.key
+                      }
+
+                    </label>
+
+
+                    <FieldRenderer
+
+                      schema={
+                        field
+                      }
+
+                      value={
+                        value
+                      }
+
+                      propKey={
+                        field.key
+                      }
+
+                      onChange={
+                        onChange
+                      }
+
+                      elements={
+                        elements
+                      }
+
+                      selectedElement={
+                        selectedElement
+                      }
+
+                    />
+
+                  </div>
+
+                );
+
+              }
+            )}
+
+          </InspectorSection>
+
+        )
+      )}
+
+    </>
+
+  );
+
 }

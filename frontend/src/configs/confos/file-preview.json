@@ -1,0 +1,34 @@
+{
+  "id": "confo.pdf_preview",
+  "name": "File Preview Test",
+  "version": 1,
+  "type": "confo",
+  "description": "Test PDF and file preview rendering.",
+  "capabilities": [
+    "media",
+    "files"
+  ],
+  "tree": {
+    "id": "file-preview-root",
+    "type": "Container",
+    "props": {
+      "layout": "vertical",
+      "backgroundColor": "#181818"
+    },
+    "children": [
+      {
+        "id": "file-preview",
+        "type": "FilePreview",
+        "width": 800,
+        "height": 600,
+        "props": {
+            "source": "{{media.fileSource}}",
+            "title": "File Preview",
+            "objectFit": "contain",
+            "borderRadius": 8,
+            "controls": true
+            }
+      }
+    ]
+  }
+}

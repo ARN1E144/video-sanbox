@@ -14,16 +14,57 @@ import {
 } from "../context/ActionContext";
 
 
+// =====================================================
+// HELPERS
+// =====================================================
+
+function normaliseNextActions(
+  value
+) {
+
+  if (
+    !Array.isArray(
+      value
+    )
+  ) {
+
+    return [];
+
+  }
+
+
+  return value.filter(
+    action =>
+      action &&
+      typeof action ===
+        "object" &&
+      typeof action.type ===
+        "string" &&
+      action.type.trim()
+  );
+
+}
+
+
+// =====================================================
+// CANVAS ELEMENT RENDERER
+// =====================================================
+
 export default function CanvasElementRenderer({
+
   Component,
+
   element,
+
   binding,
+
   children,
+
 }) {
 
-  // =====================================================
-  // SAFE ELEMENT VALUES
-  // =====================================================
+  // ===================================================
+  // SAFE ELEMENT
+  // ===================================================
 
   const safeElement =
     element || {};
@@ -44,9 +85,9 @@ export default function CanvasElementRenderer({
     {};
 
 
-  // =====================================================
+  // ===================================================
   // RUNTIME PROPS
-  // =====================================================
+  // ===================================================
 
   const props =
     useRuntimeProps(
@@ -54,35 +95,29 @@ export default function CanvasElementRenderer({
     );
 
 
-  // =====================================================
+  // ===================================================
   // ACTION CONTEXT
-  // =====================================================
+  // ===================================================
 
   const {
     runAction,
+
+    runActionPipeline,
+
   } =
     useActionContext();
 
 
-  // =====================================================
-  // ELEMENT META
-  // =====================================================
-  //
-  // IMPORTANT:
-  //
-  // The installer preserves:
-  //
-  // meta.sourceId
-  //
-  // The renderer must pass it through to the actual
-  // component.
-  //
-  // =====================================================
+  // ===================================================
+  // META
+  // ===================================================
 
   const resolvedMeta =
     useMemo(
       () => ({
+
         ...(safeElement.meta || {}),
+
       }),
       [
         safeElement.meta,
@@ -90,9 +125,25 @@ export default function CanvasElementRenderer({
     );
 
 
-  // =====================================================
+  // ===================================================
+  // ACTION CHAIN
+  // ===================================================
+
+  const nextActions =
+    useMemo(
+      () =>
+        normaliseNextActions(
+          props?.nextActions
+        ),
+      [
+        props?.nextActions,
+      ]
+    );
+
+
+  // ===================================================
   // EVENT → ACTION BRIDGE
-  // =====================================================
+  // ===================================================
 
   const emit =
     useCallback(
@@ -122,66 +173,153 @@ export default function CanvasElementRenderer({
         );
 
 
-        // ===============================================
-        // ACTION EVENT
-        // ===============================================
+        // =============================================
+        // NO ACTION
+        // =============================================
 
         if (
-          eventName === "onClick" &&
-          props.action
+          eventName !==
+            "onClick" ||
+          !props?.action
         ) {
 
           console.log(
-            "[CANVAS EVENT → ACTION]",
+            "[CANVAS EVENT]",
+            "No action configured for event",
             {
 
-              action:
-                props.action,
+              eventName,
 
-              targetId:
-                props.targetId ||
-                null,
-
-              sourceId:
-                elementId,
-
-              sourceConfoId:
-                resolvedMeta?.sourceId ||
-                null,
+              elementId,
 
             }
           );
 
 
-          try {
+          return {
 
-            const result =
-              await runAction(
+            ok:
+              true,
+
+            skipped:
+              true,
+
+            reason:
+              "NO_ACTION_CONFIGURED",
+
+          };
+
+        }
+
+
+        // =============================================
+        // PRIMARY ACTION PARAMS
+        // =============================================
+
+        const actionParams = {
+
+          // -------------------------------------------
+          // Inspector-defined action parameters
+          // -------------------------------------------
+
+          ...(props?.params &&
+          typeof props.params ===
+            "object"
+            ? props.params
+            : {}),
+
+
+          // -------------------------------------------
+          // Canvas action context
+          // -------------------------------------------
+
+          targetId:
+            props?.targetId ||
+            null,
+
+          sourceId:
+            elementId,
+
+          sourceType:
+            elementType,
+
+          sourceConfoId:
+            resolvedMeta?.sourceId ||
+            null,
+
+          payload,
+
+        };
+
+
+        // =============================================
+        // PRIMARY ACTION
+        // =============================================
+
+        console.log(
+          "[CANVAS EVENT → ACTION]",
+          {
+
+            action:
+              props.action,
+
+            targetId:
+              props.targetId ||
+              null,
+
+            sourceId:
+              elementId,
+
+            sourceType:
+              elementType,
+
+            sourceConfoId:
+              resolvedMeta?.sourceId ||
+              null,
+
+            params:
+              actionParams,
+
+            nextActionCount:
+              nextActions.length,
+
+          }
+        );
+
+
+        try {
+
+          const result =
+            await runAction(
+              props.action,
+              actionParams
+            );
+
+
+          console.log(
+            "[CANVAS PRIMARY ACTION RESULT]",
+            {
+
+              action:
                 props.action,
-                {
 
-                  targetId:
-                    props.targetId ||
-                    null,
+              result,
 
-                  sourceId:
-                    elementId,
-
-                  sourceType:
-                    elementType,
-
-                  sourceConfoId:
-                    resolvedMeta?.sourceId ||
-                    null,
-
-                  payload,
-
-                }
-              );
+            }
+          );
 
 
-            console.log(
-              "[CANVAS ACTION RESULT]",
+          // =========================================
+          // PRIMARY ACTION FAILED
+          // =========================================
+
+          if (
+            !result?.ok
+          ) {
+
+            console.warn(
+              "[CANVAS ACTION CHAIN]",
+              "Primary action failed - chain stopped",
               {
 
                 action:
@@ -196,20 +334,34 @@ export default function CanvasElementRenderer({
             return result;
 
           }
-          catch (
-            error
+
+
+          // =========================================
+          // NO CHAIN
+          // =========================================
+
+          if (
+            nextActions.length ===
+              0
+          ) {
+
+            return result;
+
+          }
+
+
+          // =========================================
+          // RUN CHAIN
+          // =========================================
+
+          if (
+            typeof runActionPipeline !==
+              "function"
           ) {
 
             console.error(
-              "[CANVAS ACTION ERROR]",
-              {
-
-                action:
-                  props.action,
-
-                error,
-
-              }
+              "[CANVAS ACTION CHAIN]",
+              "runActionPipeline is not available"
             );
 
 
@@ -219,96 +371,177 @@ export default function CanvasElementRenderer({
                 false,
 
               error:
-                error?.message ||
-                "CANVAS_ACTION_FAILED",
+                "ACTION_PIPELINE_UNAVAILABLE",
+
+              primaryResult:
+                result,
 
             };
 
           }
 
+
+          console.log(
+            "[CANVAS ACTION CHAIN]",
+            {
+
+              elementId,
+
+              elementType,
+
+              primaryAction:
+                props.action,
+
+              nextActions,
+
+            }
+          );
+
+
+          const chainResult =
+            await runActionPipeline(
+              nextActions,
+              {
+
+                // -------------------------------------
+                // Values inherited by every chained
+                // action.
+                // -------------------------------------
+
+                sourceId:
+                  elementId,
+
+                sourceType:
+                  elementType,
+
+                sourceConfoId:
+                  resolvedMeta?.sourceId ||
+                  null,
+
+                payload,
+
+                primaryResult:
+                  result,
+
+              }
+            );
+
+
+          console.log(
+            "[CANVAS ACTION CHAIN COMPLETE]",
+            {
+
+              primaryAction:
+                props.action,
+
+              primaryResult:
+                result,
+
+              chainResult,
+
+            }
+          );
+
+
+          // =========================================
+          // RETURN CHAIN RESULT
+          // =========================================
+
+          return {
+
+            ok:
+              chainResult?.ok !==
+                false,
+
+            primaryResult:
+              result,
+
+            chainResult,
+
+          };
+
         }
+        catch (
+          error
+        ) {
+
+          console.error(
+            "[CANVAS ACTION ERROR]",
+            {
+
+              action:
+                props.action,
+
+              error,
+
+            }
+          );
 
 
-        // ===============================================
-        // NO ACTION
-        // ===============================================
+          return {
 
-        console.log(
-          "[CANVAS EVENT]",
-          "No action configured for event",
-          {
+            ok:
+              false,
 
-            eventName,
+            error:
+              error?.message ||
+              "CANVAS_ACTION_FAILED",
 
-            elementId,
+          };
 
-          }
-        );
-
-
-        return {
-
-          ok:
-            true,
-
-          skipped:
-            true,
-
-          reason:
-            "NO_ACTION_CONFIGURED",
-
-        };
+        }
 
       },
       [
         elementId,
+
         elementType,
+
         props,
+
         resolvedMeta,
+
+        nextActions,
+
         runAction,
+
+        runActionPipeline,
+
       ]
     );
 
 
-  // =====================================================
+  // ===================================================
   // DEBUG
-  // =====================================================
+  // ===================================================
 
   console.log(
-    "[CanvasElementRenderer] RESOLVED COMPONENT",
+  "[CHAIN DEBUG]",
+  JSON.stringify(
     {
-
       elementId,
-
       elementType,
-
-      sourceId:
-        resolvedMeta?.sourceId ||
-        null,
-
-      ComponentName:
-        Component?.displayName ||
-        Component?.name ||
-        "UNKNOWN",
-
-      props,
-
-      binding,
-
-      meta:
-        resolvedMeta,
-
-    }
-  );
+      action: props?.action || null,
+      targetId: props?.targetId || null,
+      params: props?.params || null,
+      nextActions: props?.nextActions || null,
+      rawElementProps: element?.props || null,
+    },
+    null,
+    2
+  )
+);
 
 
-  // =====================================================
+  // ===================================================
   // INVALID COMPONENT GUARD
+  // ===================================================
   //
   // IMPORTANT:
   //
-  // This happens AFTER all hooks have been called.
-  // =====================================================
+  // All hooks above execute before this guard.
+  //
+  // ===================================================
 
   if (
     !Component ||
@@ -318,8 +551,11 @@ export default function CanvasElementRenderer({
     console.warn(
       "[CanvasElementRenderer] Missing Component or element",
       {
+
         Component,
+
         element,
+
       }
     );
 
@@ -329,37 +565,28 @@ export default function CanvasElementRenderer({
   }
 
 
-  // =====================================================
+  // ===================================================
   // RENDER
-  // =====================================================
+  // ===================================================
 
   return (
 
     <Component
 
-      // Generated installed Canvas ID
       id={
         elementId
       }
 
-
-      // Runtime-resolved props
       {...props}
 
-
-      // Installed metadata
       meta={
         resolvedMeta
       }
 
-
-      // Existing binding
       binding={
         binding
       }
 
-
-      // Event bridge
       emit={
         emit
       }

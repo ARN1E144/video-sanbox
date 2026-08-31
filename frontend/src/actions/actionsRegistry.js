@@ -83,6 +83,7 @@ import completeInterview
 import fetchPendingCalls
   from "./call/fetchPendingCalls";
 
+
 import startTrainingSession
   from "./training/startTrainingSession";
 
@@ -211,24 +212,23 @@ export const ACTIONS = {
   INTERVIEW_COMPLETE:
     "interview.complete",
 
-  
+
   // =======================================================
   // REMOTE TRAINING
   // =======================================================
 
-  
   TRAINING_START_SESSION:
     "training.startSession",
-  
+
   TRAINING_CREATE_SESSION:
     "training.createSession",
 
   TRAINING_FETCH_PENDING_SESSIONS:
-  "training.fetchPendingSessions",
+    "training.fetchPendingSessions",
 
   TRAINING_JOIN_SESSION:
     "training.joinSession",
-  
+
   TRAINING_END_SESSION:
     "training.endSession",
 
@@ -262,22 +262,406 @@ export const actionAliases = {
 
 
 // =========================================================
-// HELPERS
+// CONDITION PATH HELPER
+// =========================================================
+//
+// Typed runtime state metadata.
+//
+// type:
+//   string
+//   number
+//   boolean
+//
+// options:
+//   Optional fixed values for enum-like runtime state.
+//
+// =========================================================
+
+const conditionPath = ({
+  path,
+  label,
+  type,
+  options = [],
+}) => ({
+
+  path,
+
+  label,
+
+  type,
+
+  options,
+
+});
+
+
+// =========================================================
+// ACTION HELPER
+// =========================================================
+//
+// targets
+//   Component types this action can target.
+//
+// requires
+//   Runtime paths that represent prerequisites.
+//
+// produces
+//   Runtime paths the action can establish/change.
+//
+// conditionPaths
+//   Typed runtime paths that are meaningful conditions
+//   for this action.
+//
+// nextActions
+//   Actions that logically make sense after this action.
+//
+// params
+//   Reserved for future parameter schemas.
+//
 // =========================================================
 
 const createAction = ({
+
   value,
+
   label,
+
   category,
+
   run,
+
   targets = [],
+
+  requires = [],
+
+  produces = [],
+
+  conditionPaths = [],
+
+  nextActions = [],
+
+  params = {},
+
 }) => ({
+
   value,
+
   label,
+
   category,
+
   run,
+
   targets,
+
+  requires,
+
+  produces,
+
+  conditionPaths,
+
+  nextActions,
+
+  params,
+
 });
+
+
+// =========================================================
+// COMMON CONDITION PATH DEFINITIONS
+// =========================================================
+//
+// These are reusable metadata descriptors.
+// The inspector consumes these through action
+// conditionPaths and does not hard-code the paths.
+//
+// =========================================================
+
+// -------------------------
+// CALL
+// -------------------------
+
+const PATH_CALL_ID =
+  conditionPath({
+    path:
+      "call.id",
+    label:
+      "Call ID",
+    type:
+      "string",
+  });
+
+const PATH_CALL_CHANNEL =
+  conditionPath({
+    path:
+      "call.channel",
+    label:
+      "Call channel",
+    type:
+      "string",
+  });
+
+const PATH_CALL_STATE =
+  conditionPath({
+    path:
+      "call.state",
+    label:
+      "Call state",
+    type:
+      "string",
+    options: [
+      "idle",
+      "ringing",
+      "accepted",
+      "joined",
+      "connected",
+      "ended",
+    ],
+  });
+
+const PATH_CALL_JOINED =
+  conditionPath({
+    path:
+      "call.joined",
+    label:
+      "Call joined",
+    type:
+      "boolean",
+  });
+
+const PATH_CALL_PARTICIPANTS =
+  conditionPath({
+    path:
+      "call.participants",
+    label:
+      "Participant count",
+    type:
+      "number",
+  });
+
+const PATH_CALL_REMOTE_USERS =
+  conditionPath({
+    path:
+      "call.remoteUsers",
+    label:
+      "Remote users",
+    type:
+      "object",
+  });
+
+
+// -------------------------
+// MEDIA
+// -------------------------
+
+const PATH_MEDIA_MIC_ENABLED =
+  conditionPath({
+    path:
+      "media.micEnabled",
+    label:
+      "Microphone enabled",
+    type:
+      "boolean",
+  });
+
+const PATH_MEDIA_VIDEO_ENABLED =
+  conditionPath({
+    path:
+      "media.videoEnabled",
+    label:
+      "Video enabled",
+    type:
+      "boolean",
+  });
+
+const PATH_MEDIA_PLAYING =
+  conditionPath({
+    path:
+      "media.playing",
+    label:
+      "Media playing",
+    type:
+      "boolean",
+  });
+
+const PATH_MEDIA_SOURCE =
+  conditionPath({
+    path:
+      "media.source",
+    label:
+      "Media source",
+    type:
+      "string",
+  });
+
+const PATH_MEDIA_RECORDING =
+  conditionPath({
+    path:
+      "media.recording",
+    label:
+      "Recording active",
+    type:
+      "boolean",
+  });
+
+const PATH_MEDIA_RECORDING_URL =
+  conditionPath({
+    path:
+      "media.recordingUrl",
+    label:
+      "Recording URL",
+    type:
+      "string",
+  });
+
+
+// -------------------------
+// AVAILABILITY
+// -------------------------
+
+const PATH_AVAILABILITY_STATUS =
+  conditionPath({
+    path:
+      "availability.status",
+    label:
+      "Availability status",
+    type:
+      "string",
+    options: [
+      "available",
+      "unavailable",
+      "busy",
+    ],
+  });
+
+
+// -------------------------
+// TRAINING
+// -------------------------
+
+const PATH_TRAINING_SESSION_ID =
+  conditionPath({
+    path:
+      "training.sessionId",
+    label:
+      "Training session ID",
+    type:
+      "string",
+  });
+
+const PATH_TRAINING_STATE =
+  conditionPath({
+    path:
+      "training.state",
+    label:
+      "Training state",
+    type:
+      "string",
+    options: [
+      "idle",
+      "pending",
+      "created",
+      "joined",
+      "active",
+      "ended",
+    ],
+  });
+
+const PATH_TRAINING_PENDING_SESSIONS =
+  conditionPath({
+    path:
+      "training.pendingSessions",
+    label:
+      "Pending training sessions",
+    type:
+      "object",
+  });
+
+
+// -------------------------
+// INTERVIEW
+// -------------------------
+
+const PATH_INTERVIEW_ID =
+  conditionPath({
+    path:
+      "interview.id",
+    label:
+      "Interview ID",
+    type:
+      "string",
+  });
+
+const PATH_INTERVIEW_STATUS =
+  conditionPath({
+    path:
+      "interview.status",
+    label:
+      "Interview status",
+    type:
+      "string",
+    options: [
+      "idle",
+      "active",
+      "completed",
+      "evaluated",
+    ],
+  });
+
+const PATH_INTERVIEW_CURRENT_QUESTION =
+  conditionPath({
+    path:
+      "interview.currentQuestion",
+    label:
+      "Current question",
+    type:
+      "string",
+  });
+
+const PATH_INTERVIEW_CURRENT_QUESTION_INDEX =
+  conditionPath({
+    path:
+      "interview.currentQuestionIndex",
+    label:
+      "Question index",
+    type:
+      "number",
+  });
+
+const PATH_INTERVIEW_ANSWER =
+  conditionPath({
+    path:
+      "interview.answer",
+    label:
+      "Current answer",
+    type:
+      "string",
+  });
+
+
+// -------------------------
+// THEME
+// -------------------------
+
+const PATH_THEME_COLOR =
+  conditionPath({
+    path:
+      "theme.color",
+    label:
+      "Theme colour",
+    type:
+      "string",
+  });
+
+const PATH_THEME_APPLIED =
+  conditionPath({
+    path:
+      "theme.applied",
+    label:
+      "Theme applied",
+    type:
+      "boolean",
+  });
 
 
 // =========================================================
@@ -291,10 +675,6 @@ export const actionRegistry = {
   // =======================================================
 
   call: {
-
-    // ---------------------------------------------------
-    // START CALL
-    // ---------------------------------------------------
 
     startCall: createAction({
 
@@ -315,12 +695,33 @@ export const actionRegistry = {
         "AgoraFeed",
       ],
 
+      requires: [],
+
+      produces: [
+        "call.id",
+        "call.channel",
+        "call.state",
+        "call.joined",
+        "call.remoteUsers",
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_STATE,
+        PATH_CALL_JOINED,
+      ],
+
+      nextActions: [
+        "call.toggleMic",
+        "call.toggleVideo",
+        "call.spotlightUser",
+        "call.leaveCall",
+        "call.endCall",
+      ],
+
     }),
 
-
-    // ---------------------------------------------------
-    // ACCEPT QUEUE CALL
-    // ---------------------------------------------------
 
     acceptCall: createAction({
 
@@ -341,12 +742,28 @@ export const actionRegistry = {
         "AgoraFeed",
       ],
 
+      requires: [
+        "call.id",
+      ],
+
+      produces: [
+        "call.state",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_STATE,
+      ],
+
+      nextActions: [
+        "call.joinCall",
+        "call.toggleMic",
+        "call.toggleVideo",
+        "call.endCall",
+      ],
+
     }),
 
-
-    // ---------------------------------------------------
-    // JOIN EXISTING CALL
-    // ---------------------------------------------------
 
     joinCall: createAction({
 
@@ -366,12 +783,35 @@ export const actionRegistry = {
         "AgoraFeed",
       ],
 
+      requires: [
+        "call.id",
+        "call.channel",
+      ],
+
+      produces: [
+        "call.joined",
+        "call.state",
+        "call.remoteUsers",
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_CHANNEL,
+        PATH_CALL_JOINED,
+        PATH_CALL_STATE,
+      ],
+
+      nextActions: [
+        "call.toggleMic",
+        "call.toggleVideo",
+        "call.spotlightUser",
+        "call.leaveCall",
+        "call.endCall",
+      ],
+
     }),
 
-
-    // ---------------------------------------------------
-    // JOIN TARGETED INVITATION
-    // ---------------------------------------------------
 
     joinInvitedCall: createAction({
 
@@ -392,12 +832,35 @@ export const actionRegistry = {
         "CallPanel",
       ],
 
+      requires: [
+        "call.id",
+        "call.channel",
+      ],
+
+      produces: [
+        "call.joined",
+        "call.state",
+        "call.remoteUsers",
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_CHANNEL,
+        PATH_CALL_JOINED,
+        PATH_CALL_STATE,
+      ],
+
+      nextActions: [
+        "call.toggleMic",
+        "call.toggleVideo",
+        "call.spotlightUser",
+        "call.leaveCall",
+        "call.endCall",
+      ],
+
     }),
 
-
-    // ---------------------------------------------------
-    // LEAVE CALL
-    // ---------------------------------------------------
 
     leaveCall: createAction({
 
@@ -417,12 +880,29 @@ export const actionRegistry = {
         "AgoraFeed",
       ],
 
+      requires: [
+        "call.joined",
+      ],
+
+      produces: [
+        "call.joined",
+        "call.state",
+        "call.remoteUsers",
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_JOINED,
+        PATH_CALL_STATE,
+      ],
+
+      nextActions: [
+        "call.joinCall",
+        "call.endCall",
+      ],
+
     }),
 
-
-    // ---------------------------------------------------
-    // END CALL
-    // ---------------------------------------------------
 
     endCall: createAction({
 
@@ -443,12 +923,28 @@ export const actionRegistry = {
         "AgoraFeed",
       ],
 
+      requires: [
+        "call.id",
+      ],
+
+      produces: [
+        "call.state",
+        "call.joined",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_STATE,
+        PATH_CALL_JOINED,
+      ],
+
+      nextActions: [
+        "call.fetchAvailableCalls",
+        "call.fetchPendingCalls",
+      ],
+
     }),
 
-
-    // ---------------------------------------------------
-    // FETCH QUEUE CALLS
-    // ---------------------------------------------------
 
     fetchAvailableCalls: createAction({
 
@@ -468,12 +964,18 @@ export const actionRegistry = {
         "CallPanel",
       ],
 
+      produces: [
+        "calls.available",
+      ],
+
+      conditionPaths: [],
+
+      nextActions: [
+        "call.acceptCall",
+        "call.fetchAvailableCalls",
+      ],
+
     }),
-
-    // ---------------------------------------------------
-    // FETCH PENDING CALLS
-    // ---------------------------------------------------
-
 
 
     fetchPendingCalls: createAction({
@@ -494,12 +996,19 @@ export const actionRegistry = {
         "CallPanel",
       ],
 
+      produces: [
+        "calls.pending",
+      ],
+
+      conditionPaths: [],
+
+      nextActions: [
+        "call.acceptCall",
+        "call.fetchPendingCalls",
+      ],
+
     }),
 
-
-    // ---------------------------------------------------
-    // SPOTLIGHT
-    // ---------------------------------------------------
 
     spotlightUser: createAction({
 
@@ -519,12 +1028,28 @@ export const actionRegistry = {
         "AgoraFeed",
       ],
 
+      requires: [
+        "call.joined",
+        "call.remoteUsers",
+      ],
+
+      produces: [],
+
+      conditionPaths: [
+        PATH_CALL_JOINED,
+        PATH_CALL_PARTICIPANTS,
+      ],
+
+      nextActions: [
+        "call.spotlightUser",
+        "call.toggleMic",
+        "call.toggleVideo",
+        "call.leaveCall",
+        "call.endCall",
+      ],
+
     }),
 
-
-    // ---------------------------------------------------
-    // TOGGLE MIC
-    // ---------------------------------------------------
 
     toggleMic: createAction({
 
@@ -544,12 +1069,28 @@ export const actionRegistry = {
         "AgoraFeed",
       ],
 
+      requires: [
+        "call.joined",
+      ],
+
+      produces: [
+        "media.micEnabled",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_JOINED,
+        PATH_MEDIA_MIC_ENABLED,
+      ],
+
+      nextActions: [
+        "call.toggleMic",
+        "call.toggleVideo",
+        "call.leaveCall",
+        "call.endCall",
+      ],
+
     }),
 
-
-    // ---------------------------------------------------
-    // TOGGLE VIDEO
-    // ---------------------------------------------------
 
     toggleVideo: createAction({
 
@@ -569,12 +1110,28 @@ export const actionRegistry = {
         "AgoraFeed",
       ],
 
+      requires: [
+        "call.joined",
+      ],
+
+      produces: [
+        "media.videoEnabled",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_JOINED,
+        PATH_MEDIA_VIDEO_ENABLED,
+      ],
+
+      nextActions: [
+        "call.toggleMic",
+        "call.toggleVideo",
+        "call.leaveCall",
+        "call.endCall",
+      ],
+
     }),
 
-
-    // ---------------------------------------------------
-    // AVAILABILITY
-    // ---------------------------------------------------
 
     setAvailability: createAction({
 
@@ -592,6 +1149,19 @@ export const actionRegistry = {
 
       targets: [
         "AvailabilityButton",
+      ],
+
+      produces: [
+        "availability.status",
+      ],
+
+      conditionPaths: [
+        PATH_AVAILABILITY_STATUS,
+      ],
+
+      nextActions: [
+        "call.setAvailability",
+        "call.fetchAvailableCalls",
       ],
 
     }),
@@ -623,6 +1193,20 @@ export const actionRegistry = {
         "VideoFeed",
       ],
 
+      produces: [
+        "media.playing",
+      ],
+
+      conditionPaths: [
+        PATH_MEDIA_PLAYING,
+      ],
+
+      nextActions: [
+        "video.togglePlay",
+        "video.stopStream",
+        "video.startRecording",
+      ],
+
     }),
 
 
@@ -642,6 +1226,18 @@ export const actionRegistry = {
 
       targets: [
         "VideoFeed",
+      ],
+
+      produces: [
+        "media.playing",
+      ],
+
+      conditionPaths: [
+        PATH_MEDIA_PLAYING,
+      ],
+
+      nextActions: [
+        "video.startStream",
       ],
 
     }),
@@ -665,6 +1261,20 @@ export const actionRegistry = {
         "VideoFeed",
       ],
 
+      produces: [
+        "media.source",
+      ],
+
+      conditionPaths: [
+        PATH_MEDIA_SOURCE,
+        PATH_MEDIA_PLAYING,
+      ],
+
+      nextActions: [
+        "video.startStream",
+        "video.togglePlay",
+      ],
+
     }),
 
 
@@ -684,6 +1294,22 @@ export const actionRegistry = {
 
       targets: [
         "VideoFeed",
+      ],
+
+      produces: [
+        "media.source",
+        "media.playing",
+      ],
+
+      conditionPaths: [
+        PATH_MEDIA_SOURCE,
+        PATH_MEDIA_PLAYING,
+      ],
+
+      nextActions: [
+        "video.startStream",
+        "video.togglePlay",
+        "video.startRecording",
       ],
 
     }),
@@ -707,6 +1333,20 @@ export const actionRegistry = {
         "VideoFeed",
       ],
 
+      produces: [
+        "media.playing",
+      ],
+
+      conditionPaths: [
+        PATH_MEDIA_PLAYING,
+      ],
+
+      nextActions: [
+        "video.togglePlay",
+        "video.startRecording",
+        "video.stopStream",
+      ],
+
     }),
 
 
@@ -726,6 +1366,21 @@ export const actionRegistry = {
 
       targets: [
         "VideoFeed",
+      ],
+
+      produces: [
+        "media.micEnabled",
+      ],
+
+      conditionPaths: [
+        PATH_MEDIA_MIC_ENABLED,
+      ],
+
+      nextActions: [
+        "video.toggleMic",
+        "video.toggleVideo",
+        "video.startRecording",
+        "video.stopRecording",
       ],
 
     }),
@@ -749,6 +1404,21 @@ export const actionRegistry = {
         "VideoFeed",
       ],
 
+      produces: [
+        "media.videoEnabled",
+      ],
+
+      conditionPaths: [
+        PATH_MEDIA_VIDEO_ENABLED,
+      ],
+
+      nextActions: [
+        "video.toggleVideo",
+        "video.toggleMic",
+        "video.startRecording",
+        "video.stopRecording",
+      ],
+
     }),
 
 
@@ -768,6 +1438,20 @@ export const actionRegistry = {
 
       targets: [
         "VideoFeed",
+      ],
+
+      produces: [
+        "media.recording",
+      ],
+
+      conditionPaths: [
+        PATH_MEDIA_RECORDING,
+        PATH_MEDIA_PLAYING,
+      ],
+
+      nextActions: [
+        "video.stopRecording",
+        "video.uploadRecording",
       ],
 
     }),
@@ -791,6 +1475,22 @@ export const actionRegistry = {
         "VideoFeed",
       ],
 
+      requires: [
+        "media.recording",
+      ],
+
+      produces: [
+        "media.recording",
+      ],
+
+      conditionPaths: [
+        PATH_MEDIA_RECORDING,
+      ],
+
+      nextActions: [
+        "video.uploadRecording",
+      ],
+
     }),
 
 
@@ -812,123 +1512,225 @@ export const actionRegistry = {
         "VideoFeed",
       ],
 
+      requires: [
+        "media.recording",
+      ],
+
+      produces: [
+        "media.recordingUrl",
+      ],
+
+      conditionPaths: [
+        PATH_MEDIA_RECORDING,
+      ],
+
+      nextActions: [],
+
     }),
 
   },
 
-  // =======================================================
-  // REMOTE TRAINING SYSTEM
-  // =======================================================
 
+  // =======================================================
+  // TRAINING SYSTEM
+  // =======================================================
 
   training: {
 
-  createSession: createAction({
+    createSession: createAction({
 
-    value:
-      ACTIONS.TRAINING_CREATE_SESSION,
+      value:
+        ACTIONS.TRAINING_CREATE_SESSION,
 
-    label:
-      "Create Training Session",
+      label:
+        "Create Training Session",
 
-    category:
-      "training",
+      category:
+        "training",
 
-    run:
-      createTrainingSession,
+      run:
+        createTrainingSession,
 
-    targets: [
-      "ParticipantSelector",
-    ],
+      targets: [
+        "ParticipantSelector",
+      ],
 
-  }),
+      produces: [
+        "training.sessionId",
+        "training.state",
+      ],
 
+      conditionPaths: [
+        PATH_TRAINING_SESSION_ID,
+        PATH_TRAINING_STATE,
+      ],
 
-  startSession: createAction({
+      nextActions: [
+        "training.startSession",
+      ],
 
-    value:
-      ACTIONS.TRAINING_START_SESSION,
-
-    label:
-      "Start Training Session",
-
-    category:
-      "training",
-
-    run:
-      startTrainingSession,
-
-    targets: [
-      "AgoraFeed",
-    ],
-
-  }),
+    }),
 
 
-  fetchPendingSessions: createAction({
+    startSession: createAction({
 
-    value:
-      ACTIONS.TRAINING_FETCH_PENDING_SESSIONS,
+      value:
+        ACTIONS.TRAINING_START_SESSION,
 
-    label:
-      "Fetch Pending Training Sessions",
+      label:
+        "Start Training Session",
 
-    category:
-      "training",
+      category:
+        "training",
 
-    run:
-      fetchPendingSessions,
+      run:
+        startTrainingSession,
 
-    targets: [
-      "TrainingInvitation",
-    ],
+      targets: [
+        "AgoraFeed",
+      ],
 
-  }),
+      produces: [
+        "training.state",
+        "call.id",
+        "call.channel",
+        "call.joined",
+      ],
+
+      conditionPaths: [
+        PATH_TRAINING_STATE,
+        PATH_CALL_JOINED,
+        PATH_CALL_PARTICIPANTS,
+      ],
+
+      nextActions: [
+        "call.toggleMic",
+        "call.toggleVideo",
+        "training.endSession",
+      ],
+
+    }),
 
 
-  joinSession: createAction({
+    fetchPendingSessions: createAction({
 
-    value:
-      ACTIONS.TRAINING_JOIN_SESSION,
+      value:
+        ACTIONS.TRAINING_FETCH_PENDING_SESSIONS,
 
-    label:
-      "Join Training Session",
+      label:
+        "Fetch Pending Training Sessions",
 
-    category:
-      "training",
+      category:
+        "training",
 
-    run:
-      joinTrainingSession,
+      run:
+        fetchPendingSessions,
 
-    targets: [
-      "TrainingInvitation",
-      "AgoraFeed",
-    ],
+      targets: [
+        "TrainingInvitation",
+      ],
 
-  }),
+      produces: [
+        "training.pendingSessions",
+      ],
 
-  endSession: createAction({
+      conditionPaths: [
+        PATH_TRAINING_PENDING_SESSIONS,
+      ],
 
-    value:
-      ACTIONS.TRAINING_END_SESSION,
+      nextActions: [
+        "training.joinSession",
+        "training.fetchPendingSessions",
+      ],
 
-    label:
-      "End Training Session",
+    }),
 
-    category:
-      "training",
 
-    run:
-      endTrainingSession,
+    joinSession: createAction({
 
-    targets: [
-      "AgoraFeed",
-      "TrainingInvitation",
-    ],
+      value:
+        ACTIONS.TRAINING_JOIN_SESSION,
 
-  }),
+      label:
+        "Join Training Session",
 
-},
+      category:
+        "training",
+
+      run:
+        joinTrainingSession,
+
+      targets: [
+        "TrainingInvitation",
+        "AgoraFeed",
+      ],
+
+      requires: [
+        "training.sessionId",
+      ],
+
+      produces: [
+        "training.state",
+        "call.joined",
+        "call.remoteUsers",
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_TRAINING_STATE,
+        PATH_CALL_JOINED,
+        PATH_CALL_PARTICIPANTS,
+      ],
+
+      nextActions: [
+        "call.toggleMic",
+        "call.toggleVideo",
+        "training.endSession",
+      ],
+
+    }),
+
+
+    endSession: createAction({
+
+      value:
+        ACTIONS.TRAINING_END_SESSION,
+
+      label:
+        "End Training Session",
+
+      category:
+        "training",
+
+      run:
+        endTrainingSession,
+
+      targets: [
+        "AgoraFeed",
+        "TrainingInvitation",
+      ],
+
+      requires: [
+        "training.state",
+      ],
+
+      produces: [
+        "training.state",
+        "call.joined",
+      ],
+
+      conditionPaths: [
+        PATH_TRAINING_STATE,
+        PATH_CALL_JOINED,
+      ],
+
+      nextActions: [
+        "training.fetchPendingSessions",
+      ],
+
+    }),
+
+  },
 
 
   // =======================================================
@@ -955,6 +1757,25 @@ export const actionRegistry = {
         "InterviewPanel",
       ],
 
+      produces: [
+        "interview.id",
+        "interview.status",
+        "interview.currentQuestion",
+        "interview.currentQuestionIndex",
+      ],
+
+      conditionPaths: [
+        PATH_INTERVIEW_ID,
+        PATH_INTERVIEW_STATUS,
+        PATH_INTERVIEW_CURRENT_QUESTION,
+      ],
+
+      nextActions: [
+        "interview.submitAnswer",
+        "interview.nextQuestion",
+        "interview.complete",
+      ],
+
     }),
 
 
@@ -974,6 +1795,26 @@ export const actionRegistry = {
 
       targets: [
         "InterviewPanel",
+      ],
+
+      requires: [
+        "interview.status",
+      ],
+
+      produces: [
+        "interview.currentQuestion",
+        "interview.currentQuestionIndex",
+      ],
+
+      conditionPaths: [
+        PATH_INTERVIEW_STATUS,
+        PATH_INTERVIEW_CURRENT_QUESTION_INDEX,
+      ],
+
+      nextActions: [
+        "interview.submitAnswer",
+        "interview.nextQuestion",
+        "interview.complete",
       ],
 
     }),
@@ -997,25 +1838,23 @@ export const actionRegistry = {
         "InterviewPanel",
       ],
 
-    }),
+      requires: [
+        "interview.currentQuestion",
+      ],
 
+      produces: [
+        "interview.answer",
+      ],
 
-    complete: createAction({
+      conditionPaths: [
+        PATH_INTERVIEW_ANSWER,
+        PATH_INTERVIEW_CURRENT_QUESTION,
+      ],
 
-      value:
-        ACTIONS.INTERVIEW_COMPLETE,
-
-      label:
-        "Complete Interview",
-
-      category:
-        "interview",
-
-      run:
-        completeInterview,
-
-      targets: [
-        "InterviewPanel",
+      nextActions: [
+        "interview.nextQuestion",
+        "interview.complete",
+        "interview.evaluate",
       ],
 
     }),
@@ -1039,11 +1878,62 @@ export const actionRegistry = {
         "InterviewPanel",
       ],
 
+      requires: [
+        "interview.id",
+      ],
+
+      produces: [
+        "interview.evaluation",
+      ],
+
+      conditionPaths: [
+        PATH_INTERVIEW_STATUS,
+      ],
+
+      nextActions: [
+        "interview.complete",
+      ],
+
+    }),
+
+
+    complete: createAction({
+
+      value:
+        ACTIONS.INTERVIEW_COMPLETE,
+
+      label:
+        "Complete Interview",
+
+      category:
+        "interview",
+
+      run:
+        completeInterview,
+
+      targets: [
+        "InterviewPanel",
+      ],
+
+      requires: [
+        "interview.id",
+      ],
+
+      produces: [
+        "interview.status",
+      ],
+
+      conditionPaths: [
+        PATH_INTERVIEW_STATUS,
+      ],
+
+      nextActions: [
+        "interview.evaluate",
+      ],
+
     }),
 
   },
-  
-
 
 
   // =======================================================
@@ -1066,6 +1956,20 @@ export const actionRegistry = {
       run:
         setColor,
 
+      targets: [],
+
+      produces: [
+        "theme.color",
+      ],
+
+      conditionPaths: [
+        PATH_THEME_COLOR,
+      ],
+
+      nextActions: [
+        "theme.apply",
+      ],
+
     }),
 
 
@@ -1083,6 +1987,23 @@ export const actionRegistry = {
       run:
         applyThemeAction,
 
+      targets: [],
+
+      requires: [
+        "theme.color",
+      ],
+
+      produces: [
+        "theme.applied",
+      ],
+
+      conditionPaths: [
+        PATH_THEME_COLOR,
+        PATH_THEME_APPLIED,
+      ],
+
+      nextActions: [],
+
     }),
 
   },
@@ -1097,6 +2018,16 @@ export const actionRegistry = {
 export const getAction = (
   value
 ) => {
+
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+
+    return null;
+
+  }
+
 
   const resolved =
     actionAliases[value] ||
@@ -1143,27 +2074,7 @@ export const getAllActions = () => {
 console.log(
   "[ACTIONS REGISTRY LOADED]",
   {
-    callActions:
-      Object.keys(
-        actionRegistry.call || {}
-      ),
 
-    videoActions:
-      Object.keys(
-        actionRegistry.video || {}
-      ),
-
-    interviewActions:
-      Object.keys(
-        actionRegistry.interview || {}
-      ),
-  }
-);
-
-
-console.log(
-  "[ACTIONS REGISTRY LOADED]",
-  {
     callActions:
       Object.keys(
         actionRegistry.call || {}
@@ -1183,6 +2094,7 @@ console.log(
       Object.keys(
         actionRegistry.interview || {}
       ),
+
   }
 );
 
@@ -1192,22 +2104,37 @@ console.log(
   {
 
     startRecording:
-      actionRegistry.video?.startRecording,
+      actionRegistry
+        .video
+        ?.startRecording,
 
     startRecordingRun:
-      typeof actionRegistry.video?.startRecording?.run,
+      typeof actionRegistry
+        .video
+        ?.startRecording
+        ?.run,
 
     stopRecording:
-      actionRegistry.video?.stopRecording,
+      actionRegistry
+        .video
+        ?.stopRecording,
 
     stopRecordingRun:
-      typeof actionRegistry.video?.stopRecording?.run,
+      typeof actionRegistry
+        .video
+        ?.stopRecording
+        ?.run,
 
     uploadRecording:
-      actionRegistry.video?.uploadRecording,
+      actionRegistry
+        .video
+        ?.uploadRecording,
 
     uploadRecordingRun:
-      typeof actionRegistry.video?.uploadRecording?.run,
+      typeof actionRegistry
+        .video
+        ?.uploadRecording
+        ?.run,
 
   }
 );

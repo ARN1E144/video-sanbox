@@ -131,21 +131,6 @@ export default {
 
     },
 
-    condition: {
-
-      type:
-        "condition",
-
-      ui:
-        "advanced",
-
-      label:
-        "Condition",
-
-      default:
-        "",
-
-    },
 
     style: {
 

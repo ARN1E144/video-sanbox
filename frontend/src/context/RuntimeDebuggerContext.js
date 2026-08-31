@@ -8,6 +8,8 @@ import React, {
   useCallback,
 } from "react";
 
+import { createId } from "../utils/createId";
+
 const RuntimeDebuggerContext =
   createContext(null);
 
@@ -64,7 +66,7 @@ export function RuntimeDebuggerProvider({
       const entry = {
 
         id:
-          crypto.randomUUID(),
+          createId(),
 
         type,
 

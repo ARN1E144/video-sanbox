@@ -8,17 +8,34 @@ export const ROLE_PERMISSIONS = {
 
   canBuild: true,
 
-  allowedElements: [
+   allowedElements: [
+
     "Container",
+
     "AgoraFeed",
+
     "VideoFeed",
+
+    "MediaFeed",
+
+    "RemoteVideoGrid",
+
+    "FilePreview",
+
     "ControlPanel",
+
     "ControlButton",
+
     "ChatPanel",
+
     "Text",
+
     "FetchCallsDebug",
+
     "AvailabilityButton"
+
   ],
+
 
   allowedActions: [
     // CALL

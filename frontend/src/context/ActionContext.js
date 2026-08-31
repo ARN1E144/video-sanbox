@@ -860,37 +860,34 @@ export function ActionProvider({
   // ===================================================
 
   const executePipeline =
-    useCallback(
-      async (
-        pipeline = [],
-        payload = {}
-      ) => {
+  useCallback(
+    async (
+      pipeline = [],
+      payload = {}
+    ) => {
 
-        return runActionPipeline(
-          pipeline,
-          payload,
-          {
+      const pipelineContext = {
 
-            runRuntimeAction:
-              executeAction,
+        ...buildRuntimeContext(),
 
-            get,
+        runAction:
+          executeAction,
 
-            set,
+      };
 
-            notify,
 
-          }
-        );
+      return runActionPipeline(
+        pipeline,
+        pipelineContext,
+        payload
+      );
 
-      },
-      [
-        executeAction,
-        get,
-        set,
-        notify,
-      ]
-    );
+    },
+    [
+      buildRuntimeContext,
+      executeAction,
+    ]
+  );
 
 
   // ===================================================

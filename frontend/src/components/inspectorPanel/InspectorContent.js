@@ -1,190 +1,460 @@
-import React, { useMemo, forwardRef } from "react";
-import InspectorSection from "./InspectorSection";
-import { X } from "lucide-react";
-import { useActionContext } from "../../context/ActionContext";
-import componentRegistry from "../../actions/componentRegistry";
-import { getActionOptions } from "../../actions/getActionsOptions";
-import { getActionByValue } from "../../actions/getActionByValue";
-import FieldRenderer from "./FieldRenderer";
-import InspectorSchemaPanel from "./InspectorSchemaPanel";
-import InspectorActionPanel from "./InspectorActionPanel";
-import InspectorControlPanelEditor from "./InspectorControlPanelEditor";
-import "../../css/InspectorContent.css"
+// src/components/inspectorPanel/InspectorContent.js
+
+import React, {
+  useMemo,
+  forwardRef,
+} from "react";
+
+import {
+  X,
+} from "lucide-react";
+
+import {
+  useActionContext,
+} from "../../context/ActionContext";
+
+import componentRegistry
+  from "../../actions/componentRegistry";
+
+import InspectorSchemaPanel
+  from "./InspectorSchemaPanel";
+
+import InspectorActionPanel
+  from "./InspectorActionPanel";
+
+import InspectorControlPanelEditor
+  from "./InspectorControlPanelEditor";
+
+import "../../css/InspectorContent.css";
 
 
-const InspectorContent = forwardRef(function InspectorContent(
-  {
-    selectedId,
-    elements = [],
-    updateElement,
-    layout = "right",
-    toggleOpen,
-    position,
-  },
-  ref
-) {
-  const { bindings, updateBinding } = useActionContext();
+const InspectorContent =
+  forwardRef(
+    function InspectorContent(
+      {
+        selectedId,
 
-  // --------------------------
-  // HOOKS FIRST (NO EARLY RETURNS ABOVE THIS POINT)
-  // --------------------------
+        elements = [],
 
-  const selectedElement = useMemo(
-    () => elements.find((e) => e.id === selectedId),
-    [elements, selectedId]
-  );
+        updateElement,
 
-  const meta = useMemo(() => {
+        layout =
+          "right",
 
-  if (!selectedElement) {
-    return null;
-  }
+        toggleOpen,
 
-  return (
-    componentRegistry?.[selectedElement.type]?.contract ||
-    selectedElement.contract ||
-    null
-  );
-
-}, [selectedElement]);
-
-  const schema = meta?.editableProps || {};
-  const props = selectedElement?.props || {};
-
-  const groupedSchema = useMemo(() => {
-    const groups = {};
-
-    Object.entries(schema).forEach(([key, cfg]) => {
-      const group = cfg.group || "general";
-      if (!groups[group]) groups[group] = [];
-      groups[group].push({ key, ...cfg });
-    });
-
-    return groups;
-  }, [schema]);
-
-  const actionOptions = useMemo(() => {
-    const raw = getActionOptions() || [];
-
-    const grouped = {};
-    raw.forEach((a) => {
-      const cat = a.category || "General";
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push(a);
-    });
-
-    return Object.entries(grouped).map(([category, options]) => ({
-      category,
-      options,
-    }));
-  }, []);
-
-  const getTargets = (actionValue) => {
-    const action = getActionByValue(actionValue);
-    if (!action?.targets) return elements;
-    return elements.filter((el) =>
-      action.targets.includes(el.type)
-    );
-  };
-
-  const updateProp = (key, value) => {
-    if (!selectedElement) return;
-
-    updateElement(selectedId, {
-      props: {
-        ...props,
-        [key]: value,
+        position,
       },
-    });
-  };
 
-  // --------------------------
-  // NOW SAFE EARLY CONDITIONS (NO HOOKS ABOVE THIS)
-  // --------------------------
+      ref
+    ) {
 
-  if (!selectedElement) {
-    return (
-      <div className="p-3 text-xs text-gray-400">
-        No element selected
-      </div>
-    );
-  }
+      const {
+        bindings,
+        updateBinding,
+      } =
+        useActionContext();
 
-  if (!meta) {
-    return (
-      <div className="p-3 text-xs text-red-400">
-        No meta found for {selectedElement.type}
-      </div>
-    );
-  }
 
-  if (!schema || Object.keys(schema).length === 0) {
-    return (
-      <div className="p-3 text-xs text-red-400">
-        No editableProps found
-      </div>
-    );
-  }
+      // =================================================
+      // SELECTED ELEMENT
+      // =================================================
 
-  // --------------------------
-  // UI
-  // --------------------------
+      const selectedElement =
+        useMemo(
+          () =>
+            elements.find(
+              element =>
+                element.id ===
+                selectedId
+            ),
 
-  console.log(
-  "[INSPECTOR TARGET DEBUG]",
-  {
-    selectedElement,
-    elements,
-    targetId: selectedElement?.props?.targetId
-  }
-);
+          [
+            elements,
+            selectedId,
+          ]
+        );
 
-  return (
-  <div
-    ref={ref}
-    className="bg-panel border flex flex-col h-full w-[340px]"
-    style={{
-      position: layout === "floating" ? "absolute" : "relative",
-      left: position?.x,
-      top: position?.y,
-      zIndex: 2000,
-    }}
-  >
-    {/* HEADER */}
-    <div className="flex justify-between p-3 border-b">
-      <h3 className="text-sm font-semibold">
-        {selectedElement.type}
-      </h3>
-      <button onClick={toggleOpen}>
-        <X size={14} />
-      </button>
-    </div>
 
-    {/* BODY */}
-    <div className="p-3 space-y-3 overflow-y-auto">
+      // =================================================
+      // CONTRACT
+      // =================================================
 
-      {/* 1. SCHEMA */}
-     <InspectorSchemaPanel
-        schema={schema}
-        props={props}
-        onChange={updateProp}
-        elements={elements}
-        selectedElement={selectedElement}
-      />
+      const meta =
+        useMemo(
+          () => {
 
-      {/* 2. ACTIONS (NOW PROPER MODULE) */}
-      {selectedElement.type === "ControlPanel" && (
-        <InspectorControlPanelEditor
-          selectedElement={selectedElement}
-          elements={elements}
-          updateElement={updateElement}
-        />
-      )}
+            if (
+              !selectedElement
+            ) {
 
-    </div>
-  </div>
-);
-  
-});
+              return null;
+
+            }
+
+
+            return (
+
+              componentRegistry?.[
+                selectedElement.type
+              ]?.contract ||
+
+              selectedElement.contract ||
+
+              null
+
+            );
+
+          },
+
+          [
+            selectedElement,
+          ]
+        );
+
+
+      // =================================================
+      // RAW SCHEMA
+      // =================================================
+
+      const rawSchema =
+        meta?.editableProps ||
+        {};
+
+
+      // =================================================
+      // NORMAL COMPONENT SCHEMA
+      // =================================================
+      //
+      // Action configuration is handled exclusively by
+      // InspectorActionPanel.
+      //
+      // This prevents:
+      //
+      //   action
+      //   targetId
+      //   nextActions
+      //
+      // from appearing twice.
+      //
+      // =================================================
+
+      const schema =
+        meta?.editableProps ||
+        {};
+
+
+      // =================================================
+      // PROPS
+      // =================================================
+
+      const props =
+        selectedElement?.props ||
+        {};
+
+
+      // =================================================
+      // UPDATE PROP
+      // =================================================
+
+      const updateProp =
+        (
+          key,
+          value
+        ) => {
+
+          if (
+            !selectedElement
+          ) {
+
+            return;
+
+          }
+
+
+          updateElement(
+            selectedElement.id,
+            {
+
+              props: {
+
+                ...props,
+
+                [key]:
+                  value,
+
+              },
+
+            }
+          );
+
+        };
+
+
+      // =================================================
+      // EARLY STATES
+      // =================================================
+
+      if (
+        !selectedElement
+      ) {
+
+        return (
+
+          <div
+            className="
+              p-3
+              text-xs
+              text-gray-400
+            "
+          >
+
+            No element selected
+
+          </div>
+
+        );
+
+      }
+
+
+      if (
+        !meta
+      ) {
+
+        return (
+
+          <div
+            className="
+              p-3
+              text-xs
+              text-red-400
+            "
+          >
+
+            No contract found for{" "}
+            {selectedElement.type}
+
+          </div>
+
+        );
+
+      }
+
+
+      // =================================================
+      // UI
+      // =================================================
+
+      console.log(
+        "[INSPECTOR]",
+        {
+
+          selectedElement,
+
+          type:
+            selectedElement.type,
+
+          action:
+            props.action ||
+            "",
+
+          targetId:
+            props.targetId ||
+            "",
+
+          nextActions:
+            props.nextActions ||
+            [],
+
+        }
+      );
+
+
+      return (
+
+        <div
+
+          ref={
+            ref
+          }
+
+          className="
+            bg-panel
+            border
+            flex
+            flex-col
+            h-full
+            w-[340px]
+          "
+
+          style={{
+
+            position:
+              layout ===
+                "floating"
+                ? "absolute"
+                : "relative",
+
+            left:
+              position?.x,
+
+            top:
+              position?.y,
+
+            zIndex:
+              2000,
+
+          }}
+
+        >
+
+          {/* =========================================
+              HEADER
+          ========================================= */}
+
+          <div
+            className="
+              flex
+              justify-between
+              p-3
+              border-b
+            "
+          >
+
+            <h3
+              className="
+                text-sm
+                font-semibold
+              "
+            >
+
+              {
+                selectedElement.type
+              }
+
+            </h3>
+
+
+            <button
+              type="button"
+
+              onClick={
+                toggleOpen
+              }
+            >
+
+              <X
+                size={14}
+              />
+
+            </button>
+
+          </div>
+
+
+          {/* =========================================
+              BODY
+          ========================================= */}
+
+          <div
+            className="
+              p-3
+              space-y-3
+              overflow-y-auto
+            "
+          >
+
+            {/* =======================================
+                NORMAL PROPERTIES
+            ======================================= */}
+
+            {Object.keys(
+              schema
+            ).length >
+            0 && (
+
+              <InspectorSchemaPanel
+
+                schema={
+                  schema
+                }
+
+                props={
+                  props
+                }
+
+                onChange={
+                  updateProp
+                }
+
+                elements={
+                  elements
+                }
+
+                selectedElement={
+                  selectedElement
+                }
+
+              />
+
+            )}
+
+
+            {/* =======================================
+                ACTIONS
+            ======================================= */}
+
+            <InspectorActionPanel
+
+              selectedElement={
+                selectedElement
+              }
+
+              elements={
+                elements
+              }
+
+              updateElement={
+                updateElement
+              }
+
+            />
+
+
+            {/* =======================================
+                CONTROL PANEL
+            ======================================= */}
+
+            {selectedElement.type ===
+              "ControlPanel" && (
+
+              <InspectorControlPanelEditor
+
+                selectedElement={
+                  selectedElement
+                }
+
+                elements={
+                  elements
+                }
+
+                updateElement={
+                  updateElement
+                }
+
+              />
+
+            )}
+
+          </div>
+
+        </div>
+
+      );
+
+    }
+  );
+
 
 export default InspectorContent;

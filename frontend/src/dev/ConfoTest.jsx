@@ -23,8 +23,20 @@ import ConfosRegistry
 // =====================================================
 // AVAILABLE CONFOS
 // =====================================================
+//
+// These are the Confos currently exposed through the
+// development installer.
+//
+// Keep this list aligned with ConfosRegistry while the
+// development/test environment is being used.
+//
+// =====================================================
 
 const AVAILABLE_CONFOS = [
+
+  // ===================================================
+  // REALTIME / APPLICATION TEMPLATES
+  // ===================================================
 
   {
     id:
@@ -64,6 +76,35 @@ const AVAILABLE_CONFOS = [
 
     name:
       "AI Video Interviewer",
+  },
+
+
+  // ===================================================
+  // MEDIA COMPONENT TESTS
+  // ===================================================
+
+  {
+    id:
+      "confo.media_test",
+
+    name:
+      "Media Feed Test",
+  },
+
+  {
+    id:
+      "confo.pdf_preview",
+
+    name:
+      "File Preview Test",
+  },
+
+  {
+    id:
+      "confo.remote_video_grid",
+
+    name:
+      "Remote Video Grid Test",
   },
 
 ];
@@ -164,6 +205,10 @@ function findNodeBySourceId(
   }
 
 
+  // ---------------------------------------------------
+  // Match metadata source ID
+  // ---------------------------------------------------
+
   if (
     node?.meta?.sourceId ===
     sourceId
@@ -174,6 +219,10 @@ function findNodeBySourceId(
   }
 
 
+  // ---------------------------------------------------
+  // Match direct node ID
+  // ---------------------------------------------------
+
   if (
     node?.id ===
     sourceId
@@ -183,6 +232,10 @@ function findNodeBySourceId(
 
   }
 
+
+  // ---------------------------------------------------
+  // Search children
+  // ---------------------------------------------------
 
   if (
     Array.isArray(
@@ -225,6 +278,10 @@ function findNodeBySourceId(
 
 export default function ConfoTest() {
 
+  // ===================================================
+  // PROJECT CONTEXT
+  // ===================================================
+
   const {
     projectSchema,
     setProjectSchema,
@@ -236,44 +293,65 @@ export default function ConfoTest() {
     useProjectContext();
 
 
+  // ===================================================
+  // SELECTED CONFO
+  // ===================================================
+
   const [
     selected,
     setSelected,
-  ] = useState(
-    "confo.remote_training"
-  );
+  ] =
+    useState(
+      "confo.remote_training"
+    );
 
+
+  // ===================================================
+  // LOADED CONFO
+  // ===================================================
 
   const [
     confo,
     setConfo,
-  ] = useState(
-    null
-  );
+  ] =
+    useState(
+      null
+    );
 
+
+  // ===================================================
+  // ERRORS
+  // ===================================================
 
   const [
     errors,
     setErrors,
-  ] = useState(
-    []
-  );
+  ] =
+    useState(
+      []
+    );
 
+
+  // ===================================================
+  // INSTALL STATE
+  // ===================================================
 
   const [
     installing,
     setInstalling,
-  ] = useState(
-    false
-  );
+  ] =
+    useState(
+      false
+    );
 
 
   const [
     installResult,
     setInstallResult,
-  ] = useState(
-    null
-  );
+  ] =
+    useState(
+      null
+    );
 
 
   // ===================================================
@@ -310,8 +388,16 @@ export default function ConfoTest() {
           try {
 
             console.log(
+              "=============================================="
+            );
+
+            console.log(
               "[ConfoTest] Loading",
               selected
+            );
+
+            console.log(
+              "=============================================="
             );
 
 
@@ -322,9 +408,14 @@ export default function ConfoTest() {
             );
 
 
-            // -------------------------------------------
-            // REGISTRY
-            // -------------------------------------------
+            setConfo(
+              null
+            );
+
+
+            // =========================================
+            // REGISTRY LOOKUP
+            // =========================================
 
             const config =
               ConfosRegistry[
@@ -349,9 +440,9 @@ export default function ConfoTest() {
             );
 
 
-            // -------------------------------------------
+            // =========================================
             // LOAD / VALIDATE
-            // -------------------------------------------
+            // =========================================
 
             const loader =
               new ConfoLoader();
@@ -405,11 +496,13 @@ export default function ConfoTest() {
             console.log(
               "[ConfoTest] Confo ready",
               {
+
                 id:
                   result.confo?.id,
 
                 name:
                   result.confo?.name,
+
               }
             );
 
@@ -525,7 +618,7 @@ export default function ConfoTest() {
 
 
       // =================================================
-      // START
+      // INSTALL START
       // =================================================
 
       setInstalling(
@@ -545,6 +638,7 @@ export default function ConfoTest() {
 
         console.log(
           {
+
             confoId:
               confo.id,
 
@@ -558,6 +652,10 @@ export default function ConfoTest() {
               currentProject.name,
 
           }
+        );
+
+        console.log(
+          "=============================================="
         );
 
 
@@ -611,10 +709,6 @@ export default function ConfoTest() {
         // =================================================
         // INSPECT INSTALLED TREE
         // =================================================
-        //
-        // This is diagnostic only.
-        // It must NEVER block installation.
-        // =================================================
 
         const diagnostics =
           inspectTree(
@@ -642,22 +736,40 @@ export default function ConfoTest() {
 
 
         // =================================================
-        // VIDEOFEED DIAGNOSTIC
+        // MEDIA DIAGNOSTICS
         // =================================================
 
-        const videoFeeds =
+        const mediaNodes =
           diagnostics.filter(
             item =>
+
               item.type ===
-              "VideoFeed"
+                "VideoFeed" ||
+
+              item.type ===
+                "AgoraFeed" ||
+
+              item.type ===
+                "MediaFeed" ||
+
+              item.type ===
+                "RemoteVideoGrid" ||
+
+              item.type ===
+                "FilePreview"
+
           );
 
 
         console.log(
-          "[ConfoTest] VIDEOFEED NODES",
-          videoFeeds
+          "[ConfoTest] MEDIA NODES",
+          mediaNodes
         );
 
+
+        // =================================================
+        // EXISTING VIDEO DIAGNOSTIC
+        // =================================================
 
         const interviewVideo =
           findNodeBySourceId(
@@ -762,6 +874,16 @@ export default function ConfoTest() {
           projectName:
             currentProject.name,
 
+          confoId:
+            confo.id,
+
+          confoVersion:
+            confo.version ||
+            1,
+
+          mediaNodeCount:
+            mediaNodes.length,
+
           videoFeedFound:
             !!interviewVideo,
 
@@ -789,16 +911,11 @@ export default function ConfoTest() {
             confo:
               confo.name,
 
+            mediaNodeCount:
+              mediaNodes.length,
+
             videoFeedFound:
               !!interviewVideo,
-
-            videoFeedId:
-              interviewVideo?.id ||
-              null,
-
-            videoFeedSourceId:
-              interviewVideo?.meta?.sourceId ||
-              null,
 
           }
         );
@@ -995,7 +1112,7 @@ export default function ConfoTest() {
             8,
 
           minWidth:
-            260,
+            280,
 
         }}
       >
@@ -1012,9 +1129,11 @@ export default function ConfoTest() {
                   item.id
                 }
               >
+
                 {
                   item.name
                 }
+
               </option>
 
             )
@@ -1086,7 +1205,43 @@ export default function ConfoTest() {
           >
 
             {
-              confo.description
+              confo.description ||
+              "No description provided."
+            }
+
+          </div>
+
+
+          <div
+            style={{
+
+              fontSize:
+                12,
+
+              color:
+                "#777",
+
+              marginBottom:
+                12,
+
+            }}
+          >
+
+            Confo ID:
+            {" "}
+
+            {
+              confo.id
+            }
+
+            <br />
+
+            Version:
+            {" "}
+
+            {
+              confo.version ||
+              1
             }
 
           </div>
@@ -1274,6 +1429,22 @@ export default function ConfoTest() {
               }}
             >
 
+              Confo:
+              {" "}
+              {
+                installResult.confoId
+              }
+
+              <br />
+
+              Version:
+              {" "}
+              {
+                installResult.confoVersion
+              }
+
+              <br />
+
               Project:
               {" "}
               {
@@ -1286,6 +1457,14 @@ export default function ConfoTest() {
               {" "}
               {
                 installResult.projectId
+              }
+
+              <br />
+
+              Media nodes:
+              {" "}
+              {
+                installResult.mediaNodeCount
               }
 
               <br />

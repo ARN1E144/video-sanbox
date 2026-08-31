@@ -12,6 +12,8 @@ import React, {
 import { useRuntimeDebugger }
 from "./RuntimeDebuggerContext";
 
+import { createId } from "../utils/createId";
+
 
 const RuntimeEventContext =
   createContext(null);
@@ -46,7 +48,7 @@ export function RuntimeEventProvider({
       const eventRecord = {
 
         id:
-          crypto.randomUUID(),
+          createId(),
 
         event,
 

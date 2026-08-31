@@ -1,0 +1,37 @@
+{
+  "id": "confo.media_test",
+  "name": "Media Feed Test",
+  "version": 1,
+  "type": "confo",
+  "description": "Test generic external media rendering.",
+  "capabilities": [
+    "video",
+    "media"
+  ],
+  "tree": {
+    "id": "media-test-root",
+    "type": "Container",
+    "props": {
+      "layout": "vertical",
+      "backgroundColor": "#181818"
+    },
+    "children": [
+      {
+        "id": "media-feed",
+        "type": "MediaFeed",
+        "width": 800,
+        "height": 450,
+        "props": {
+          "source": "{{media.testSource}}",
+          "sourceType": "auto",
+          "title": "Media Test",
+          "controls": true,
+          "autoPlay": false,
+          "muted": false,
+          "objectFit": "contain",
+          "borderRadius": 8
+        }
+      }
+    ]
+  }
+}

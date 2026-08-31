@@ -51,19 +51,204 @@ const DEVICE_SIZES = {
 // =====================================================
 // DEFAULT EXTRACTION
 // =====================================================
+//
+// Contract editableProps describe the property's
+// definition, not its runtime value.
+//
+// Example contract:
+//
+// source: {
+//   type: "string"
+// }
+//
+// must become:
+//
+// source: ""
+//
+// If a contract explicitly provides:
+//
+// default: "https://..."
+//
+// that value wins.
+//
+// =====================================================
 
-const extractDefaults = (editableProps = {}) => {
+const extractDefaults = (
+  editableProps = {}
+) => {
+
   const result = {};
 
-  Object.entries(editableProps).forEach(([key, cfg]) => {
-    result[key] =
-      typeof cfg === "object" &&
-      cfg.default !== undefined
-        ? cfg.default
-        : cfg;
-  });
+
+  Object.entries(
+    editableProps
+  ).forEach(
+    (
+      [
+        key,
+        definition,
+      ]
+    ) => {
+
+      // =================================================
+      // EXPLICIT DEFAULT
+      // =================================================
+
+      if (
+        definition &&
+        typeof definition ===
+          "object" &&
+        definition.default !==
+          undefined
+      ) {
+
+        result[key] =
+          definition.default;
+
+        return;
+
+      }
+
+
+      // =================================================
+      // LEGACY PRIMITIVE VALUE
+      // =================================================
+
+      if (
+        definition === null ||
+        typeof definition !==
+          "object"
+      ) {
+
+        result[key] =
+          definition;
+
+        return;
+
+      }
+
+
+      // =================================================
+      // TYPE
+      // =================================================
+
+      const type =
+        String(
+          definition.type ||
+          ""
+        )
+          .toLowerCase()
+          .trim();
+
+
+      // =================================================
+      // STRING
+      // =================================================
+
+      if (
+        type.includes(
+          "string"
+        )
+      ) {
+
+        result[key] =
+          "";
+
+        return;
+
+      }
+
+
+      // =================================================
+      // NUMBER
+      // =================================================
+
+      if (
+        type.includes(
+          "number"
+        )
+      ) {
+
+        result[key] =
+          0;
+
+        return;
+
+      }
+
+
+      // =================================================
+      // BOOLEAN
+      // =================================================
+
+      if (
+        type.includes(
+          "boolean"
+        )
+      ) {
+
+        result[key] =
+          false;
+
+        return;
+
+      }
+
+
+      // =================================================
+      // ARRAY
+      // =================================================
+
+      if (
+        type.includes(
+          "array"
+        )
+      ) {
+
+        result[key] =
+          [];
+
+        return;
+
+      }
+
+
+      // =================================================
+      // OBJECT
+      // =================================================
+
+      if (
+        type.includes(
+          "object"
+        )
+      ) {
+
+        result[key] =
+          null;
+
+        return;
+
+      }
+
+
+      // =================================================
+      // UNKNOWN TYPE
+      // =================================================
+      //
+      // Never pass the contract definition itself
+      // into a runtime component prop.
+      //
+      // =================================================
+
+      result[key] =
+        null;
+
+    }
+  );
+
 
   return result;
+
 };
 
 // =====================================================

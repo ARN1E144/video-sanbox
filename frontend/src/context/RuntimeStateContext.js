@@ -11,6 +11,7 @@ import React, {
 
 import { useRuntimeDebugger } from "./RuntimeDebuggerContext";
 import { INITIAL_RUNTIME_STATE } from "../runtime/models/initialRuntimeState";
+import { createId } from "../utils/createId";
 
 const RuntimeStateContext = createContext(null);
 
@@ -153,7 +154,7 @@ return resolvePath(
     if (transactionRef.current) return;
 
     transactionRef.current = {
-      id: crypto.randomUUID(),
+      id: createId(),
       startedAt: performance.now(),
       pendingWrites: new Map(),
       isCommitting: false,

@@ -26,62 +26,313 @@ const CanvasContext = createContext();
 // =====================================================
 // DEFAULT EXTRACTION
 // =====================================================
+//
+// Contract editableProps describe the PROPERTY TYPE.
+// They are not the property's actual runtime value.
+//
+// Example:
+//
+// editableProps: {
+//
+//   source: {
+//     type: "string"
+//   },
+//
+//   columns: {
+//     type: "number"
+//   }
+//
+// }
+//
+// MUST become:
+//
+// props: {
+//
+//   source: "",
+//
+//   columns: 0
+//
+// }
+//
+// rather than:
+//
+// props: {
+//
+//   source: {
+//     type: "string"
+//   }
+//
+// }
+//
+// =====================================================
 
-function extractDefaults(editableProps = {}) {
+function extractDefaults(
+  editableProps = {}
+) {
 
   const result = {};
 
-  Object.entries(editableProps).forEach(([key, value]) => {
 
-    if (
-      value &&
-      typeof value === "object" &&
-      value.default !== undefined
-    ) {
+  Object.entries(
+    editableProps
+  ).forEach(
+    (
+      [
+        key,
+        definition,
+      ]
+    ) => {
 
-      result[key] = value.default;
+      // -------------------------------------------------
+      // Explicit default always wins.
+      // -------------------------------------------------
 
-    } else {
+      if (
+        definition &&
+        typeof definition ===
+          "object" &&
+        definition.default !==
+          undefined
+      ) {
 
-      result[key] = value;
+        result[key] =
+          definition.default;
+
+
+        return;
+
+      }
+
+
+      // -------------------------------------------------
+      // Primitive definition.
+      //
+      // Example:
+      //
+      // source: ""
+      // -------------------------------------------------
+
+      if (
+        typeof definition !==
+          "object" ||
+        definition === null
+      ) {
+
+        result[key] =
+          definition;
+
+        return;
+
+      }
+
+
+      // -------------------------------------------------
+      // Type-based defaults.
+      // -------------------------------------------------
+
+      const type =
+        String(
+          definition.type ||
+          ""
+        )
+          .toLowerCase();
+
+
+      if (
+        type ===
+          "string"
+      ) {
+
+        result[key] =
+          "";
+
+        return;
+
+      }
+
+
+      if (
+        type ===
+          "number"
+      ) {
+
+        result[key] =
+          0;
+
+        return;
+
+      }
+
+
+      if (
+        type ===
+          "boolean"
+      ) {
+
+        result[key] =
+          false;
+
+        return;
+
+      }
+
+
+      if (
+        type ===
+          "object"
+      ) {
+
+        result[key] =
+          null;
+
+        return;
+
+      }
+
+
+      if (
+        type ===
+          "array"
+      ) {
+
+        result[key] =
+          [];
+
+        return;
+
+      }
+
+
+      // -------------------------------------------------
+      // Union types.
+      //
+      // Example:
+      //
+      // "number|string"
+      // -------------------------------------------------
+
+      if (
+        type.includes(
+          "string"
+        )
+      ) {
+
+        result[key] =
+          "";
+
+        return;
+
+      }
+
+
+      if (
+        type.includes(
+          "number"
+        )
+      ) {
+
+        result[key] =
+          0;
+
+        return;
+
+      }
+
+
+      if (
+        type.includes(
+          "boolean"
+        )
+      ) {
+
+        result[key] =
+          false;
+
+        return;
+
+      }
+
+
+      // -------------------------------------------------
+      // Unknown definition.
+      //
+      // Don't leak the contract object into component
+      // props.
+      // -------------------------------------------------
+
+      result[key] =
+        null;
 
     }
+  );
 
-  });
 
   return result;
+
 }
 
 // =====================================================
 // NORMALIZE ELEMENT
 // =====================================================
 
-function normalizeElement(el) {
+function normalizeElement(
+  el
+) {
 
   if (
     !el ||
-    typeof el !== "object"
+    typeof el !==
+      "object"
   ) {
 
     return null;
 
   }
 
-  const registryEntry =
-    componentRegistry[el.type];
 
-  const metaDefaults =
-    registryEntry?.meta?.editableProps || {};
+  const registryEntry =
+    componentRegistry?.[
+      el.type
+    ];
+
+
+  // ===================================================
+  // CONTRACT DEFAULTS
+  // ===================================================
+
+  const contractDefaults =
+    registryEntry
+      ?.contract
+      ?.editableProps ||
+    {};
+
+
+  const defaultProps =
+    extractDefaults(
+      contractDefaults
+    );
+
+
+  // ===================================================
+  // ACTUAL ELEMENT PROPS
+  // ===================================================
+  //
+  // Explicit element props override contract defaults.
+  //
+  // ===================================================
 
   const props = {
 
-    ...extractDefaults(
-      metaDefaults
-    ),
+    ...defaultProps,
 
-    ...(el.props || {})
+    ...(el.props || {}),
 
   };
+
+
+  // ===================================================
+  // NORMALISED ELEMENT
+  // ===================================================
 
   return {
 
@@ -92,22 +343,16 @@ function normalizeElement(el) {
         ? el.type
         : "Text",
 
-    // =================================================
-    // HIERARCHY
-    //
-    // null     = top-level canvas element
-    // parentId = child of another canvas element
-    // =================================================
-
     parentId:
       el.parentId ??
       null,
 
-    props
+    props,
 
   };
 
 }
+
 
 // =====================================================
 // NORMALIZE ELEMENTS

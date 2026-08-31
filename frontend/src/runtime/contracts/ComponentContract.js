@@ -1,8 +1,23 @@
+// src/runtime/contracts/ComponentContract.js
+
+// =====================================================
+// COMPONENT CONTRACTS
+// =====================================================
+
 import agoraFeed
   from "./components/AgoraFeed.contract.js";
 
 import videoFeed
   from "./components/VideoFeed.contract.js";
+
+import mediaFeed
+  from "./components/MediaFeed.contract.js";
+
+import remoteVideoGrid
+  from "./components/RemoteVideoGrid.contract.js";
+
+import filePreview
+  from "./components/FilePreview.contract.js";
 
 import controlButton
   from "./components/ControlButton.contract.js";
@@ -47,11 +62,29 @@ import trainingInvitation
 
 const ComponentContract = {
 
+  // ===================================================
+  // MEDIA
+  // ===================================================
+
   AgoraFeed:
     agoraFeed,
 
   VideoFeed:
     videoFeed,
+
+  MediaFeed:
+    mediaFeed,
+
+  RemoteVideoGrid:
+    remoteVideoGrid,
+
+  FilePreview:
+    filePreview,
+
+
+  // ===================================================
+  // CONTROLS
+  // ===================================================
 
   ControlButton:
     controlButton,
@@ -59,29 +92,16 @@ const ComponentContract = {
   ControlPanel:
     controlPanel,
 
-  ChatPanel:
-    chatPanel,
-
   MicButton:
     micButton,
 
-  Container:
-    container,
 
-  TextBox:
-    textBox,
+  // ===================================================
+  // COMMUNICATION
+  // ===================================================
 
-  AppBar:
-    appBar,
-
-  Text:
-    text,
-
-  TextLabel:
-    textLabel,
-
-  InterviewPanel:
-    interviewPanel,
+  ChatPanel:
+    chatPanel,
 
   ParticipantSelector:
     participantSelector,
@@ -89,7 +109,41 @@ const ComponentContract = {
   TrainingInvitation:
     trainingInvitation,
 
+
+  // ===================================================
+  // LAYOUT
+  // ===================================================
+
+  Container:
+    container,
+
+  AppBar:
+    appBar,
+
+
+  // ===================================================
+  // TEXT
+  // ===================================================
+
+  TextBox:
+    textBox,
+
+  Text:
+    text,
+
+  TextLabel:
+    textLabel,
+
+
+  // ===================================================
+  // AI
+  // ===================================================
+
+  InterviewPanel:
+    interviewPanel,
+
 };
 
 
 export default ComponentContract;
+

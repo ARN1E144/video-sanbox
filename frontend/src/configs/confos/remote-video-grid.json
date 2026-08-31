@@ -1,0 +1,34 @@
+{
+  "id": "confo.remote_video_grid",
+  "name": "Remote Video Grid Test",
+  "version": 1,
+  "type": "confo",
+  "description": "Test rendering of multiple realtime remote participants.",
+  "capabilities": [
+    "video",
+    "audio",
+    "realtime"
+  ],
+  "tree": {
+    "id": "remote-grid-root",
+    "type": "Container",
+    "props": {
+      "layout": "vertical",
+      "backgroundColor": "#181818"
+    },
+    "children": [
+      {
+        "id": "remote-grid",
+        "type": "RemoteVideoGrid",
+        "width": 800,
+        "height": 450,
+        "props": {
+          "source": "call.remoteUsers",
+          "columns": 2,
+          "gap": 8,
+          "emptyText": "No remote participants"
+        }
+      }
+    ]
+  }
+}

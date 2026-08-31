@@ -1,3 +1,5 @@
+// src/configs/confosRegistry.js
+
 import oneToOne
   from "./1-to-1.json";
 
@@ -12,6 +14,15 @@ import remoteTraining
 
 import aiVideoInterviewer
   from "./ai-video-interviewer.json";
+
+import filePreview
+  from "./file-preview.json";
+
+import mediaFeed
+  from "./media-feed.json";
+
+import remoteVideoGrid
+  from "./remote-video-grid.json";
 
 
 const ConfosRegistry = {
@@ -30,6 +41,20 @@ const ConfosRegistry = {
 
   "confo.ai_video_interviewer":
     aiVideoInterviewer,
+
+
+  // ===================================================
+  // MEDIA TEST CONFOS
+  // ===================================================
+
+  "confo.pdf_preview":
+    filePreview,
+
+  "confo.media_test":
+    mediaFeed,
+
+  "confo.remote_video_grid":
+    remoteVideoGrid,
 
 };
 

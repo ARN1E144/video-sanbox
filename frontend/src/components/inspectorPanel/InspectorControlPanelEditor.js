@@ -6,6 +6,7 @@ import { useRuntimeAuth } from "../../context/RuntimeAuthContext";
 import { getActionOptions } from "../../actions/getActionsOptions";
 import { getActionByValue } from "../../actions/getActionByValue";
 import  ControlButtonBase from "../../ui/ControlButtonBase";
+import { createId } from "../../utils/createId";
 
 export default function InspectorControlPanelEditor({
   selectedElement,
@@ -66,7 +67,7 @@ export default function InspectorControlPanelEditor({
 
   const addControl = () => {
     const newControl = {
-      id: crypto.randomUUID(),
+      id: createId(),
       label: "Button",
       icon: "Circle",
       action: "",
