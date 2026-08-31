@@ -34,53 +34,56 @@ export default function ParticipantSelector({
   roleFilter =
     "",
 
+  // ---------------------------------------------------
+  // Runtime state destination
+  //
+  // Examples:
+  //
+  // call.selectedParticipantIds
+  // training.participantIds
+  // ---------------------------------------------------
+
+  selectionPath =
+    "call.selectedParticipantIds",
+
 }) {
 
-
-  const { session,
-    } = useAuth();
+  const {
+    session,
+  } =
+    useAuth();
 
   const runtime =
     useRuntimeState();
-
- 
 
 
   // ===================================================
   // CURRENT USER
   // ===================================================
-  //
-  // The authenticated user must never be selectable
-  // as their own training participant.
-  //
-  // Support the common runtime auth shapes used by the
-  // application while keeping this component tolerant
-  // of missing auth state.
-  // ===================================================
 
   const currentUserId =
     session?.user?.id ||
+    runtime.get?.("auth.user.id") ||
+    runtime.get?.("user.id") ||
     null;
 
-    console.log(
-        "[ParticipantSelector] CURRENT USER DEBUG",
-        {
-            currentUserId,
-            auth:
-            runtime.get?.("auth"),
-            user:
-            runtime.get?.("user"),
-        }
-        );
+
+  console.log(
+    "[ParticipantSelector] CURRENT USER DEBUG",
+    {
+      currentUserId,
+      selectionPath,
+    }
+  );
 
 
   // ===================================================
-  // INITIAL TRAINING PARTICIPANTS
+  // INITIAL SELECTION
   // ===================================================
 
-  const initialParticipantIds =
+  const initialSelectedIds =
     runtime.get?.(
-      "training.participantIds"
+      selectionPath
     );
 
 
@@ -108,9 +111,9 @@ export default function ParticipantSelector({
   ] =
     useState(
       Array.isArray(
-        initialParticipantIds
+        initialSelectedIds
       )
-        ? initialParticipantIds.map(
+        ? initialSelectedIds.map(
             id =>
               String(id)
           )
@@ -118,9 +121,6 @@ export default function ParticipantSelector({
     );
 
 
-  // Keep selected member objects independently of the
-  // current search/page so selected chips don't disappear
-  // when the user searches for someone else.
   const [
     selectedMembersMap,
     setSelectedMembersMap,
@@ -132,35 +132,35 @@ export default function ParticipantSelector({
     loading,
     setLoading,
   ] =
-    useState(false);
+  useState(false);
 
 
   const [
     loadingMore,
     setLoadingMore,
   ] =
-    useState(false);
+  useState(false);
 
 
   const [
     error,
     setError,
   ] =
-    useState(null);
+  useState(null);
 
 
   const [
     page,
     setPage,
   ] =
-    useState(1);
+  useState(1);
 
 
   const [
     hasNext,
     setHasNext,
   ] =
-    useState(false);
+  useState(false);
 
 
   const searchTimeoutRef =
@@ -176,29 +176,30 @@ export default function ParticipantSelector({
   // ===================================================
 
   const normaliseMember =
-    member => {
+    useCallback(
+      member => {
 
-      if (
-        !member
-      ) {
-
-        return null;
-
-      }
+        if (!member) {
+          return null;
+        }
 
 
-      return {
+        return {
 
-        ...member,
+          ...member,
 
-        id:
-          String(
-            member.id
-          ),
+          id:
+            String(
+              member.id ??
+              member._id ??
+              ""
+            ),
 
-      };
+        };
 
-    };
+      },
+      []
+    );
 
 
   // ===================================================
@@ -210,7 +211,7 @@ export default function ParticipantSelector({
       async ({
         nextPage = 1,
         append = false,
-        searchValue = search,
+        searchValue = "",
       } = {}) => {
 
         if (
@@ -327,8 +328,7 @@ export default function ParticipantSelector({
 
 
           // --------------------------------------------
-          // Preserve user objects for selected
-          // participants.
+          // Preserve selected member objects
           // --------------------------------------------
 
           if (
@@ -346,19 +346,19 @@ export default function ParticipantSelector({
                 loadedMembers.forEach(
                   member => {
 
+                    const id =
+                      String(
+                        member.id
+                      );
+
+
                     if (
                       selectedIds.includes(
-                        String(
-                          member.id
-                        )
+                        id
                       )
                     ) {
 
-                      next[
-                        String(
-                          member.id
-                        )
-                      ] =
+                      next[id] =
                         member;
 
                     }
@@ -390,19 +390,15 @@ export default function ParticipantSelector({
           console.log(
             "[ParticipantSelector] Members loaded",
             {
-
+              selectionPath,
               search:
                 searchValue,
-
               page:
                 nextPage,
-
               count:
                 loadedMembers.length,
-
               total:
                 pagination.total,
-
             }
           );
 
@@ -442,9 +438,10 @@ export default function ParticipantSelector({
       },
       [
         currentUserId,
+        normaliseMember,
         roleFilter,
-        search,
         selectedIds,
+        selectionPath,
       ]
     );
 
@@ -456,16 +453,12 @@ export default function ParticipantSelector({
   useEffect(() => {
 
     loadMembers({
-
       nextPage:
         1,
-
       append:
         false,
-
       searchValue:
         "",
-
     });
 
   }, [
@@ -490,16 +483,12 @@ export default function ParticipantSelector({
         () => {
 
           loadMembers({
-
             nextPage:
               1,
-
             append:
               false,
-
             searchValue:
               search.trim(),
-
           });
 
         },
@@ -522,63 +511,57 @@ export default function ParticipantSelector({
 
 
   // ===================================================
-  // SYNC TRAINING PARTICIPANTS
+  // RUNTIME SYNC
+  // ===================================================
+  //
+  // This is now generic.
+  //
+  // Group call:
+  //
+  // call.selectedParticipantIds
+  //
+  // Training:
+  //
+  // training.participantIds
+  //
   // ===================================================
 
-  const syncTrainingParticipants =
+  const syncSelectedParticipants =
     useCallback(
       nextIds => {
 
         const normalisedIds =
-          nextIds.map(
-            id =>
-              String(id)
-          );
+          [
+            ...new Set(
+              nextIds
+                .map(
+                  id =>
+                    String(id).trim()
+                )
+                .filter(Boolean)
+            ),
+          ];
 
-
-        // ----------------------------------------------
-        // New session-oriented state
-        // ----------------------------------------------
 
         runtime.set(
-          "training.participantIds",
+          selectionPath,
           normalisedIds
         );
 
 
-        // ----------------------------------------------
-        // Temporary backwards compatibility.
-        //
-        // Keep the first selected participant available
-        // to the existing single-recipient Remote
-        // Training call flow while we migrate the Confo
-        // to TrainingSession.
-        // ----------------------------------------------
-
-        runtime.set(
-          "call.recipientId",
-          normalisedIds[0] ||
-          null
-        );
-
-
         console.log(
-          "[ParticipantSelector] Training participants changed",
+          "[ParticipantSelector] Selection changed",
           {
-
+            selectionPath,
             participantIds:
               normalisedIds,
-
-            legacyRecipientId:
-              normalisedIds[0] ||
-              null,
-
           }
         );
 
       },
       [
         runtime,
+        selectionPath,
       ]
     );
 
@@ -607,10 +590,6 @@ export default function ParticipantSelector({
         }
 
 
-        // --------------------------------------------
-        // Never allow current user to be selected.
-        // --------------------------------------------
-
         if (
           currentUserId &&
           memberId ===
@@ -635,11 +614,13 @@ export default function ParticipantSelector({
 
             const next =
               exists
+
                 ? previous.filter(
                     id =>
                       id !==
                       memberId
                   )
+
                 : [
                     ...previous,
                     memberId,
@@ -681,7 +662,7 @@ export default function ParticipantSelector({
             );
 
 
-            syncTrainingParticipants(
+            syncSelectedParticipants(
               next
             );
 
@@ -694,7 +675,8 @@ export default function ParticipantSelector({
       },
       [
         currentUserId,
-        syncTrainingParticipants,
+        normaliseMember,
+        syncSelectedParticipants,
       ]
     );
 
@@ -743,7 +725,7 @@ export default function ParticipantSelector({
             );
 
 
-            syncTrainingParticipants(
+            syncSelectedParticipants(
               next
             );
 
@@ -755,7 +737,7 @@ export default function ParticipantSelector({
 
       },
       [
-        syncTrainingParticipants,
+        syncSelectedParticipants,
       ]
     );
 
@@ -779,16 +761,12 @@ export default function ParticipantSelector({
 
 
         loadMembers({
-
           nextPage:
             page + 1,
-
           append:
             true,
-
           searchValue:
             search.trim(),
-
         });
 
       },
@@ -820,9 +798,7 @@ export default function ParticipantSelector({
                   String(
                     member.id
                   ) ===
-                  String(
-                    id
-                  )
+                  String(id)
               )
           )
           .filter(Boolean),
@@ -874,7 +850,6 @@ export default function ParticipantSelector({
 
         color:
           "#fff",
-
       }}
     >
 
@@ -895,7 +870,6 @@ export default function ParticipantSelector({
 
           color:
             "#888",
-
         }}
       >
         {label}
@@ -952,7 +926,6 @@ export default function ParticipantSelector({
 
           outline:
             "none",
-
         }}
 
       />
@@ -975,7 +948,6 @@ export default function ParticipantSelector({
 
           color:
             "#999",
-
         }}
       >
 
@@ -1005,7 +977,6 @@ export default function ParticipantSelector({
 
             marginBottom:
               9,
-
           }}
         >
 
@@ -1013,6 +984,7 @@ export default function ParticipantSelector({
             member => (
 
               <button
+
                 key={
                   member.id
                 }
@@ -1046,8 +1018,8 @@ export default function ParticipantSelector({
 
                   cursor:
                     "pointer",
-
                 }}
+
               >
 
                 {`${member.firstName || ""} ${member.lastName || ""}`.trim() ||
@@ -1093,7 +1065,6 @@ export default function ParticipantSelector({
 
             fontSize:
               11,
-
           }}
         >
           {error}
@@ -1122,7 +1093,6 @@ export default function ParticipantSelector({
 
           background:
             "#0d0d0d",
-
         }}
       >
 
@@ -1141,7 +1111,6 @@ export default function ParticipantSelector({
 
               textAlign:
                 "center",
-
             }}
           >
             Loading participants...
@@ -1166,7 +1135,6 @@ export default function ParticipantSelector({
 
               textAlign:
                 "center",
-
             }}
           >
             No participants found.
@@ -1201,6 +1169,7 @@ export default function ParticipantSelector({
               return (
 
                 <button
+
                   key={
                     memberId
                   }
@@ -1248,8 +1217,8 @@ export default function ParticipantSelector({
 
                     cursor:
                       "pointer",
-
                   }}
+
                 >
 
                   <span
@@ -1287,7 +1256,6 @@ export default function ParticipantSelector({
 
                       fontSize:
                         10,
-
                     }}
                   >
 
@@ -1305,7 +1273,6 @@ export default function ParticipantSelector({
 
                       flex:
                         1,
-
                     }}
                   >
 
@@ -1328,7 +1295,6 @@ export default function ParticipantSelector({
 
                         textOverflow:
                           "ellipsis",
-
                       }}
                     >
                       {displayName}
@@ -1357,7 +1323,6 @@ export default function ParticipantSelector({
 
                         textOverflow:
                           "ellipsis",
-
                       }}
                     >
                       {member.email}
@@ -1375,7 +1340,6 @@ export default function ParticipantSelector({
 
                         color:
                           "#777",
-
                       }}
                     >
                       {member.role}
@@ -1400,6 +1364,7 @@ export default function ParticipantSelector({
       {hasNext && (
 
         <button
+
           type="button"
 
           onClick={
@@ -1439,8 +1404,8 @@ export default function ParticipantSelector({
               loadingMore
                 ? "default"
                 : "pointer",
-
           }}
+
         >
 
           {loadingMore

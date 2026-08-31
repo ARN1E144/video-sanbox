@@ -59,17 +59,12 @@ function safeText(
   }
 
 
-  // ---------------------------------------------------
-  // Object values must never be rendered directly.
-  // ---------------------------------------------------
-
   if (
     isObject(
       value
     )
   ) {
 
-    // Prefer common identity fields first.
     const candidate =
       value.uid ??
       value.id ??
@@ -220,7 +215,7 @@ function resolveRemoteUsers(
 
 
   // ---------------------------------------------------
-  // Already-resolved runtime value
+  // Already resolved object
   // ---------------------------------------------------
 
   if (
@@ -327,11 +322,6 @@ function normaliseParticipants(
           }
 
 
-          // -----------------------------------------
-          // Preserve Agora/runtime participant object
-          // and provide a stable key.
-          // -----------------------------------------
-
           const participantWithUid =
 
             isObject(
@@ -417,6 +407,7 @@ function safeParticipantKey(
 }
 
 
+
 // =====================================================
 // REMOTE PARTICIPANT TILE
 // =====================================================
@@ -425,7 +416,9 @@ function RemoteParticipantTile({
   participant,
 }) {
 
-  const tileRef = React.useRef(null);
+  const tileRef =
+    React.useRef(null);
+
 
   const rawUid =
     participant?.uid ??
@@ -433,44 +426,118 @@ function RemoteParticipantTile({
     participant?.userId ??
     null;
 
+
   const uid =
     safeText(
       rawUid,
       "Participant"
     );
 
+
   const [, forceRender] =
     React.useState(0);
 
+
   React.useEffect(() => {
 
-    const user =
+    // =================================================
+    // LOOK UP ACTUAL AGORA USER
+    // =================================================
+
+    const agoraUser =
       agoraEngine.getRemoteUser(
         rawUid
       );
 
+
+    // =================================================
+    // LOOK UP ACTUAL VIDEO TRACK
+    // =================================================
+
     const videoTrack =
-      user?.videoTrack;
+      agoraUser?.videoTrack;
+
+
+    // =================================================
+    // TRACK DIAGNOSTIC
+    // =================================================
+
+    console.log(
+      "[RemoteVideoTile] TRACK DIAGNOSTIC",
+      {
+
+        rawUid,
+
+        uid,
+
+        hasAgoraUser:
+          !!agoraUser,
+
+        agoraUserUid:
+          agoraUser?.uid,
+
+        hasVideoTrack:
+          !!videoTrack,
+
+        trackState:
+          videoTrack
+            ?.mediaStreamTrack
+            ?.readyState,
+
+        enabled:
+          videoTrack?.enabled,
+
+        muted:
+          videoTrack?.isMuted,
+
+      }
+    );
+
+
+    // =================================================
+    // NO TRACK YET
+    // =================================================
 
     if (
       !videoTrack ||
       !tileRef.current
     ) {
+
+      console.log(
+        "[RemoteVideoTile] waiting for video track",
+        {
+          uid,
+          rawUid,
+          hasAgoraUser:
+            !!agoraUser,
+        }
+      );
+
+
       return;
+
     }
+
 
     const container =
       tileRef.current;
+
+
+    // =================================================
+    // PLAY
+    // =================================================
 
     console.log(
       "[RemoteVideoTile] PLAY",
       {
         uid,
+        rawUid,
         container,
         track:
           videoTrack,
       }
     );
+
 
     try {
 
@@ -478,22 +545,42 @@ function RemoteParticipantTile({
         container
       );
 
+
       forceRender(
         value =>
           value + 1
       );
 
-    } catch (error) {
+
+      console.log(
+        "[RemoteVideoTile] PLAYING",
+        {
+          uid,
+          rawUid,
+        }
+      );
+
+
+    }
+    catch (
+      error
+    ) {
 
       console.error(
         "[RemoteVideoTile] play failed",
         {
           uid,
+          rawUid,
           error,
         }
       );
 
     }
+
+
+    // =================================================
+    // CLEANUP
+    // =================================================
 
     return () => {
 
@@ -501,7 +588,10 @@ function RemoteParticipantTile({
 
         videoTrack.stop();
 
-      } catch (error) {
+      }
+      catch (
+        error
+      ) {
 
         console.warn(
           "[RemoteVideoTile] stop failed",
@@ -521,49 +611,109 @@ function RemoteParticipantTile({
   ]);
 
 
+  // =================================================
+  // RENDER
+  // =================================================
+
   return (
+
     <div
       style={{
-        position: "relative",
-        width: "100%",
-        aspectRatio: "16 / 9",
-        minHeight: 120,
-        overflow: "hidden",
-        borderRadius: 8,
-        background: "#000",
+
+        position:
+          "relative",
+
+        width:
+          "100%",
+
+        aspectRatio:
+          "16 / 9",
+
+        minHeight:
+          120,
+
+        overflow:
+          "hidden",
+
+        borderRadius:
+          8,
+
+        background:
+          "#000",
+
       }}
     >
 
       <div
-        ref={tileRef}
+        ref={
+          tileRef
+        }
+
         style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          overflow: "hidden",
+
+          position:
+            "absolute",
+
+          inset:
+            0,
+
+          width:
+            "100%",
+
+          height:
+            "100%",
+
+          overflow:
+            "hidden",
+
         }}
       />
 
+
       <div
         style={{
-          position: "absolute",
-          left: 8,
-          bottom: 8,
-          zIndex: 10,
-          padding: "3px 6px",
-          borderRadius: 4,
-          background: "rgba(0,0,0,.65)",
-          color: "#fff",
-          fontSize: 10,
+
+          position:
+            "absolute",
+
+          left:
+            8,
+
+          bottom:
+            8,
+
+          zIndex:
+            10,
+
+          padding:
+            "3px 6px",
+
+          borderRadius:
+            4,
+
+          background:
+            "rgba(0,0,0,.65)",
+
+          color:
+            "#fff",
+
+          fontSize:
+            10,
+
         }}
       >
+
         {uid}
+
       </div>
 
     </div>
+
   );
+
 }
+
+
 
 // =====================================================
 // COMPONENT
@@ -604,23 +754,81 @@ export default function RemoteVideoGrid({
       {}
     );
 
-    const [, forceRemoteRender] =
+
+  const [, forceRemoteRender] =
     useState(0);
 
 
   // ===================================================
-  // RESOLVE SOURCE
+  // RUNTIME PATH
+  // ===================================================
+
+  const runtimePath =
+    useMemo(
+      () => {
+
+        if (
+          typeof source !== "string"
+        ) {
+
+          return null;
+
+        }
+
+
+        const trimmed =
+          source.trim();
+
+
+        if (
+          !trimmed
+        ) {
+
+          return null;
+
+        }
+
+
+        if (
+          trimmed.startsWith(
+            "{{"
+          ) &&
+          trimmed.endsWith(
+            "}}"
+          )
+        ) {
+
+          return trimmed
+            .slice(
+              2,
+              -2
+            )
+            .trim();
+
+        }
+
+
+        return trimmed;
+
+      },
+      [
+        source,
+      ]
+    );
+
+
+  // ===================================================
+  // INITIAL VALUE + RUNTIME SUBSCRIPTION
   // ===================================================
 
   useEffect(() => {
 
     // -------------------------------------------------
-    // Already-resolved object
+    // Already resolved object
     // -------------------------------------------------
 
     if (
-      typeof source !==
-        "string"
+      typeof source !== "string"
     ) {
 
       setRuntimeRemoteUsers(
@@ -633,54 +841,18 @@ export default function RemoteVideoGrid({
     }
 
 
-    const trimmed =
-      source.trim();
-
-
-    if (
-      !trimmed
-    ) {
-
-      setRuntimeRemoteUsers(
-        runtime.get?.(
-          "call.remoteUsers"
-        ) || {}
-      );
-
-
-      return undefined;
-
-    }
-
-
     // -------------------------------------------------
-    // Resolve binding syntax
+    // No runtime path
     // -------------------------------------------------
-
-    const runtimePath =
-      trimmed.startsWith(
-        "{{"
-      ) &&
-      trimmed.endsWith(
-        "}}"
-      )
-
-        ? trimmed
-            .slice(
-              2,
-              -2
-            )
-            .trim()
-
-        : trimmed;
-
 
     if (
       !runtimePath
     ) {
 
       setRuntimeRemoteUsers(
-        {}
+        runtime.get?.(
+          "call.remoteUsers"
+        ) || {}
       );
 
 
@@ -713,8 +885,26 @@ export default function RemoteVideoGrid({
         runtimePath,
         value => {
 
+          console.log(
+            "[RemoteVideoGrid] RUNTIME UPDATE",
+            {
+              path:
+                runtimePath,
+
+              users:
+                value,
+            }
+          );
+
+
           setRuntimeRemoteUsers(
             value || {}
+          );
+
+
+          forceRemoteRender(
+            value =>
+              value + 1
           );
 
         }
@@ -729,35 +919,71 @@ export default function RemoteVideoGrid({
 
   }, [
     runtime,
+    runtimePath,
     source,
   ]);
-  
+
+
+  // ===================================================
+  // AGORA REFRESH
+  // ===================================================
+
   useEffect(() => {
 
-  return agoraEngine.on(
-    "REMOTE_USERS_CHANGED",
-    () => {
-      forceRemoteRender(
-        value => value + 1
-      );
-    }
-  );
+    const unsubscribe =
+      agoraEngine.on(
+        "REMOTE_USERS_CHANGED",
+        payload => {
 
-}, []);
+          console.log(
+            "[RemoteVideoGrid] REMOTE_USERS_CHANGED",
+            payload
+          );
+
+
+          forceRemoteRender(
+            value =>
+              value + 1
+          );
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, []);
 
 
   // ===================================================
   // PARTICIPANTS
   // ===================================================
 
+  const remoteUsers =
+    resolveRemoteUsers(
+      runtime,
+      source
+    );
+
+
   const participants =
     useMemo(
       () =>
         normaliseParticipants(
-          runtimeRemoteUsers
+          runtimeRemoteUsers &&
+          Object.keys(
+            runtimeRemoteUsers
+          ).length
+            ? runtimeRemoteUsers
+            : remoteUsers
         ),
       [
         runtimeRemoteUsers,
+        remoteUsers,
       ]
     );
 
@@ -843,8 +1069,7 @@ export default function RemoteVideoGrid({
       }}
     >
 
-      {participants.length ===
-      0 ? (
+      {participants.length === 0 ? (
 
         <div
           style={{

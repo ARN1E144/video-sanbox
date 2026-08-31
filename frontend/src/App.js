@@ -1,30 +1,110 @@
-
 import React from "react";
 
-import { PreviewProvider } from "./context/PreviewContext";
-import { CanvasProvider } from "./context/CanvasContext";
-import { ProjectProvider } from "./context/ProjectContext";
-import { ActionProvider } from "./context/ActionContext";
-import { AuthProvider, useAuth } from "./context/AuthContext";
+import {
+  AuthProvider,
+  useAuth,
+} from "./context/AuthContext";
 
-import { RuntimeEventProvider } from "./context/RuntimeEventContext";
-import { RuntimeTriggersProvider } from "./context/RuntimeTriggersContext";
-import { RuntimeStateProvider } from "./context/RuntimeStateContext";
-import { RuntimeDebuggerProvider } from "./context/RuntimeDebuggerContext";
+import AuthPortal
+  from "./components/AuthPortal";
+
 import {
   RuntimeAuthProvider,
   useRuntimeAuth,
 } from "./context/RuntimeAuthContext";
 
-import RuntimeBootstrap from "./runtime/RuntimeBootstrap";
-import RuntimeDevWiring from "./dev/RuntimeDevWiring";
-import RuntimeTestPanel from "./dev/RuntimeTestPanel";
-import ConfoTest from "./dev/ConfoTest";
-import ConfoRenderer from "./runtime/confos/ConfoRenderer";
-import ContractTest from "./dev/ContractTest";
+import {
+  RuntimeEventProvider,
+} from "./context/RuntimeEventContext";
 
-import MainApp from "./MainApp";
-import AuthPortal from "./components/AuthPortal";
+import {
+  RuntimeStateProvider,
+} from "./context/RuntimeStateContext";
+
+import RuntimeBootstrap
+  from "./runtime/RuntimeBootstrap";
+
+import {
+  ActionProvider,
+} from "./context/ActionContext";
+
+import {
+  RuntimeTriggersProvider,
+} from "./context/RuntimeTriggersContext";
+
+import RuntimeDevWiring
+  from "./dev/RuntimeDevWiring";
+
+import ContractTest
+  from "./dev/ContractTest";
+
+import {
+  ProjectProvider,
+} from "./context/ProjectContext";
+
+import {
+  CanvasProvider,
+} from "./context/CanvasContext";
+
+import {
+  PreviewProvider,
+} from "./context/PreviewContext";
+
+import MainApp
+  from "./MainApp";
+
+import ConfoRenderer
+  from "./runtime/confos/ConfoRenderer";
+
+import RuntimeTestPanel
+  from "./dev/RuntimeTestPanel";
+
+import ConfoTest
+  from "./dev/ConfoTest";
+
+import useGroupCallInvitations
+  from "./hooks/useGroupCallInvitations";
+
+
+// =====================================================
+// LOADING
+// =====================================================
+
+function AuthLoading() {
+
+  return (
+    <div
+      style={{
+        minHeight:
+          "100vh",
+
+        width:
+          "100%",
+
+        display:
+          "flex",
+
+        alignItems:
+          "center",
+
+        justifyContent:
+          "center",
+
+        background:
+          "#020617",
+
+        color:
+          "#fff",
+
+        fontFamily:
+          "sans-serif",
+      }}
+    >
+      Loading...
+    </div>
+  );
+
+}
 
 
 // =====================================================
@@ -32,84 +112,149 @@ import AuthPortal from "./components/AuthPortal";
 // =====================================================
 
 function RuntimeAuthDebug() {
-  const runtimeAuth = useRuntimeAuth();
+
+  const runtimeAuth =
+    useRuntimeAuth();
+
 
   console.log(
-    "%c 🔒 [RUNTIME AUTH]",
-    "background-color:#DC2626;color:white;font-weight:bold;padding:3px 8px;border-radius:4px;",
+    "[RUNTIME AUTH DEBUG]",
     runtimeAuth
   );
 
+
   return null;
+
 }
 
 
 // =====================================================
-// LOADING SCREEN
+// GROUP CALL INVITATION RUNTIME
+// =====================================================
+//
+// IMPORTANT:
+//
+// This component must:
+// - live at module scope
+// - be rendered below ActionProvider
+// - be rendered only for authenticated users
+//
+// The hook itself performs:
+//   initial fetch
+//   5 second polling
+//   call.fetchPendingInvitations
+//
 // =====================================================
 
-function AuthLoading() {
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#020617",
-        color: "#fff",
-        fontFamily: "sans-serif",
-      }}
-    >
-      Loading...
-    </div>
-  );
+function GroupCallInvitationRuntime() {
+
+  const {
+    refresh,
+    isPolling,
+  } =
+    useGroupCallInvitations({
+
+      enabled:
+        true,
+
+      intervalMs:
+        5000,
+
+    });
+
+
+  // ---------------------------------------------------
+  // DEVELOPMENT DIAGNOSTICS
+  // ---------------------------------------------------
+
+  React.useEffect(() => {
+
+    console.log(
+      "[GroupCallInvitationRuntime] mounted",
+      {
+        isPolling,
+      }
+    );
+
+
+    return () => {
+
+      console.log(
+        "[GroupCallInvitationRuntime] unmounted"
+      );
+
+    };
+
+  }, [
+    isPolling,
+  ]);
+
+
+  // ---------------------------------------------------
+  // Expose refresh only through runtime/hook.
+  //
+  // We deliberately do not render anything.
+  // ---------------------------------------------------
+
+  React.useEffect(() => {
+
+    console.log(
+      "[GroupCallInvitationRuntime] refresh available",
+      typeof refresh === "function"
+    );
+
+  }, [
+    refresh,
+  ]);
+
+
+  return null;
+
 }
 
 
 // =====================================================
 // AUTH GATE
-//
-// IMPORTANT:
-//
-// ProjectProvider is deliberately NOT mounted until
-// authentication has completed.
-//
-// This prevents:
-//
-//   ProjectProvider
-//        ↓
-//   GET /api/projects
-//        ↓
-//   401
-//
-// when there is no authenticated user.
 // =====================================================
 
 function AuthGate() {
+
   const {
     session,
     loading,
-  } = useAuth();
+  } =
+    useAuth();
+
 
   // ---------------------------------------------------
   // AUTH HYDRATION
   // ---------------------------------------------------
 
-  if (loading) {
-    return <AuthLoading />;
+  if (
+    loading
+  ) {
+
+    return (
+      <AuthLoading />
+    );
+
   }
+
 
   // ---------------------------------------------------
   // NOT AUTHENTICATED
   // ---------------------------------------------------
 
-  if (!session?.tokens?.accessToken) {
+  if (
+    !session?.tokens?.accessToken
+  ) {
+
     return (
       <AuthPortal />
     );
+
   }
+
 
   // ---------------------------------------------------
   // AUTHENTICATED
@@ -118,6 +263,7 @@ function AuthGate() {
   return (
     <AuthenticatedApp />
   );
+
 }
 
 
@@ -126,7 +272,9 @@ function AuthGate() {
 // =====================================================
 
 function AuthenticatedApp() {
+
   return (
+
     <RuntimeAuthProvider>
 
       <RuntimeAuthDebug />
@@ -139,11 +287,23 @@ function AuthenticatedApp() {
 
           <ActionProvider>
 
+            {/* =========================================
+                GROUP INVITATION POLLING
+
+                MUST be below ActionProvider because
+                useGroupCallInvitations() uses
+                useActionContext().
+            ========================================= */}
+
+            <GroupCallInvitationRuntime />
+
+
             <RuntimeTriggersProvider>
 
               <RuntimeDevWiring />
 
               <ContractTest />
+
 
               <ProjectProvider>
 
@@ -174,7 +334,9 @@ function AuthenticatedApp() {
       </RuntimeEventProvider>
 
     </RuntimeAuthProvider>
+
   );
+
 }
 
 
@@ -183,11 +345,18 @@ function AuthenticatedApp() {
 // =====================================================
 
 function App() {
+
   return (
+
     <AuthProvider>
+
       <AuthGate />
+
     </AuthProvider>
+
   );
+
 }
+
 
 export default App;

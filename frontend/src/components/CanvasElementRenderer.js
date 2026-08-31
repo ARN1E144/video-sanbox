@@ -36,12 +36,75 @@ function normaliseNextActions(
   return value.filter(
     action =>
       action &&
-      typeof action ===
-        "object" &&
-      typeof action.type ===
-        "string" &&
+      typeof action === "object" &&
+      typeof action.type === "string" &&
       action.type.trim()
   );
+
+}
+
+
+// =====================================================
+// RESOLVE COMPONENT
+// =====================================================
+//
+// Canvas normally passes:
+//
+//   Component = entry.component
+//
+// However, this renderer is deliberately tolerant of:
+//
+//   Component = function
+//
+// or:
+//
+//   Component = {
+//     component: function,
+//     contract: ...
+//   }
+//
+// This prevents a registry-entry object from ever being
+// handed directly to React.
+//
+// =====================================================
+
+function resolveComponent(
+  value
+) {
+
+  // ---------------------------------------------------
+  // Already a React component
+  // ---------------------------------------------------
+
+  if (
+    typeof value === "function"
+  ) {
+
+    return value;
+
+  }
+
+
+  // ---------------------------------------------------
+  // Registry entry
+  // ---------------------------------------------------
+
+  if (
+    value &&
+    typeof value === "object" &&
+    typeof value.component === "function"
+  ) {
+
+    return value.component;
+
+  }
+
+
+  // ---------------------------------------------------
+  // Invalid
+  // ---------------------------------------------------
+
+  return null;
 
 }
 
@@ -81,8 +144,26 @@ export default function CanvasElementRenderer({
 
 
   const elementProps =
-    safeElement.props ||
-    {};
+    safeElement.props &&
+    typeof safeElement.props === "object"
+      ? safeElement.props
+      : {};
+
+
+  // ===================================================
+  // RESOLVE COMPONENT
+  // ===================================================
+
+  const ResolvedComponent =
+    useMemo(
+      () =>
+        resolveComponent(
+          Component
+        ),
+      [
+        Component,
+      ]
+    );
 
 
   // ===================================================
@@ -162,11 +243,6 @@ export default function CanvasElementRenderer({
 
             eventName,
 
-            props,
-
-            meta:
-              resolvedMeta,
-
             payload,
 
           }
@@ -174,27 +250,32 @@ export default function CanvasElementRenderer({
 
 
         // =============================================
-        // NO ACTION
+        // NO ACTION CONFIGURED
         // =============================================
 
         if (
-          eventName !==
-            "onClick" ||
-          !props?.action
+          eventName !== "onClick"
         ) {
 
-          console.log(
-            "[CANVAS EVENT]",
-            "No action configured for event",
-            {
+          return {
 
-              eventName,
+            ok:
+              true,
 
-              elementId,
+            skipped:
+              true,
 
-            }
-          );
+            reason:
+              "UNHANDLED_EVENT",
 
+          };
+
+        }
+
+
+        if (
+          !props?.action
+        ) {
 
           return {
 
@@ -213,24 +294,23 @@ export default function CanvasElementRenderer({
 
 
         // =============================================
-        // PRIMARY ACTION PARAMS
+        // ACTION PARAMS
         // =============================================
 
         const actionParams = {
 
           // -------------------------------------------
-          // Inspector-defined action parameters
+          // Inspector-defined parameters
           // -------------------------------------------
 
           ...(props?.params &&
-          typeof props.params ===
-            "object"
+          typeof props.params === "object"
             ? props.params
             : {}),
 
 
           // -------------------------------------------
-          // Canvas action context
+          // Runtime canvas context
           // -------------------------------------------
 
           targetId:
@@ -252,10 +332,6 @@ export default function CanvasElementRenderer({
         };
 
 
-        // =============================================
-        // PRIMARY ACTION
-        // =============================================
-
         console.log(
           "[CANVAS EVENT → ACTION]",
           {
@@ -264,8 +340,7 @@ export default function CanvasElementRenderer({
               props.action,
 
             targetId:
-              props.targetId ||
-              null,
+              actionParams.targetId,
 
             sourceId:
               elementId,
@@ -274,18 +349,20 @@ export default function CanvasElementRenderer({
               elementType,
 
             sourceConfoId:
-              resolvedMeta?.sourceId ||
-              null,
+              actionParams.sourceConfoId,
 
             params:
               actionParams,
 
-            nextActionCount:
-              nextActions.length,
+            nextActions,
 
           }
         );
 
+
+        // =============================================
+        // PRIMARY ACTION
+        // =============================================
 
         try {
 
@@ -309,9 +386,9 @@ export default function CanvasElementRenderer({
           );
 
 
-          // =========================================
-          // PRIMARY ACTION FAILED
-          // =========================================
+          // -------------------------------------------
+          // STOP ON FAILURE
+          // -------------------------------------------
 
           if (
             !result?.ok
@@ -336,13 +413,12 @@ export default function CanvasElementRenderer({
           }
 
 
-          // =========================================
-          // NO CHAIN
-          // =========================================
+          // -------------------------------------------
+          // NO NEXT ACTIONS
+          // -------------------------------------------
 
           if (
-            nextActions.length ===
-              0
+            nextActions.length === 0
           ) {
 
             return result;
@@ -350,9 +426,9 @@ export default function CanvasElementRenderer({
           }
 
 
-          // =========================================
-          // RUN CHAIN
-          // =========================================
+          // -------------------------------------------
+          // PIPELINE UNAVAILABLE
+          // -------------------------------------------
 
           if (
             typeof runActionPipeline !==
@@ -381,32 +457,14 @@ export default function CanvasElementRenderer({
           }
 
 
-          console.log(
-            "[CANVAS ACTION CHAIN]",
-            {
-
-              elementId,
-
-              elementType,
-
-              primaryAction:
-                props.action,
-
-              nextActions,
-
-            }
-          );
-
+          // -------------------------------------------
+          // RUN NEXT ACTION PIPELINE
+          // -------------------------------------------
 
           const chainResult =
             await runActionPipeline(
               nextActions,
               {
-
-                // -------------------------------------
-                // Values inherited by every chained
-                // action.
-                // -------------------------------------
 
                 sourceId:
                   elementId,
@@ -443,15 +501,10 @@ export default function CanvasElementRenderer({
           );
 
 
-          // =========================================
-          // RETURN CHAIN RESULT
-          // =========================================
-
           return {
 
             ok:
-              chainResult?.ok !==
-                false,
+              chainResult?.ok !== false,
 
             primaryResult:
               result,
@@ -512,50 +565,57 @@ export default function CanvasElementRenderer({
 
 
   // ===================================================
-  // DEBUG
+  // COMPONENT DEBUG
   // ===================================================
 
   console.log(
-  "[CHAIN DEBUG]",
-  JSON.stringify(
+    "[CanvasElementRenderer]",
     {
+
       elementId,
+
       elementType,
-      action: props?.action || null,
-      targetId: props?.targetId || null,
-      params: props?.params || null,
-      nextActions: props?.nextActions || null,
-      rawElementProps: element?.props || null,
-    },
-    null,
-    2
-  )
-);
+
+      originalComponentType:
+        typeof Component,
+
+      resolvedComponentType:
+        typeof ResolvedComponent,
+
+      componentIsFunction:
+        typeof ResolvedComponent ===
+          "function",
+
+      componentName:
+        ResolvedComponent?.displayName ||
+        ResolvedComponent?.name ||
+        null,
+
+      action:
+        props?.action ||
+        null,
+
+      targetId:
+        props?.targetId ||
+        null,
+
+    }
+  );
 
 
   // ===================================================
-  // INVALID COMPONENT GUARD
-  // ===================================================
-  //
-  // IMPORTANT:
-  //
-  // All hooks above execute before this guard.
-  //
+  // INVALID ELEMENT
   // ===================================================
 
   if (
-    !Component ||
+    !safeElement ||
     !element
   ) {
 
     console.warn(
-      "[CanvasElementRenderer] Missing Component or element",
+      "[CanvasElementRenderer] Missing element",
       {
-
-        Component,
-
         element,
-
       }
     );
 
@@ -566,38 +626,143 @@ export default function CanvasElementRenderer({
 
 
   // ===================================================
+  // INVALID COMPONENT
+  // ===================================================
+
+  if (
+    typeof ResolvedComponent !==
+      "function"
+  ) {
+
+    console.error(
+      "[CanvasElementRenderer] Invalid component",
+      {
+
+        elementId,
+
+        elementType,
+
+        originalComponent:
+          Component,
+
+        originalComponentType:
+          typeof Component,
+
+        resolvedComponent:
+          ResolvedComponent,
+
+        resolvedComponentType:
+          typeof ResolvedComponent,
+
+      }
+    );
+
+
+    return (
+
+      <div
+        style={{
+
+          width:
+            "100%",
+
+          height:
+            "100%",
+
+          minHeight:
+            40,
+
+          display:
+            "flex",
+
+          alignItems:
+            "center",
+
+          justifyContent:
+            "center",
+
+          boxSizing:
+            "border-box",
+
+          border:
+            "1px solid #7f1d1d",
+
+          background:
+            "#2a1111",
+
+          color:
+            "#fca5a5",
+
+          padding:
+            12,
+
+          fontSize:
+            11,
+
+          textAlign:
+            "center",
+
+        }}
+      >
+
+        Invalid component:
+        {" "}
+        {elementType || "Unknown"}
+
+      </div>
+
+    );
+
+  }
+
+
+  // ===================================================
+  // COMPONENT PROPS
+  // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // These props belong to the React component.
+  //
+  // The component itself is responsible for deciding
+  // which props belong on its DOM and which do not.
+  //
+  // ===================================================
+
+  const componentProps = {
+
+    id:
+      elementId,
+
+    ...props,
+
+    meta:
+      resolvedMeta,
+
+    binding:
+      binding,
+
+    emit:
+      emit,
+
+  };
+
+
+  // ===================================================
   // RENDER
   // ===================================================
 
   return (
 
-    <Component
-
-      id={
-        elementId
-      }
-
-      {...props}
-
-      meta={
-        resolvedMeta
-      }
-
-      binding={
-        binding
-      }
-
-      emit={
-        emit
-      }
-
+    <ResolvedComponent
+      {...componentProps}
     >
 
       {
         children
       }
 
-    </Component>
+    </ResolvedComponent>
 
   );
 

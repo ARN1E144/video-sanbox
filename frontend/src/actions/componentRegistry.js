@@ -1,4 +1,4 @@
-// src/components/elements/registry.js
+// src/components/elements/componentRegistry.js
 
 
 // =====================================================

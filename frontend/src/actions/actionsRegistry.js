@@ -61,6 +61,35 @@ import toggleVideo
 import setAvailability
   from "./call/setAvailability";
 
+import fetchPendingCalls
+  from "./call/fetchPendingCalls";
+
+
+// =========================================================
+// GROUP CALL ACTIONS
+// =========================================================
+
+import createGroupCall
+  from "./call/group/createGroupCall";
+
+import fetchPendingInvitations
+  from "./call/group/fetchPendingInvitations";
+
+import acceptInvitation
+  from "./call/group/acceptInvitation";
+
+import declineInvitation
+  from "./call/group/declineInvitation";
+
+import joinGroupCall
+  from "./call/group/joinGroupCall";
+
+import leaveGroupCall
+  from "./call/group/leaveGroupCall";
+
+import endGroupCall
+  from "./call/group/endGroupCall";
+
 
 import startInterview
   from "./interview/startInterview";
@@ -79,9 +108,6 @@ import uploadRecording
 
 import completeInterview
   from "./interview/completeInterview";
-
-import fetchPendingCalls
-  from "./call/fetchPendingCalls";
 
 
 import startTrainingSession
@@ -113,7 +139,7 @@ import {
 export const ACTIONS = {
 
   // =======================================================
-  // CALL LIFECYCLE
+  // STANDARD CALL LIFECYCLE
   // =======================================================
 
   CALL_START:
@@ -145,6 +171,32 @@ export const ACTIONS = {
 
   CALL_AVAILABILITY:
     "call.setAvailability",
+
+
+  // =======================================================
+  // GROUP CALL LIFECYCLE
+  // =======================================================
+
+  CALL_CREATE_GROUP:
+    "call.createGroupCall",
+
+  CALL_FETCH_PENDING_INVITATIONS:
+    "call.fetchPendingInvitations",
+
+  CALL_ACCEPT_INVITATION:
+    "call.acceptInvitation",
+
+  CALL_DECLINE_INVITATION:
+    "call.declineInvitation",
+
+  CALL_JOIN_GROUP:
+    "call.joinGroupCall",
+
+  CALL_LEAVE_GROUP:
+    "call.leaveGroupCall",
+
+  CALL_END_GROUP:
+    "call.endGroupCall",
 
 
   // =======================================================
@@ -264,18 +316,6 @@ export const actionAliases = {
 // =========================================================
 // CONDITION PATH HELPER
 // =========================================================
-//
-// Typed runtime state metadata.
-//
-// type:
-//   string
-//   number
-//   boolean
-//
-// options:
-//   Optional fixed values for enum-like runtime state.
-//
-// =========================================================
 
 const conditionPath = ({
   path,
@@ -299,24 +339,25 @@ const conditionPath = ({
 // ACTION HELPER
 // =========================================================
 //
-// targets
-//   Component types this action can target.
-//
-// requires
-//   Runtime paths that represent prerequisites.
-//
-// produces
-//   Runtime paths the action can establish/change.
-//
-// conditionPaths
-//   Typed runtime paths that are meaningful conditions
-//   for this action.
-//
 // nextActions
-//   Actions that logically make sense after this action.
+//   Available / logically valid follow-on actions.
 //
-// params
-//   Reserved for future parameter schemas.
+// autoNextActions
+//   Actions the runtime may execute automatically after
+//   this action completes successfully.
+//
+// This distinction is important.
+//
+// Example:
+//
+//   joinGroupCall
+//       nextActions:
+//         toggleMic
+//         toggleVideo
+//         leaveGroupCall
+//         endGroupCall
+//
+// These must NOT all execute automatically.
 //
 // =========================================================
 
@@ -340,6 +381,8 @@ const createAction = ({
 
   nextActions = [],
 
+  autoNextActions = [],
+
   params = {},
 
 }) => ({
@@ -362,6 +405,8 @@ const createAction = ({
 
   nextActions,
 
+  autoNextActions,
+
   params,
 
 });
@@ -370,16 +415,10 @@ const createAction = ({
 // =========================================================
 // COMMON CONDITION PATH DEFINITIONS
 // =========================================================
-//
-// These are reusable metadata descriptors.
-// The inspector consumes these through action
-// conditionPaths and does not hard-code the paths.
-//
-// =========================================================
 
-// -------------------------
+// =====================================================
 // CALL
-// -------------------------
+// =====================================================
 
 const PATH_CALL_ID =
   conditionPath({
@@ -391,6 +430,7 @@ const PATH_CALL_ID =
       "string",
   });
 
+
 const PATH_CALL_CHANNEL =
   conditionPath({
     path:
@@ -401,6 +441,7 @@ const PATH_CALL_CHANNEL =
       "string",
   });
 
+
 const PATH_CALL_STATE =
   conditionPath({
     path:
@@ -409,15 +450,21 @@ const PATH_CALL_STATE =
       "Call state",
     type:
       "string",
+
     options: [
       "idle",
+      "waiting",
       "ringing",
       "accepted",
+      "joining",
       "joined",
       "connected",
+      "join_failed",
       "ended",
     ],
+
   });
+
 
 const PATH_CALL_JOINED =
   conditionPath({
@@ -429,6 +476,7 @@ const PATH_CALL_JOINED =
       "boolean",
   });
 
+
 const PATH_CALL_PARTICIPANTS =
   conditionPath({
     path:
@@ -438,6 +486,7 @@ const PATH_CALL_PARTICIPANTS =
     type:
       "number",
   });
+
 
 const PATH_CALL_REMOTE_USERS =
   conditionPath({
@@ -450,9 +499,62 @@ const PATH_CALL_REMOTE_USERS =
   });
 
 
-// -------------------------
+// =====================================================
+// GROUP CALL
+// =====================================================
+
+const PATH_CALL_TYPE =
+  conditionPath({
+    path:
+      "call.type",
+    label:
+      "Call type",
+    type:
+      "string",
+
+    options: [
+      "queue",
+      "targeted",
+      "group",
+    ],
+
+  });
+
+
+const PATH_CALL_INVITATION_STATUS =
+  conditionPath({
+    path:
+      "call.invitationStatus",
+    label:
+      "Invitation status",
+    type:
+      "string",
+
+    options: [
+      "invited",
+      "accepted",
+      "declined",
+      "joined",
+      "left",
+    ],
+
+  });
+
+
+const PATH_CALL_PENDING_INVITATIONS =
+  conditionPath({
+    path:
+      "calls.pendingInvitations",
+    label:
+      "Pending group invitations",
+    type:
+      "object",
+  });
+
+
+// =====================================================
 // MEDIA
-// -------------------------
+// =====================================================
 
 const PATH_MEDIA_MIC_ENABLED =
   conditionPath({
@@ -464,6 +566,7 @@ const PATH_MEDIA_MIC_ENABLED =
       "boolean",
   });
 
+
 const PATH_MEDIA_VIDEO_ENABLED =
   conditionPath({
     path:
@@ -473,6 +576,7 @@ const PATH_MEDIA_VIDEO_ENABLED =
     type:
       "boolean",
   });
+
 
 const PATH_MEDIA_PLAYING =
   conditionPath({
@@ -484,6 +588,7 @@ const PATH_MEDIA_PLAYING =
       "boolean",
   });
 
+
 const PATH_MEDIA_SOURCE =
   conditionPath({
     path:
@@ -494,6 +599,7 @@ const PATH_MEDIA_SOURCE =
       "string",
   });
 
+
 const PATH_MEDIA_RECORDING =
   conditionPath({
     path:
@@ -503,6 +609,7 @@ const PATH_MEDIA_RECORDING =
     type:
       "boolean",
   });
+
 
 const PATH_MEDIA_RECORDING_URL =
   conditionPath({
@@ -515,9 +622,9 @@ const PATH_MEDIA_RECORDING_URL =
   });
 
 
-// -------------------------
+// =====================================================
 // AVAILABILITY
-// -------------------------
+// =====================================================
 
 const PATH_AVAILABILITY_STATUS =
   conditionPath({
@@ -527,17 +634,19 @@ const PATH_AVAILABILITY_STATUS =
       "Availability status",
     type:
       "string",
+
     options: [
       "available",
       "unavailable",
       "busy",
     ],
+
   });
 
 
-// -------------------------
+// =====================================================
 // TRAINING
-// -------------------------
+// =====================================================
 
 const PATH_TRAINING_SESSION_ID =
   conditionPath({
@@ -549,6 +658,7 @@ const PATH_TRAINING_SESSION_ID =
       "string",
   });
 
+
 const PATH_TRAINING_STATE =
   conditionPath({
     path:
@@ -557,6 +667,7 @@ const PATH_TRAINING_STATE =
       "Training state",
     type:
       "string",
+
     options: [
       "idle",
       "pending",
@@ -565,7 +676,9 @@ const PATH_TRAINING_STATE =
       "active",
       "ended",
     ],
+
   });
+
 
 const PATH_TRAINING_PENDING_SESSIONS =
   conditionPath({
@@ -578,9 +691,9 @@ const PATH_TRAINING_PENDING_SESSIONS =
   });
 
 
-// -------------------------
+// =====================================================
 // INTERVIEW
-// -------------------------
+// =====================================================
 
 const PATH_INTERVIEW_ID =
   conditionPath({
@@ -592,6 +705,7 @@ const PATH_INTERVIEW_ID =
       "string",
   });
 
+
 const PATH_INTERVIEW_STATUS =
   conditionPath({
     path:
@@ -600,13 +714,16 @@ const PATH_INTERVIEW_STATUS =
       "Interview status",
     type:
       "string",
+
     options: [
       "idle",
       "active",
       "completed",
       "evaluated",
     ],
+
   });
+
 
 const PATH_INTERVIEW_CURRENT_QUESTION =
   conditionPath({
@@ -618,6 +735,7 @@ const PATH_INTERVIEW_CURRENT_QUESTION =
       "string",
   });
 
+
 const PATH_INTERVIEW_CURRENT_QUESTION_INDEX =
   conditionPath({
     path:
@@ -627,6 +745,7 @@ const PATH_INTERVIEW_CURRENT_QUESTION_INDEX =
     type:
       "number",
   });
+
 
 const PATH_INTERVIEW_ANSWER =
   conditionPath({
@@ -639,9 +758,9 @@ const PATH_INTERVIEW_ANSWER =
   });
 
 
-// -------------------------
+// =====================================================
 // THEME
-// -------------------------
+// =====================================================
 
 const PATH_THEME_COLOR =
   conditionPath({
@@ -652,6 +771,7 @@ const PATH_THEME_COLOR =
     type:
       "string",
   });
+
 
 const PATH_THEME_APPLIED =
   conditionPath({
@@ -675,6 +795,10 @@ export const actionRegistry = {
   // =======================================================
 
   call: {
+
+    // =====================================================
+    // STANDARD CALLS
+    // =====================================================
 
     startCall: createAction({
 
@@ -1067,6 +1191,7 @@ export const actionRegistry = {
 
       targets: [
         "AgoraFeed",
+        "RemoteVideoGrid",
       ],
 
       requires: [
@@ -1108,6 +1233,7 @@ export const actionRegistry = {
 
       targets: [
         "AgoraFeed",
+        "RemoteVideoGrid",
       ],
 
       requires: [
@@ -1163,6 +1289,424 @@ export const actionRegistry = {
         "call.setAvailability",
         "call.fetchAvailableCalls",
       ],
+
+    }),
+
+
+    // =====================================================
+    // GROUP CALL SYSTEM
+    // =====================================================
+
+    createGroupCall: createAction({
+
+      value:
+        ACTIONS.CALL_CREATE_GROUP,
+
+      label:
+        "Create Group Call",
+
+      category:
+        "call",
+
+      run:
+        createGroupCall,
+
+      targets: [
+        "ParticipantSelector",
+        "CallPanel",
+      ],
+
+      requires: [],
+
+      produces: [
+        "call.id",
+        "call.channel",
+        "call.type",
+        "call.state",
+        "call.joined",
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_CHANNEL,
+        PATH_CALL_TYPE,
+        PATH_CALL_STATE,
+        PATH_CALL_JOINED,
+        PATH_CALL_PARTICIPANTS,
+      ],
+
+      // Actions which are valid after creating a group call.
+      nextActions: [
+        "call.joinGroupCall",
+        "call.endGroupCall",
+      ],
+
+      // Automatic transition:
+      //
+      // create → join
+      //
+      autoNextActions: [
+        "call.joinGroupCall",
+      ],
+
+      params: {
+
+        participantIds: {
+
+          type:
+            "array",
+
+          itemType:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    fetchPendingInvitations: createAction({
+
+      value:
+        ACTIONS.CALL_FETCH_PENDING_INVITATIONS,
+
+      label:
+        "Fetch Pending Group Invitations",
+
+      category:
+        "call",
+
+      run:
+        fetchPendingInvitations,
+
+      targets: [
+        "IncomingGroupCallAlert",
+        "CallPanel",
+      ],
+
+      requires: [],
+
+      produces: [
+        "calls.pendingInvitations",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_PENDING_INVITATIONS,
+      ],
+
+      nextActions: [
+        "call.acceptInvitation",
+        "call.declineInvitation",
+        "call.fetchPendingInvitations",
+      ],
+
+      params: {},
+
+    }),
+
+
+    acceptInvitation: createAction({
+
+      value:
+        ACTIONS.CALL_ACCEPT_INVITATION,
+
+      label:
+        "Accept Group Call Invitation",
+
+      category:
+        "call",
+
+      run:
+        acceptInvitation,
+
+      targets: [
+        "IncomingGroupCallAlert",
+        "CallPanel",
+      ],
+
+      requires: [
+        "call.id",
+      ],
+
+      produces: [
+        "call.id",
+        "call.channel",
+        "call.type",
+        "call.state",
+        "call.joined",
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_CHANNEL,
+        PATH_CALL_TYPE,
+        PATH_CALL_STATE,
+        PATH_CALL_JOINED,
+        PATH_CALL_PARTICIPANTS,
+      ],
+
+      // Accepted invitation can proceed to join.
+      nextActions: [
+        "call.joinGroupCall",
+      ],
+
+      // Automatic transition:
+      //
+      // accept → join
+      //
+      autoNextActions: [],
+
+      params: {
+
+        callId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    declineInvitation: createAction({
+
+      value:
+        ACTIONS.CALL_DECLINE_INVITATION,
+
+      label:
+        "Decline Group Call Invitation",
+
+      category:
+        "call",
+
+      run:
+        declineInvitation,
+
+      targets: [
+        "IncomingGroupCallAlert",
+      ],
+
+      requires: [
+        "call.id",
+      ],
+
+      produces: [
+        "calls.pendingInvitations",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_PENDING_INVITATIONS,
+      ],
+
+      nextActions: [],
+
+      params: {
+
+        callId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    joinGroupCall: createAction({
+
+      value:
+        ACTIONS.CALL_JOIN_GROUP,
+
+      label:
+        "Join Group Call",
+
+      category:
+        "call",
+
+      run:
+        joinGroupCall,
+
+      targets: [
+        "AgoraFeed",
+        "RemoteVideoGrid",
+      ],
+
+      requires: [
+        "call.id",
+      ],
+
+      produces: [
+        "call.joined",
+        "call.state",
+        "call.channel",
+        "call.remoteUsers",
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_CHANNEL,
+        PATH_CALL_STATE,
+        PATH_CALL_JOINED,
+        PATH_CALL_PARTICIPANTS,
+        PATH_CALL_REMOTE_USERS,
+      ],
+
+      // These are AVAILABLE after joining.
+      //
+      // They do not execute automatically.
+      nextActions: [
+        "call.toggleMic",
+        "call.toggleVideo",
+        "call.leaveGroupCall",
+        "call.endGroupCall",
+      ],
+
+      params: {
+
+        callId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    leaveGroupCall: createAction({
+
+      value:
+        ACTIONS.CALL_LEAVE_GROUP,
+
+      label:
+        "Leave Group Call",
+
+      category:
+        "call",
+
+      run:
+        leaveGroupCall,
+
+      targets: [
+        "AgoraFeed",
+        "RemoteVideoGrid",
+      ],
+
+      requires: [
+        "call.id",
+        "call.joined",
+      ],
+
+      produces: [
+        "call.joined",
+        "call.state",
+        "call.remoteUsers",
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_STATE,
+        PATH_CALL_JOINED,
+        PATH_CALL_PARTICIPANTS,
+      ],
+
+      nextActions: [],
+
+      params: {
+
+        callId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    endGroupCall: createAction({
+
+      value:
+        ACTIONS.CALL_END_GROUP,
+
+      label:
+        "End Group Call",
+
+      category:
+        "call",
+
+      run:
+        endGroupCall,
+
+      targets: [
+        "CallPanel",
+        "AgoraFeed",
+        "RemoteVideoGrid",
+      ],
+
+      requires: [
+        "call.id",
+      ],
+
+      produces: [
+        "call.state",
+        "call.joined",
+        "call.remoteUsers",
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_STATE,
+        PATH_CALL_JOINED,
+        PATH_CALL_PARTICIPANTS,
+      ],
+
+      nextActions: [
+        "call.fetchPendingInvitations",
+      ],
+
+      params: {
+
+        callId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
 
     }),
 
@@ -2094,6 +2638,45 @@ console.log(
       Object.keys(
         actionRegistry.interview || {}
       ),
+
+    groupCallActions: [
+      "createGroupCall",
+      "fetchPendingInvitations",
+      "acceptInvitation",
+      "declineInvitation",
+      "joinGroupCall",
+      "leaveGroupCall",
+      "endGroupCall",
+    ],
+
+  }
+);
+
+
+console.log(
+  "[GROUP CALL ACTION DEBUG]",
+  {
+
+    createGroupCall:
+      actionRegistry.call?.createGroupCall,
+
+    createGroupCallAutoNext:
+      actionRegistry.call
+        ?.createGroupCall
+        ?.autoNextActions,
+
+    acceptInvitation:
+      actionRegistry.call
+        ?.acceptInvitation,
+
+    acceptInvitationAutoNext:
+      actionRegistry.call
+        ?.acceptInvitation
+        ?.autoNextActions,
+
+    joinGroupCall:
+      actionRegistry.call
+        ?.joinGroupCall,
 
   }
 );

@@ -2,174 +2,433 @@
 
 console.log("🔥 rolePermissions.js EXECUTED");
 
+// src/config/ROLE_PERMISSIONS.js
+
 export const ROLE_PERMISSIONS = {
 
- owner: {
+  // =====================================================
+  // OWNER
+  // =====================================================
 
-  canBuild: true,
+  owner: {
 
-   allowedElements: [
+    canBuild:
+      true,
 
-    "Container",
+    allowedElements: [
 
-    "AgoraFeed",
+      // -----------------------------------------------
+      // CORE
+      // -----------------------------------------------
 
-    "VideoFeed",
+      "Container",
 
-    "MediaFeed",
+      "Text",
 
-    "RemoteVideoGrid",
+      "ControlPanel",
 
-    "FilePreview",
+      "ControlButton",
 
-    "ControlPanel",
+      // -----------------------------------------------
+      // VIDEO
+      // -----------------------------------------------
 
-    "ControlButton",
+      "AgoraFeed",
 
-    "ChatPanel",
+      "RemoteVideoGrid",
 
-    "Text",
+      "VideoFeed",
 
-    "FetchCallsDebug",
+      "MediaFeed",
 
-    "AvailabilityButton"
+      // -----------------------------------------------
+      // CALL
+      // -----------------------------------------------
 
-  ],
+      "ChatPanel",
+
+      "AvailabilityButton",
+
+      "FetchCallsDebug",
+
+      // -----------------------------------------------
+      // GROUP CALL
+      // -----------------------------------------------
+
+      "ParticipantSelector",
+
+      "IncomingGroupCallAlert",
+
+      "GroupCallControls",
+
+    ],
 
 
-  allowedActions: [
-    // CALL
-    "call.startCall",
-    "call.acceptCall",
-    "call.joinCall",
-    "call.leaveCall",
-    "call.endCall",
-    "call.toggleMic",
-    "call.toggleVideo",
-    "call.spotlightUser",
-    "call.fetchAvailableCalls",
-    "call.setAvailability",
-    "call.fetchPendingCalls",
-    "call.joinInvitedCall",
+    allowedActions: [
 
-    // AI INTERVIEW
-    "interview.start",
-    "interview.nextQuestion",
-    "interview.submitAnswer",
-    "interview.evaluate",
-    "interview.complete",
+      // =================================================
+      // STANDARD CALL
+      // =================================================
 
-    "video.toggleMic",
-    "video.toggleVideo",
-    "video.startRecording",
-    "video.stopRecording",
-    "video.uploadRecording",
+      "call.startCall",
 
-    "training.createSession",
-    "training.startSession",
-    "training.fetchPendingSessions",
-    "training.joinSession",
-    "training.endSession",
+      "call.acceptCall",
 
-    
-  ]
+      "call.joinCall",
 
-},
+      "call.leaveCall",
 
+      "call.endCall",
+
+      "call.toggleMic",
+
+      "call.toggleVideo",
+
+      "call.spotlightUser",
+
+      "call.fetchAvailableCalls",
+
+      "call.setAvailability",
+
+      "call.fetchPendingCalls",
+
+      "call.joinInvitedCall",
+
+
+      // =================================================
+      // GROUP CALL
+      // =================================================
+
+      "call.createGroupCall",
+
+      "call.fetchPendingInvitations",
+
+      "call.acceptInvitation",
+
+      "call.declineInvitation",
+
+      "call.joinGroupCall",
+
+      "call.leaveGroupCall",
+
+      "call.endGroupCall",
+
+
+      // =================================================
+      // AI INTERVIEW
+      // =================================================
+
+      "interview.start",
+
+      "interview.nextQuestion",
+
+      "interview.submitAnswer",
+
+      "interview.evaluate",
+
+      "interview.complete",
+
+
+      // =================================================
+      // VIDEO
+      // =================================================
+
+      "video.toggleMic",
+
+      "video.toggleVideo",
+
+      "video.startRecording",
+
+      "video.stopRecording",
+
+      "video.uploadRecording",
+
+
+      // =================================================
+      // TRAINING
+      // =================================================
+
+      "training.createSession",
+
+      "training.startSession",
+
+      "training.fetchPendingSessions",
+
+      "training.joinSession",
+
+      "training.endSession",
+
+    ],
+
+  },
+
+
+  // =====================================================
+  // ADMIN
+  // =====================================================
 
   admin: {
 
-    canBuild: true,
+    canBuild:
+      true,
 
     allowedElements: [
+
       "Container",
-      "AgoraFeed",
-      "VideoFeed",
-      "ControlPanel",
-      "ControlButton",
-      "ChatPanel",
+
       "Text",
-      "AvailabilityButton"
+
+      "AgoraFeed",
+
+      "RemoteVideoGrid",
+
+      "VideoFeed",
+
+      "ControlPanel",
+
+      "ControlButton",
+
+      "ChatPanel",
+
+      "AvailabilityButton",
+
+      "ParticipantSelector",
+
+      "IncomingGroupCallAlert",
+
+      "GroupCallControls",
+
     ],
 
-     allowedActions: [
-        "call.startCall",
-        "call.acceptCall",
-        "call.joinCall",
-        "call.leaveCall",
-        "call.endCall",
-        "call.toggleMic",
-        "call.toggleVideo",
-        "call.spotlightUser",
-        "call.fetchAvailableCalls",
-        "call.setAvailability"
-        ]
+
+    allowedActions: [
+
+      // -----------------------------------------------
+      // STANDARD CALL
+      // -----------------------------------------------
+
+      "call.startCall",
+
+      "call.acceptCall",
+
+      "call.joinCall",
+
+      "call.leaveCall",
+
+      "call.endCall",
+
+      "call.toggleMic",
+
+      "call.toggleVideo",
+
+      "call.spotlightUser",
+
+      "call.fetchAvailableCalls",
+
+      "call.setAvailability",
+
+      "call.fetchPendingCalls",
+
+      "call.joinInvitedCall",
+
+
+      // -----------------------------------------------
+      // GROUP CALL
+      // -----------------------------------------------
+
+      "call.createGroupCall",
+
+      "call.fetchPendingInvitations",
+
+      "call.acceptInvitation",
+
+      "call.declineInvitation",
+
+      "call.joinGroupCall",
+
+      "call.leaveGroupCall",
+
+      "call.endGroupCall",
+
+    ],
 
   },
 
+
+  // =====================================================
+  // HOST
+  // =====================================================
 
   host: {
 
-    canBuild: false,
+    canBuild:
+      false,
 
     allowedElements: [
+
       "AgoraFeed",
+
+      "RemoteVideoGrid",
+
       "VideoFeed",
+
       "ControlPanel",
+
       "ControlButton",
-      "ChatPanel"
+
+      "ChatPanel",
+
+      // Group-call experience
+      "ParticipantSelector",
+
+      "IncomingGroupCallAlert",
+
+      "GroupCallControls",
+
     ],
 
+
     allowedActions: [
+
+      // -----------------------------------------------
+      // STANDARD CALL
+      // -----------------------------------------------
+
       "call.acceptCall",
+
       "call.joinCall",
+
       "call.leaveCall",
+
       "call.endCall",
+
       "call.toggleMic",
+
       "call.toggleVideo",
-      "call.spotlightUser"
-    ]
+
+      "call.spotlightUser",
+
+
+      // -----------------------------------------------
+      // GROUP CALL
+      // -----------------------------------------------
+
+      "call.createGroupCall",
+
+      "call.fetchPendingInvitations",
+
+      "call.acceptInvitation",
+
+      "call.declineInvitation",
+
+      "call.joinGroupCall",
+
+      "call.leaveGroupCall",
+
+      "call.endGroupCall",
+
+    ],
 
   },
 
+
+  // =====================================================
+  // PARTICIPANT
+  // =====================================================
 
   participant: {
 
-    canBuild: false,
+    canBuild:
+      false,
 
     allowedElements: [
+
       "AgoraFeed",
+
+      "RemoteVideoGrid",
+
       "VideoFeed",
+
       "ControlPanel",
+
       "ControlButton",
-      "ChatPanel"
+
+      "ChatPanel",
+
+      "Text",
+
+      // Group-call participant experience
+      "IncomingGroupCallAlert",
+
+      "GroupCallControls",
+
     ],
 
+
     allowedActions: [
+
+      // -----------------------------------------------
+      // STANDARD CALL
+      // -----------------------------------------------
+
       "call.joinCall",
+
       "call.leaveCall",
+
       "call.toggleMic",
-      "call.toggleVideo"
-    ]
+
+      "call.toggleVideo",
+
+
+      // -----------------------------------------------
+      // GROUP CALL
+      // -----------------------------------------------
+
+      "call.fetchPendingInvitations",
+
+      "call.acceptInvitation",
+
+      "call.declineInvitation",
+
+      "call.joinGroupCall",
+
+      "call.leaveGroupCall",
+
+    ],
 
   },
 
 
+  // =====================================================
+  // VIEWER
+  // =====================================================
+
   viewer: {
 
-    canBuild: false,
+    canBuild:
+      false,
 
     allowedElements: [
+
       "AgoraFeed",
+
+      "RemoteVideoGrid",
+
       "VideoFeed",
-      "Text"
+
+      "Text",
+
     ],
 
-    allowedActions: [
-      "call.joinCall",
-      "call.leaveCall"
-    ]
 
-  }
+    allowedActions: [
+
+      "call.joinCall",
+
+      "call.leaveCall",
+
+    ],
+
+  },
 
 };

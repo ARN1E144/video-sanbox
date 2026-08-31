@@ -30,54 +30,76 @@ class AgoraEngine {
     // IDENTITY
     // =====================================================
 
-    this.uid = null;
-    this.channel = null;
+    this.uid =
+      null;
+
+    this.channel =
+      null;
 
 
     // =====================================================
     // LOCAL TRACKS
     // =====================================================
 
-    this.localAudioTrack = null;
-    this.localVideoTrack = null;
+    this.localAudioTrack =
+      null;
+
+    this.localVideoTrack =
+      null;
 
 
     // =====================================================
     // REMOTE USERS
     //
     // IMPORTANT:
-    // This Map is INTERNAL engine state.
     //
-    // It is allowed to contain Agora User / Track objects.
-    // These objects must NEVER be written directly into
+    // This is INTERNAL ENGINE STATE.
+    //
+    // It may contain:
+    //
+    // - AgoraRemoteUser
+    // - RemoteAudioTrack
+    // - RemoteVideoTrack
+    //
+    // None of these objects may be written into
     // RuntimeState.
     // =====================================================
 
-    this.remoteUsers = new Map();
+    this.remoteUsers =
+      new Map();
 
 
     // =====================================================
     // STATE
     // =====================================================
 
-    this.isReady = false;
-    this.isJoining = false;
-    this.isLeaving = false;
+    this.isReady =
+      false;
+
+    this.isJoining =
+      false;
+
+    this.isLeaving =
+      false;
 
 
     // =====================================================
     // LOCKS
     // =====================================================
 
-    this.micLock = false;
-    this.videoLock = false;
+    this.micLock =
+      false;
+
+    this.videoLock =
+      false;
 
 
     // =====================================================
     // SUBSCRIBERS
     // =====================================================
 
-    this.listeners = new Map();
+    this.listeners =
+      new Map();
 
 
     // =====================================================
@@ -85,13 +107,46 @@ class AgoraEngine {
     // =====================================================
 
     this.handleUserPublished =
-      this.handleUserPublished.bind(this);
+      this.handleUserPublished.bind(
+        this
+      );
+
 
     this.handleUserUnpublished =
-      this.handleUserUnpublished.bind(this);
+      this.handleUserUnpublished.bind(
+        this
+      );
+
 
     this.handleUserLeft =
-      this.handleUserLeft.bind(this);
+      this.handleUserLeft.bind(
+        this
+      );
+
+  }
+
+
+  // =====================================================
+  // UID NORMALISATION
+  // =====================================================
+
+  normaliseUid(
+    uid
+  ) {
+
+    if (
+      uid === null ||
+      uid === undefined
+    ) {
+
+      return null;
+
+    }
+
+
+    return String(
+      uid
+    );
 
   }
 
@@ -106,7 +161,8 @@ class AgoraEngine {
   ) {
 
     if (
-      typeof handler !== "function"
+      typeof handler !==
+      "function"
     ) {
 
       return () => {};
@@ -115,7 +171,9 @@ class AgoraEngine {
 
 
     if (
-      !this.listeners.has(event)
+      !this.listeners.has(
+        event
+      )
     ) {
 
       this.listeners.set(
@@ -127,21 +185,30 @@ class AgoraEngine {
 
 
     const handlers =
-      this.listeners.get(event);
+      this.listeners.get(
+        event
+      );
 
 
-    handlers.add(handler);
+    handlers.add(
+      handler
+    );
 
 
     return () => {
 
-      handlers.delete(handler);
+      handlers.delete(
+        handler
+      );
+
 
       if (
         handlers.size === 0
       ) {
 
-        this.listeners.delete(event);
+        this.listeners.delete(
+          event
+        );
 
       }
 
@@ -156,10 +223,14 @@ class AgoraEngine {
   ) {
 
     const handlers =
-      this.listeners.get(event);
+      this.listeners.get(
+        event
+      );
 
 
-    if (!handlers) {
+    if (
+      !handlers
+    ) {
 
       return;
 
@@ -171,15 +242,20 @@ class AgoraEngine {
 
         try {
 
-          handler(payload);
+          handler(
+            payload
+          );
 
-        } catch (error) {
+        }
+        catch (
+          error
+        ) {
 
           console.error(
             "[AgoraEngine] listener failed",
             {
               event,
-              error
+              error,
             }
           );
 
@@ -198,7 +274,8 @@ class AgoraEngine {
   generateUid() {
 
     return Math.floor(
-      Math.random() * 100000
+      Math.random() *
+      100000
     );
 
   }
@@ -235,7 +312,9 @@ class AgoraEngine {
       process.env.REACT_APP_SERVER_API;
 
 
-    if (!api) {
+    if (
+      !api
+    ) {
 
       throw new Error(
         "REACT_APP_SERVER_API is not configured"
@@ -252,16 +331,20 @@ class AgoraEngine {
       "[Agora] TOKEN REQUEST",
       {
         channel,
-        uid
+        uid,
       }
     );
 
 
     const response =
-      await fetch(url);
+      await fetch(
+        url
+      );
 
 
-    if (!response.ok) {
+    if (
+      !response.ok
+    ) {
 
       const text =
         await response.text();
@@ -284,9 +367,14 @@ class AgoraEngine {
     try {
 
       data =
-        JSON.parse(text);
+        JSON.parse(
+          text
+        );
 
-    } catch (error) {
+    }
+    catch (
+      error
+    ) {
 
       throw new Error(
         "Agora token response was not valid JSON"
@@ -295,7 +383,9 @@ class AgoraEngine {
     }
 
 
-    if (!data.token) {
+    if (
+      !data?.token
+    ) {
 
       throw new Error(
         "Agora token missing"
@@ -321,54 +411,63 @@ class AgoraEngine {
 
   }
 
-  getRemoteUsers() {
 
-  return new Map(
-    this.remoteUsers
-  );
+  getRemoteUser(
+    uid
+  ) {
 
-}
+    const key =
+      this.normaliseUid(
+        uid
+      );
 
 
-getRemoteUser(uid) {
+    if (
+      !key
+    ) {
 
-  if (uid === undefined || uid === null) {
-    return null;
+      return null;
+
+    }
+
+
+    return (
+      this.remoteUsers.get(
+        key
+      ) ||
+      null
+    );
+
   }
-
-  return this.remoteUsers.get(uid) || null;
-
-}
 
 
   // =====================================================
   // REMOTE USER SNAPSHOT
+  // =====================================================
   //
-  // IMPORTANT:
+  // Runtime-safe only.
   //
-  // This MUST contain plain serialisable data only.
-  //
-  // Never put:
-  // - audioTrack
-  // - videoTrack
-  // - Agora User objects
-  // - MediaStream objects
-  //
-  // into RuntimeState.
   // =====================================================
 
   getRemoteUsersSnapshot() {
 
-    const snapshot = {};
+    const snapshot =
+      {};
 
 
     this.remoteUsers.forEach(
-      (user, uid) => {
+      (
+        user,
+        key
+      ) => {
 
-        snapshot[String(uid)] = {
+        snapshot[key] = {
 
           uid:
-            user?.uid ?? uid,
+            this.normaliseUid(
+              user?.uid ??
+              key
+            ),
 
           hasAudio:
             !!user?.audioTrack,
@@ -400,9 +499,6 @@ getRemoteUser(uid) {
 
   // =====================================================
   // REMOTE USER NOTIFICATION
-  //
-  // This is the ONLY method that publishes the remote
-  // user collection into the runtime event system.
   // =====================================================
 
   notifyRemoteUsersChanged(
@@ -414,7 +510,9 @@ getRemoteUser(uid) {
 
 
     const count =
-      Object.keys(users).length;
+      Object.keys(
+        users
+      ).length;
 
 
     console.log(
@@ -427,7 +525,7 @@ getRemoteUser(uid) {
 
         count,
 
-        users
+        users,
       }
     );
 
@@ -436,7 +534,102 @@ getRemoteUser(uid) {
       "REMOTE_USERS_CHANGED",
       {
         users,
-        count
+        count,
+        source,
+      }
+    );
+
+  }
+
+
+  // =====================================================
+  // REMOTE VIDEO READY NOTIFICATION
+  // =====================================================
+
+  notifyRemoteVideoReady(
+    user
+  ) {
+
+    const uid =
+      this.normaliseUid(
+        user?.uid
+      );
+
+
+    const videoTrack =
+      user?.videoTrack;
+
+
+    if (
+      !uid ||
+      !videoTrack
+    ) {
+
+      return;
+
+    }
+
+
+    console.log(
+      "[AgoraEngine] REMOTE VIDEO TRACK READY",
+      {
+        uid,
+
+        hasVideoTrack:
+          true,
+      }
+    );
+
+
+    this.emit(
+      "REMOTE_VIDEO_TRACK_READY",
+      {
+        uid,
+
+        user,
+
+        videoTrack,
+      }
+    );
+
+  }
+
+
+  // =====================================================
+  // REMOTE VIDEO UNAVAILABLE
+  // =====================================================
+
+  notifyRemoteVideoUnavailable(
+    user
+  ) {
+
+    const uid =
+      this.normaliseUid(
+        user?.uid
+      );
+
+
+    if (
+      !uid
+    ) {
+
+      return;
+
+    }
+
+
+    console.log(
+      "[AgoraEngine] REMOTE VIDEO TRACK UNAVAILABLE",
+      {
+        uid,
+      }
+    );
+
+
+    this.emit(
+      "REMOTE_VIDEO_TRACK_UNAVAILABLE",
+      {
+        uid,
       }
     );
 
@@ -452,7 +645,9 @@ getRemoteUser(uid) {
     mediaType
   ) {
 
-    if (!user) {
+    if (
+      !user
+    ) {
 
       console.warn(
         "[AgoraEngine] subscribe ignored - missing user"
@@ -478,21 +673,39 @@ getRemoteUser(uid) {
     }
 
 
+    const uid =
+      this.normaliseUid(
+        user.uid
+      );
+
+
+    if (
+      !uid
+    ) {
+
+      console.warn(
+        "[AgoraEngine] subscribe ignored - invalid uid"
+      );
+
+      return false;
+
+    }
+
+
     try {
 
       console.log(
         "[AgoraEngine] subscribing",
         {
-          uid:
-            user.uid,
+          uid,
 
-          mediaType
+          mediaType,
         }
       );
 
 
       // -------------------------------------------------
-      // Subscribe
+      // Subscribe through Agora
       // -------------------------------------------------
 
       await this.client.subscribe(
@@ -502,56 +715,36 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Diagnostic BEFORE Map SET
-      // -------------------------------------------------
-
-      console.log(
-        "[AgoraEngine] AFTER SUBSCRIBE BEFORE MAP SET",
-        {
-          uid:
-            user.uid,
-
-          mediaType,
-
-          mapSize:
-            this.remoteUsers.size
-        }
-      );
-
-
-      // -------------------------------------------------
-      // Store Agora user internally
+      // Store latest Agora user.
       // -------------------------------------------------
 
       this.remoteUsers.set(
-        user.uid,
+        uid,
         user
       );
 
 
-      // -------------------------------------------------
-      // Diagnostic AFTER Map SET
-      // -------------------------------------------------
-
       console.log(
-        "[AgoraEngine] AFTER MAP SET",
+        "[AgoraEngine] AFTER SUBSCRIBE",
         {
-          uid:
-            user.uid,
+          uid,
 
           mediaType,
 
           mapSize:
             this.remoteUsers.size,
 
-          users:
-            this.getRemoteUsersSnapshot()
+          hasAudioTrack:
+            !!user.audioTrack,
+
+          hasVideoTrack:
+            !!user.videoTrack,
         }
       );
 
 
       // -------------------------------------------------
-      // Remote audio
+      // AUDIO
       // -------------------------------------------------
 
       if (
@@ -563,15 +756,16 @@ getRemoteUser(uid) {
 
           user.audioTrack.play();
 
-        } catch (error) {
+        }
+        catch (
+          error
+        ) {
 
           console.error(
             "[AgoraEngine] remote audio playback failed",
             {
-              uid:
-                user.uid,
-
-              error
+              uid,
+              error,
             }
           );
 
@@ -581,52 +775,53 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Remote video
-      //
-      // AgoraFeed owns the DOM playback.
+      // VIDEO
       // -------------------------------------------------
 
       if (
         mediaType === "video"
       ) {
 
-        console.log(
-          "[AgoraEngine] remote video track available",
-          {
-            uid:
-              user.uid,
+        this.notifyRemoteUsersChanged(
+          "video-subscribed"
+        );
 
-            hasVideoTrack:
-              !!user.videoTrack
-          }
+
+        // IMPORTANT:
+        //
+        // This is the signal RemoteVideoGrid uses to
+        // reconcile the actual Agora video track.
+        //
+
+        this.notifyRemoteVideoReady(
+          user
+        );
+
+      }
+      else {
+
+        this.notifyRemoteUsersChanged(
+          "audio-subscribed"
         );
 
       }
 
 
-      // -------------------------------------------------
-      // Publish runtime-safe snapshot
-      // -------------------------------------------------
-
-      this.notifyRemoteUsersChanged(
-        "after-subscribe"
-      );
-
-
       return true;
 
-
-    } catch (error) {
+    }
+    catch (
+      error
+    ) {
 
       console.error(
         "[AgoraEngine] remote subscribe failed",
         {
-          uid:
-            user?.uid,
+          uid,
 
           mediaType,
 
-          error
+          error,
         }
       );
 
@@ -647,13 +842,18 @@ getRemoteUser(uid) {
     mediaType
   ) {
 
+    const uid =
+      this.normaliseUid(
+        user?.uid
+      );
+
+
     console.log(
       "[AgoraEngine] USER PUBLISHED",
       {
-        uid:
-          user.uid,
+        uid,
 
-        mediaType
+        mediaType,
       }
     );
 
@@ -668,15 +868,14 @@ getRemoteUser(uid) {
     console.log(
       "[AgoraEngine] USER PUBLISHED SUBSCRIBE RESULT",
       {
-        uid:
-          user.uid,
+        uid,
 
         mediaType,
 
         subscribed,
 
         mapSize:
-          this.remoteUsers.size
+          this.remoteUsers.size,
       }
     );
 
@@ -684,10 +883,11 @@ getRemoteUser(uid) {
     this.emit(
       "USER_PUBLISHED",
       {
-        uid:
-          user.uid,
+        uid,
 
-        mediaType
+        mediaType,
+
+        subscribed,
       }
     );
 
@@ -703,24 +903,45 @@ getRemoteUser(uid) {
     mediaType
   ) {
 
+    const uid =
+      this.normaliseUid(
+        user?.uid
+      );
+
+
     console.log(
       "[AgoraEngine] USER UNPUBLISHED",
       {
-        uid:
-          user.uid,
+        uid,
 
-        mediaType
+        mediaType,
       }
     );
 
 
-    // Keep the user in the internal Map.
-    // Agora removes the specific track from the user.
+    if (
+      !uid
+    ) {
+
+      return;
+
+    }
+
+
+    // -------------------------------------------------
+    // Keep user in internal engine state.
+    // Agora removes the specific media track.
+    // -------------------------------------------------
+
     this.remoteUsers.set(
-      user.uid,
+      uid,
       user
     );
 
+
+    // -------------------------------------------------
+    // Runtime-safe snapshot.
+    // -------------------------------------------------
 
     this.notifyRemoteUsersChanged(
       "unpublished"
@@ -730,12 +951,22 @@ getRemoteUser(uid) {
     this.emit(
       "USER_UNPUBLISHED",
       {
-        uid:
-          user.uid,
+        uid,
 
-        mediaType
+        mediaType,
       }
     );
+
+
+    if (
+      mediaType === "video"
+    ) {
+
+      this.notifyRemoteVideoUnavailable(
+        user
+      );
+
+    }
 
   }
 
@@ -748,17 +979,31 @@ getRemoteUser(uid) {
     user
   ) {
 
+    const uid =
+      this.normaliseUid(
+        user?.uid
+      );
+
+
     console.log(
       "[AgoraEngine] USER LEFT",
       {
-        uid:
-          user.uid
+        uid,
       }
     );
 
 
+    if (
+      !uid
+    ) {
+
+      return;
+
+    }
+
+
     this.remoteUsers.delete(
-      user.uid
+      uid
     );
 
 
@@ -770,8 +1015,7 @@ getRemoteUser(uid) {
     this.emit(
       "USER_LEFT",
       {
-        uid:
-          user.uid
+        uid,
       }
     );
 
@@ -845,14 +1089,15 @@ getRemoteUser(uid) {
   async processExistingRemoteUsers() {
 
     const users =
-      this.client.remoteUsers || [];
+      this.client.remoteUsers ||
+      [];
 
 
     console.log(
       "[AgoraEngine] processing existing users",
       {
         count:
-          users.length
+          users.length,
       }
     );
 
@@ -861,33 +1106,47 @@ getRemoteUser(uid) {
       const user of users
     ) {
 
+      const uid =
+        this.normaliseUid(
+          user?.uid
+        );
+
+
+      if (
+        !uid
+      ) {
+
+        continue;
+
+      }
+
+
       console.log(
         "[AgoraEngine] existing remote user",
         {
-          uid:
-            user.uid,
+          uid,
 
           hasAudio:
             !!user.audioTrack,
 
           hasVideo:
-            !!user.videoTrack
+            !!user.videoTrack,
         }
       );
 
 
       // -------------------------------------------------
-      // Store user immediately
+      // Store immediately.
       // -------------------------------------------------
 
       this.remoteUsers.set(
-        user.uid,
+        uid,
         user
       );
 
 
       // -------------------------------------------------
-      // Audio
+      // AUDIO
       // -------------------------------------------------
 
       if (
@@ -901,13 +1160,16 @@ getRemoteUser(uid) {
             "audio"
           );
 
-        } catch (error) {
+        }
+        catch (
+          error
+        ) {
 
           console.log(
-            "[AgoraEngine] existing audio not subscribed",
+            "[AgoraEngine] existing audio subscribe failed",
             {
-              uid:
-                user.uid
+              uid,
+              error,
             }
           );
 
@@ -917,7 +1179,7 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Video
+      // VIDEO
       // -------------------------------------------------
 
       if (
@@ -931,13 +1193,16 @@ getRemoteUser(uid) {
             "video"
           );
 
-        } catch (error) {
+        }
+        catch (
+          error
+        ) {
 
           console.log(
-            "[AgoraEngine] existing video not subscribed",
+            "[AgoraEngine] existing video subscribe failed",
             {
-              uid:
-                user.uid
+              uid,
+              error,
             }
           );
 
@@ -947,7 +1212,17 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Existing audio playback
+      // Refresh internal user reference.
+      // -------------------------------------------------
+
+      this.remoteUsers.set(
+        uid,
+        user
+      );
+
+
+      // -------------------------------------------------
+      // AUDIO PLAYBACK
       // -------------------------------------------------
 
       if (
@@ -958,11 +1233,17 @@ getRemoteUser(uid) {
 
           user.audioTrack.play();
 
-        } catch (error) {
+        }
+        catch (
+          error
+        ) {
 
           console.warn(
             "[AgoraEngine] existing audio playback failed",
-            error
+            {
+              uid,
+              error,
+            }
           );
 
         }
@@ -970,22 +1251,40 @@ getRemoteUser(uid) {
       }
 
 
+      // -------------------------------------------------
+      // VIDEO READY
+      // -------------------------------------------------
+
+      if (
+        user.videoTrack
+      ) {
+
+        this.notifyRemoteVideoReady(
+          user
+        );
+
+      }
+
+
       console.log(
         "[AgoraEngine] existing user processed",
         {
-          uid:
-            user.uid,
+          uid,
 
           mapSize:
             this.remoteUsers.size,
 
           users:
-            this.getRemoteUsersSnapshot()
+            this.getRemoteUsersSnapshot(),
         }
       );
 
     }
 
+
+    // ---------------------------------------------------
+    // Final runtime-safe snapshot.
+    // ---------------------------------------------------
 
     this.notifyRemoteUsersChanged(
       "existing-users"
@@ -999,7 +1298,7 @@ getRemoteUser(uid) {
   // =====================================================
 
   async joinCall({
-    channel
+    channel,
   } = {}) {
 
     if (
@@ -1013,7 +1312,7 @@ getRemoteUser(uid) {
           appId:
             !!this.appId,
 
-          channel
+          channel,
         }
       );
 
@@ -1038,7 +1337,7 @@ getRemoteUser(uid) {
             this.isLeaving,
 
           isReady:
-            this.isReady
+            this.isReady,
         }
       );
 
@@ -1054,7 +1353,7 @@ getRemoteUser(uid) {
     try {
 
       // -------------------------------------------------
-      // Reset remote state
+      // Reset remote state.
       // -------------------------------------------------
 
       this.remoteUsers.clear();
@@ -1066,11 +1365,12 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Generate identity
+      // Generate identity.
       // -------------------------------------------------
 
       this.uid =
         this.generateUid();
+
 
       this.channel =
         channel;
@@ -1096,7 +1396,7 @@ getRemoteUser(uid) {
           this.channel,
 
         uid:
-          this.uid
+          this.uid,
       });
 
 
@@ -1106,20 +1406,20 @@ getRemoteUser(uid) {
           channel,
 
           uid:
-            this.uid
+            this.uid,
         }
       );
 
 
       // -------------------------------------------------
-      // Register events BEFORE joining
+      // Register events BEFORE joining.
       // -------------------------------------------------
 
       this.registerClientEvents();
 
 
       // -------------------------------------------------
-      // Token
+      // Token.
       // -------------------------------------------------
 
       const token =
@@ -1130,7 +1430,7 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Final identity
+      // Final identity.
       // -------------------------------------------------
 
       console.log(
@@ -1161,12 +1461,12 @@ getRemoteUser(uid) {
           this.client.connectionState,
 
         tokenPresent:
-          !!token
+          !!token,
       });
 
 
       // -------------------------------------------------
-      // Join Agora
+      // Join Agora.
       // -------------------------------------------------
 
       await this.client.join(
@@ -1186,13 +1486,13 @@ getRemoteUser(uid) {
             this.uid,
 
           connectionState:
-            this.client.connectionState
+            this.client.connectionState,
         }
       );
 
 
       // -------------------------------------------------
-      // Local audio
+      // Local audio.
       // -------------------------------------------------
 
       this.localAudioTrack =
@@ -1201,7 +1501,7 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Local video
+      // Local video.
       // -------------------------------------------------
 
       this.localVideoTrack =
@@ -1210,13 +1510,15 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Publish
+      // Publish.
       // -------------------------------------------------
 
-      await this.client.publish([
-        this.localAudioTrack,
-        this.localVideoTrack
-      ]);
+      await this.client.publish(
+        [
+          this.localAudioTrack,
+          this.localVideoTrack,
+        ]
+      );
 
 
       console.log(
@@ -1225,7 +1527,7 @@ getRemoteUser(uid) {
           uid:
             this.uid,
 
-          channel
+          channel,
         }
       );
 
@@ -1235,7 +1537,7 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Local tracks ready
+      // Local tracks ready.
       // -------------------------------------------------
 
       this.emit(
@@ -1245,20 +1547,20 @@ getRemoteUser(uid) {
             this.localAudioTrack,
 
           videoTrack:
-            this.localVideoTrack
+            this.localVideoTrack,
         }
       );
 
 
       // -------------------------------------------------
-      // Process existing users
+      // Process existing remote users.
       // -------------------------------------------------
 
       await this.processExistingRemoteUsers();
 
 
       // -------------------------------------------------
-      // Joined
+      // Joined.
       // -------------------------------------------------
 
       this.emit(
@@ -1267,7 +1569,7 @@ getRemoteUser(uid) {
           channel,
 
           uid:
-            this.uid
+            this.uid,
         }
       );
 
@@ -1278,15 +1580,17 @@ getRemoteUser(uid) {
           channel,
 
           uid:
-            this.uid
+            this.uid,
         }
       );
 
 
       return true;
 
-
-    } catch (error) {
+    }
+    catch (
+      error
+    ) {
 
       console.error(
         "[Agora] join failed",
@@ -1297,7 +1601,7 @@ getRemoteUser(uid) {
       this.emit(
         "CALL_JOIN_FAILED",
         {
-          error
+          error,
         }
       );
 
@@ -1307,8 +1611,8 @@ getRemoteUser(uid) {
 
       return false;
 
-
-    } finally {
+    }
+    finally {
 
       this.isJoining =
         false;
@@ -1361,7 +1665,7 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Stop local audio
+      // Stop local audio.
       // -------------------------------------------------
 
       if (
@@ -1379,7 +1683,7 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Stop local video
+      // Stop local video.
       // -------------------------------------------------
 
       if (
@@ -1397,7 +1701,7 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Leave Agora
+      // Leave Agora.
       // -------------------------------------------------
 
       if (
@@ -1411,14 +1715,14 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Remove listeners
+      // Remove client listeners.
       // -------------------------------------------------
 
       this.unregisterClientEvents();
 
 
       // -------------------------------------------------
-      // Reset remote users
+      // Clear remote users.
       // -------------------------------------------------
 
       this.remoteUsers.clear();
@@ -1430,18 +1734,19 @@ getRemoteUser(uid) {
 
 
       // -------------------------------------------------
-      // Save previous identity
+      // Save previous identity.
       // -------------------------------------------------
 
       const previousUid =
         this.uid;
+
 
       const previousChannel =
         this.channel;
 
 
       // -------------------------------------------------
-      // Reset identity
+      // Reset identity.
       // -------------------------------------------------
 
       this.uid =
@@ -1461,7 +1766,7 @@ getRemoteUser(uid) {
             previousUid,
 
           channel:
-            previousChannel
+            previousChannel,
         }
       );
 
@@ -1473,15 +1778,17 @@ getRemoteUser(uid) {
             previousUid,
 
           channel:
-            previousChannel
+            previousChannel,
         }
       );
 
 
       return true;
 
-
-    } catch (error) {
+    }
+    catch (
+      error
+    ) {
 
       console.error(
         "[Agora] leave failed",
@@ -1491,8 +1798,8 @@ getRemoteUser(uid) {
 
       return false;
 
-
-    } finally {
+    }
+    finally {
 
       this.isLeaving =
         false;
@@ -1558,8 +1865,10 @@ getRemoteUser(uid) {
 
       this.remoteUsers.clear();
 
-
-    } catch (error) {
+    }
+    catch (
+      error
+    ) {
 
       console.warn(
         "[Agora] cleanup warning",
@@ -1579,6 +1888,9 @@ getRemoteUser(uid) {
       false;
 
     this.isJoining =
+      false;
+
+    this.isLeaving =
       false;
 
     this.micLock =
@@ -1642,15 +1954,17 @@ getRemoteUser(uid) {
       this.emit(
         "MIC_TOGGLED",
         {
-          enabled
+          enabled,
         }
       );
 
 
       return enabled;
 
-
-    } catch (error) {
+    }
+    catch (
+      error
+    ) {
 
       console.error(
         "[Agora] mic toggle failed",
@@ -1660,8 +1974,8 @@ getRemoteUser(uid) {
 
       return false;
 
-
-    } finally {
+    }
+    finally {
 
       this.micLock =
         false;
@@ -1718,15 +2032,17 @@ getRemoteUser(uid) {
       this.emit(
         "VIDEO_TOGGLED",
         {
-          enabled
+          enabled,
         }
       );
 
 
       return enabled;
 
-
-    } catch (error) {
+    }
+    catch (
+      error
+    ) {
 
       console.error(
         "[Agora] video toggle failed",
@@ -1736,8 +2052,8 @@ getRemoteUser(uid) {
 
       return false;
 
-
-    } finally {
+    }
+    finally {
 
       this.videoLock =
         false;

@@ -1,57 +1,83 @@
 // src/context/ThemeContext.js
 
 import {
-  useEffect,
   createContext,
   useContext,
+  useEffect,
 } from "react";
 
 import {
   theme,
-  applyTheme
+  applyTheme,
 } from "../theme/theme";
 
 
-
 const ThemeContext =
-  createContext(theme);
+  createContext(null);
 
 
+// =====================================================
+// THEME PROVIDER
+// =====================================================
 
-export const ThemeProvider = ({
-  children
-}) => {
+export function ThemeProvider({
+  children,
+}) {
 
+  useEffect(
+    () => {
 
-  useEffect(() => {
+      try {
 
-    applyTheme(theme);
+        applyTheme(
+          theme
+        );
 
-  }, []);
+      }
+      catch (error) {
 
+        console.error(
+          "[ThemeProvider] applyTheme failed",
+          error
+        );
+
+      }
+
+    },
+    []
+  );
 
 
   return (
-
     <ThemeContext.Provider
-      value={theme}
+      value={
+        theme
+      }
     >
-
       {children}
-
     </ThemeContext.Provider>
-
   );
 
-};
+}
 
 
+// =====================================================
+// USE THEME
+// =====================================================
+
+export function useTheme() {
+
+  const context =
+    useContext(
+      ThemeContext
+    );
 
 
-export const useTheme = () => {
-
-  return useContext(
-    ThemeContext
+  return (
+    context ||
+    theme
   );
 
-};
+}
+
+export default ThemeContext;

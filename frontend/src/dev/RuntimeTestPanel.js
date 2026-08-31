@@ -24,9 +24,6 @@ import RuntimeStatusPanel
 import CallControlsPanel
   from "./panels/CallControlsPanel";
 
-import CallsPanel
-  from "../components/call/CallsPanel";
-
 import InterviewControlsPanel
   from "./panels/InterviewControlsPanel";
 
@@ -50,10 +47,6 @@ function findElementBySourceId(
   }
 
 
-  // ---------------------------------------------------
-  // Direct sourceId match
-  // ---------------------------------------------------
-
   if (
     node?.meta?.sourceId ===
     sourceId
@@ -64,10 +57,6 @@ function findElementBySourceId(
   }
 
 
-  // ---------------------------------------------------
-  // Older installed structures
-  // ---------------------------------------------------
-
   if (
     node?.props?.meta?.sourceId ===
     sourceId
@@ -77,10 +66,6 @@ function findElementBySourceId(
 
   }
 
-
-  // ---------------------------------------------------
-  // Children
-  // ---------------------------------------------------
 
   if (
     Array.isArray(
@@ -298,18 +283,18 @@ export default function RuntimeTestPanel() {
     isMobile,
     setIsMobile,
   ] =
-    useState(
-      window.innerWidth <= 600
-    );
+  useState(
+    window.innerWidth <= 600
+  );
 
 
   const [
     isOpen,
     setIsOpen,
   ] =
-    useState(
-      true
-    );
+  useState(
+    true
+  );
 
 
   // ===================================================
@@ -320,20 +305,20 @@ export default function RuntimeTestPanel() {
     position,
     setPosition,
   ] =
-    useState({
+  useState({
 
-      x:
-        window.innerWidth > 600
-          ? Math.max(
-              20,
-              window.innerWidth - 440
-            )
-          : 12,
+    x:
+      window.innerWidth > 600
+        ? Math.max(
+            20,
+            window.innerWidth - 440
+          )
+        : 12,
 
-      y:
-        80,
+    y:
+      80,
 
-    });
+  });
 
 
   // ===================================================
@@ -344,12 +329,151 @@ export default function RuntimeTestPanel() {
     trainingParticipantIds,
     setTrainingParticipantIds,
   ] =
-    useState(
-      () =>
+  useState(
+    () =>
+      runtime.get?.(
+        "training.participantIds"
+      ) || []
+  );
+
+
+  // ===================================================
+  // GROUP CALL TEST INPUT
+  // ===================================================
+
+  const [
+    groupParticipantInput,
+    setGroupParticipantInput,
+  ] =
+  useState("");
+
+
+  const [
+    groupCallIdInput,
+    setGroupCallIdInput,
+  ] =
+  useState("");
+
+
+  const [
+    selectedGroupInvitationIndex,
+    setSelectedGroupInvitationIndex,
+  ] =
+  useState(0);
+
+
+  const [
+    groupActionRunning,
+    setGroupActionRunning,
+  ] =
+  useState(false);
+
+
+  // ===================================================
+  // GROUP CALL RUNTIME STATE
+  //
+  // IMPORTANT:
+  //
+  // These values are React state so the Runtime Test
+  // Panel re-renders whenever the runtime changes.
+  //
+  // ===================================================
+
+  const [
+    pendingGroupInvitations,
+    setPendingGroupInvitations,
+  ] =
+  useState(
+    () => {
+
+      const value =
         runtime.get?.(
-          "training.participantIds"
-        ) || []
-    );
+          "calls.pendingInvitations"
+        );
+
+
+      return Array.isArray(value)
+        ? value
+        : [];
+
+    }
+  );
+
+
+  const [
+    runtimeGroupCallId,
+    setRuntimeGroupCallId,
+  ] =
+  useState(
+    () =>
+      runtime.get?.(
+        "call.id"
+      ) || ""
+  );
+
+
+  const [
+    groupCallChannel,
+    setGroupCallChannel,
+  ] =
+  useState(
+    () =>
+      runtime.get?.(
+        "call.channel"
+      ) || ""
+  );
+
+
+  const [
+    groupCallState,
+    setGroupCallState,
+  ] =
+  useState(
+    () =>
+      runtime.get?.(
+        "call.state"
+      ) || "idle"
+  );
+
+
+  const [
+    groupCallJoined,
+    setGroupCallJoined,
+  ] =
+  useState(
+    () =>
+      Boolean(
+        runtime.get?.(
+          "call.joined"
+        )
+      )
+  );
+
+
+  const [
+    groupCallParticipantCount,
+    setGroupCallParticipantCount,
+  ] =
+  useState(
+    () =>
+      Number(
+        runtime.get?.(
+          "call.participants"
+        ) || 0
+      )
+  );
+
+
+  const [
+    groupRemoteUsers,
+    setGroupRemoteUsers,
+  ] =
+  useState(
+    () =>
+      runtime.get?.(
+        "call.remoteUsers"
+      ) || {}
+  );
 
 
   // ===================================================
@@ -428,7 +552,7 @@ export default function RuntimeTestPanel() {
 
 
   // ===================================================
-  // REQUEST / ACTION LOCKS
+  // REQUEST / ACTION LOCK
   // ===================================================
 
   const runningActionRef =
@@ -493,6 +617,19 @@ export default function RuntimeTestPanel() {
 
   useEffect(() => {
 
+    const initial =
+      runtime.get?.(
+        "training.participantIds"
+      );
+
+
+    setTrainingParticipantIds(
+      Array.isArray(initial)
+        ? initial
+        : []
+    );
+
+
     const unsubscribe =
       runtime.subscribe(
         "training.participantIds",
@@ -517,6 +654,243 @@ export default function RuntimeTestPanel() {
     return () => {
 
       unsubscribe?.();
+
+    };
+
+  }, [
+    runtime,
+  ]);
+
+
+  // ===================================================
+  // GROUP CALL RUNTIME SUBSCRIPTIONS
+  // ===================================================
+  //
+  // This is the important fix for the refresh problem.
+  //
+  // Every displayed group-call value has its own runtime
+  // subscription and React state.
+  //
+  // ===================================================
+
+  useEffect(() => {
+
+    // -------------------------------------------------
+    // INITIAL VALUES
+    // -------------------------------------------------
+
+    const initialInvitations =
+      runtime.get?.(
+        "calls.pendingInvitations"
+      );
+
+
+    setPendingGroupInvitations(
+      Array.isArray(
+        initialInvitations
+      )
+        ? initialInvitations
+        : []
+    );
+
+
+    setRuntimeGroupCallId(
+      runtime.get?.(
+        "call.id"
+      ) || ""
+    );
+
+
+    setGroupCallChannel(
+      runtime.get?.(
+        "call.channel"
+      ) || ""
+    );
+
+
+    setGroupCallState(
+      runtime.get?.(
+        "call.state"
+      ) || "idle"
+    );
+
+
+    setGroupCallJoined(
+      Boolean(
+        runtime.get?.(
+          "call.joined"
+        )
+      )
+    );
+
+
+    setGroupCallParticipantCount(
+      Number(
+        runtime.get?.(
+          "call.participants"
+        ) || 0
+      )
+    );
+
+
+    setGroupRemoteUsers(
+      runtime.get?.(
+        "call.remoteUsers"
+      ) || {}
+    );
+
+
+    // -------------------------------------------------
+    // SUBSCRIPTIONS
+    // -------------------------------------------------
+
+    const unsubscribeInvitations =
+      runtime.subscribe?.(
+        "calls.pendingInvitations",
+        value => {
+
+          const list =
+            Array.isArray(
+              value
+            )
+              ? value
+              : [];
+
+
+          console.log(
+            "[RuntimeTest] pending invitations updated",
+            {
+              count:
+                list.length,
+
+              invitations:
+                list,
+            }
+          );
+
+
+          setPendingGroupInvitations(
+            list
+          );
+
+
+          // Keep selected index valid.
+
+          setSelectedGroupInvitationIndex(
+            previous =>
+              list.length === 0
+                ? 0
+                : Math.min(
+                    previous,
+                    list.length - 1
+                  )
+          );
+
+        }
+      );
+
+
+    const unsubscribeCallId =
+      runtime.subscribe?.(
+        "call.id",
+        value => {
+
+          setRuntimeGroupCallId(
+            value || ""
+          );
+
+        }
+      );
+
+
+    const unsubscribeChannel =
+      runtime.subscribe?.(
+        "call.channel",
+        value => {
+
+          setGroupCallChannel(
+            value || ""
+          );
+
+        }
+      );
+
+
+    const unsubscribeState =
+      runtime.subscribe?.(
+        "call.state",
+        value => {
+
+          setGroupCallState(
+            value || "idle"
+          );
+
+        }
+      );
+
+
+    const unsubscribeJoined =
+      runtime.subscribe?.(
+        "call.joined",
+        value => {
+
+          setGroupCallJoined(
+            Boolean(
+              value
+            )
+          );
+
+        }
+      );
+
+
+    const unsubscribeParticipants =
+      runtime.subscribe?.(
+        "call.participants",
+        value => {
+
+          setGroupCallParticipantCount(
+            Number(
+              value || 0
+            )
+          );
+
+        }
+      );
+
+
+    const unsubscribeRemoteUsers =
+      runtime.subscribe?.(
+        "call.remoteUsers",
+        value => {
+
+          setGroupRemoteUsers(
+            value || {}
+          );
+
+        }
+      );
+
+
+    // -------------------------------------------------
+    // CLEANUP
+    // -------------------------------------------------
+
+    return () => {
+
+      unsubscribeInvitations?.();
+
+      unsubscribeCallId?.();
+
+      unsubscribeChannel?.();
+
+      unsubscribeState?.();
+
+      unsubscribeJoined?.();
+
+      unsubscribeParticipants?.();
+
+      unsubscribeRemoteUsers?.();
 
     };
 
@@ -1140,9 +1514,7 @@ export default function RuntimeTestPanel() {
           await runAction(
             "training.endSession",
             {
-
               sessionId,
-
             }
           );
 
@@ -1159,6 +1531,468 @@ export default function RuntimeTestPanel() {
           false;
 
       }
+
+    };
+
+
+  // =====================================================
+  // GROUP CALL HELPERS
+  // =====================================================
+
+  const getGroupParticipantIds =
+    () => {
+
+      return [
+        ...new Set(
+
+          groupParticipantInput
+
+            .split(
+              /[\n,]+/
+            )
+
+            .map(
+              value =>
+                value.trim()
+            )
+
+            .filter(Boolean)
+
+        ),
+      ];
+
+    };
+
+
+  const groupParticipantIds =
+    getGroupParticipantIds();
+
+
+  const groupParticipantCount =
+    groupParticipantIds.length;
+
+
+  // =====================================================
+  // SELECTED GROUP INVITATION
+  // =====================================================
+
+  const selectedGroupInvitation =
+    Array.isArray(
+      pendingGroupInvitations
+    )
+      ? pendingGroupInvitations[
+          selectedGroupInvitationIndex
+        ] || null
+      : null;
+
+
+  // =====================================================
+  // ACTIVE GROUP CALL ID
+  // =====================================================
+
+  const activeGroupCallId =
+    groupCallIdInput.trim() ||
+    selectedGroupInvitation?.callId ||
+    runtimeGroupCallId ||
+    "";
+
+
+  // =====================================================
+  // GROUP ACTION RUNNER
+  // =====================================================
+
+  const runGroupAction =
+    async (
+      action,
+      params = {}
+    ) => {
+
+      if (
+        groupActionRunning
+      ) {
+
+        return null;
+
+      }
+
+
+      setGroupActionRunning(
+        true
+      );
+
+
+      try {
+
+        console.log(
+          "[RuntimeTest] GROUP ACTION",
+          {
+            action,
+            params,
+          }
+        );
+
+
+        const result =
+          await runAction(
+            action,
+            params
+          );
+
+
+        console.log(
+          `[RuntimeTest] ${action} result:`,
+          result
+        );
+
+
+        return result;
+
+      }
+      catch (error) {
+
+        console.error(
+          `[RuntimeTest] ${action} failed`,
+          error
+        );
+
+
+        return {
+
+          ok:
+            false,
+
+          error:
+            error?.message ||
+            "GROUP_ACTION_FAILED",
+
+        };
+
+      }
+      finally {
+
+        setGroupActionRunning(
+          false
+        );
+
+      }
+
+    };
+
+
+  // =====================================================
+  // CREATE GROUP CALL
+  // =====================================================
+
+  const testCreateGroupCall =
+    async () => {
+
+      const participantIds =
+        getGroupParticipantIds();
+
+
+      if (
+        participantIds.length ===
+        0
+      ) {
+
+        console.warn(
+          "[RuntimeTest] Enter at least one participant ID"
+        );
+
+
+        return;
+
+      }
+
+
+      const result =
+        await runGroupAction(
+          "call.createGroupCall",
+          {
+            participantIds,
+          }
+        );
+
+
+      if (
+        result?.result?.callId
+      ) {
+
+        setGroupCallIdInput(
+          String(
+            result.result.callId
+          )
+        );
+
+      }
+
+    };
+
+
+  // =====================================================
+  // FETCH GROUP INVITATIONS
+  // =====================================================
+
+  const testFetchPendingInvitations =
+    async () => {
+
+      await runGroupAction(
+        "call.fetchPendingInvitations"
+      );
+
+    };
+
+
+  // =====================================================
+  // SELECT INVITATION
+  // =====================================================
+
+  const selectGroupInvitation =
+    index => {
+
+      setSelectedGroupInvitationIndex(
+        index
+      );
+
+
+      const invitation =
+        pendingGroupInvitations[
+          index
+        ];
+
+
+      if (
+        invitation?.callId
+      ) {
+
+        setGroupCallIdInput(
+          invitation.callId
+        );
+
+      }
+
+    };
+
+
+  // =====================================================
+  // APPLY SELECTED INVITATION
+  // =====================================================
+
+  const applySelectedInvitation =
+    () => {
+
+      if (
+        selectedGroupInvitation?.callId
+      ) {
+
+        setGroupCallIdInput(
+          selectedGroupInvitation.callId
+        );
+
+
+        console.log(
+          "[RuntimeTest] Selected group invitation",
+          selectedGroupInvitation
+        );
+
+      }
+
+    };
+
+
+  // =====================================================
+  // ACCEPT GROUP INVITATION
+  // =====================================================
+
+  const testAcceptInvitation =
+    async () => {
+
+      const callId =
+        activeGroupCallId;
+
+
+      if (
+        !callId
+      ) {
+
+        console.warn(
+          "[RuntimeTest] No group call ID selected"
+        );
+
+
+        return;
+
+      }
+
+
+      await runGroupAction(
+        "call.acceptInvitation",
+        {
+          callId,
+        }
+      );
+
+    };
+
+
+  // =====================================================
+  // DECLINE GROUP INVITATION
+  // =====================================================
+
+  const testDeclineInvitation =
+    async () => {
+
+      const callId =
+        activeGroupCallId;
+
+
+      if (
+        !callId
+      ) {
+
+        console.warn(
+          "[RuntimeTest] No group call ID selected"
+        );
+
+
+        return;
+
+      }
+
+
+      await runGroupAction(
+        "call.declineInvitation",
+        {
+          callId,
+        }
+      );
+
+    };
+
+
+  // =====================================================
+  // JOIN GROUP CALL
+  // =====================================================
+
+  const testJoinGroupCall =
+    async () => {
+
+      const callId =
+        activeGroupCallId;
+
+
+      if (
+        !callId
+      ) {
+
+        console.warn(
+          "[RuntimeTest] No group call ID available"
+        );
+
+
+        return;
+
+      }
+
+
+      await runGroupAction(
+        "call.joinGroupCall",
+        {
+          callId,
+        }
+      );
+
+    };
+
+
+  // =====================================================
+  // LEAVE GROUP CALL
+  // =====================================================
+
+  const testLeaveGroupCall =
+    async () => {
+
+      const callId =
+        activeGroupCallId;
+
+
+      if (
+        !callId
+      ) {
+
+        console.warn(
+          "[RuntimeTest] No group call ID available"
+        );
+
+
+        return;
+
+      }
+
+
+      await runGroupAction(
+        "call.leaveGroupCall",
+        {
+          callId,
+        }
+      );
+
+    };
+
+
+  // =====================================================
+  // END GROUP CALL
+  // =====================================================
+
+  const testEndGroupCall =
+    async () => {
+
+      const callId =
+        activeGroupCallId;
+
+
+      if (
+        !callId
+      ) {
+
+        console.warn(
+          "[RuntimeTest] No group call ID available"
+        );
+
+
+        return;
+
+      }
+
+
+      await runGroupAction(
+        "call.endGroupCall",
+        {
+          callId,
+        }
+      );
+
+    };
+
+
+  // =====================================================
+  // CLEAR GROUP TEST FIELDS
+  // =====================================================
+
+  const clearGroupCallTest =
+    () => {
+
+      setGroupParticipantInput(
+        ""
+      );
+
+      setGroupCallIdInput(
+        ""
+      );
+
+      setSelectedGroupInvitationIndex(
+        0
+      );
 
     };
 
@@ -1403,22 +2237,6 @@ export default function RuntimeTestPanel() {
     runtime.get?.(
       "media"
     ) || {};
-
-
-  const remoteUsers =
-    runtime.get?.(
-      "call.remoteUsers"
-    ) || {};
-
-
-  const remoteUserCount =
-    remoteUsers &&
-    typeof remoteUsers ===
-      "object"
-      ? Object.keys(
-          remoteUsers
-        ).length
-      : 0;
 
 
   // =====================================================
@@ -1825,10 +2643,1101 @@ export default function RuntimeTestPanel() {
 
 
         {/* =================================================
-            CALL CONTROLS
+            EXISTING CALL CONTROLS
         ================================================= */}
 
         <CallControlsPanel />
+
+        <hr />
+
+
+        {/* =================================================
+            GROUP CALL CONTROLS
+        ================================================= */}
+
+        <div>
+
+          <div
+            style={{
+
+              fontWeight:
+                "bold",
+
+              marginBottom:
+                8,
+
+              fontSize:
+                13,
+
+            }}
+          >
+
+            Group Call Controls
+
+          </div>
+
+
+          <div
+            style={{
+
+              fontSize:
+                10,
+
+              color:
+                "#888",
+
+              lineHeight:
+                1.5,
+
+              marginBottom:
+                10,
+
+            }}
+          >
+
+            Dedicated development controls for the
+            group-call runtime lifecycle.
+
+          </div>
+
+
+          {/* ---------------------------------------------
+              RUNTIME STATE
+          --------------------------------------------- */}
+
+          <div
+            style={{
+
+              padding:
+                10,
+
+              border:
+                "1px solid #292929",
+
+              borderRadius:
+                8,
+
+              background:
+                "#111",
+
+              marginBottom:
+                10,
+
+              fontSize:
+                10,
+
+              lineHeight:
+                1.6,
+
+            }}
+          >
+
+            <div>
+
+              Call ID:
+              {" "}
+              <strong>
+                {runtimeGroupCallId ||
+                  "none"}
+              </strong>
+
+            </div>
+
+
+            <div>
+
+              Channel:
+              {" "}
+              <strong>
+                {groupCallChannel ||
+                  "none"}
+              </strong>
+
+            </div>
+
+
+            <div>
+
+              State:
+              {" "}
+              <strong>
+                {groupCallState}
+              </strong>
+
+            </div>
+
+
+            <div>
+
+              Joined:
+              {" "}
+              <strong>
+                {groupCallJoined
+                  ? "true"
+                  : "false"}
+              </strong>
+
+            </div>
+
+
+            <div>
+
+              Participants:
+              {" "}
+              <strong>
+                {groupCallParticipantCount}
+              </strong>
+
+            </div>
+
+
+            <div>
+
+              Remote Users:
+              {" "}
+              <strong>
+                {
+                  groupRemoteUsers &&
+                  typeof groupRemoteUsers ===
+                    "object"
+                    ? Object.keys(
+                        groupRemoteUsers
+                      ).length
+                    : 0
+                }
+              </strong>
+
+            </div>
+
+
+            <div>
+
+              Pending Invitations:
+              {" "}
+              <strong>
+                {pendingGroupInvitations.length}
+              </strong>
+
+            </div>
+
+          </div>
+
+
+          {/* ---------------------------------------------
+              PARTICIPANT IDS
+          --------------------------------------------- */}
+
+          <label
+            style={{
+
+              display:
+                "block",
+
+              color:
+                "#aaa",
+
+              marginBottom:
+                5,
+
+              fontSize:
+                11,
+
+            }}
+          >
+
+            Participant User IDs
+
+          </label>
+
+
+          <textarea
+
+            value={
+              groupParticipantInput
+            }
+
+            onChange={
+              event =>
+                setGroupParticipantInput(
+                  event.target.value
+                )
+            }
+
+            placeholder={
+              "Paste participant IDs separated by commas or new lines"
+            }
+
+            rows={4}
+
+            style={{
+
+              width:
+                "100%",
+
+              boxSizing:
+                "border-box",
+
+              resize:
+                "vertical",
+
+              padding:
+                9,
+
+              marginBottom:
+                8,
+
+              background:
+                "#111",
+
+              color:
+                "#fff",
+
+              border:
+                "1px solid #333",
+
+              borderRadius:
+                7,
+
+              fontFamily:
+                "monospace",
+
+              fontSize:
+                10,
+
+            }}
+
+          />
+
+
+          <div
+            style={{
+
+              fontSize:
+                10,
+
+              color:
+                "#777",
+
+              marginBottom:
+                8,
+
+            }}
+          >
+
+            Parsed participant IDs:
+            {" "}
+            {groupParticipantCount}
+
+          </div>
+
+
+          <button
+
+            onClick={
+              testCreateGroupCall
+            }
+
+            disabled={
+              groupParticipantCount ===
+                0 ||
+              groupActionRunning
+            }
+
+            style={{
+
+              width:
+                "100%",
+
+              minHeight:
+                36,
+
+              marginBottom:
+                8,
+
+              cursor:
+                groupParticipantCount > 0 &&
+                !groupActionRunning
+                  ? "pointer"
+                  : "not-allowed",
+
+              opacity:
+                groupParticipantCount > 0 &&
+                !groupActionRunning
+                  ? 1
+                  : 0.55,
+
+            }}
+
+          >
+
+            {groupActionRunning
+              ? "Running..."
+              : "Test Create Group Call"}
+
+          </button>
+
+
+          {/* ---------------------------------------------
+              PENDING INVITATIONS
+          --------------------------------------------- */}
+
+          <button
+
+            onClick={
+              testFetchPendingInvitations
+            }
+
+            disabled={
+              groupActionRunning
+            }
+
+            style={{
+
+              width:
+                "100%",
+
+              minHeight:
+                36,
+
+              marginBottom:
+                8,
+
+              cursor:
+                groupActionRunning
+                  ? "not-allowed"
+                  : "pointer",
+
+            }}
+
+          >
+
+            Test Fetch Pending Invitations
+
+          </button>
+
+
+          {/* ---------------------------------------------
+              INVITATION LIST
+          --------------------------------------------- */}
+
+          {pendingGroupInvitations.length >
+          0 && (
+
+            <div
+              style={{
+
+                marginBottom:
+                  10,
+
+                padding:
+                  10,
+
+                border:
+                  "1px solid #292929",
+
+                borderRadius:
+                  8,
+
+                background:
+                  "#101010",
+
+              }}
+            >
+
+              <div
+                style={{
+
+                  color:
+                    "#aaa",
+
+                  fontSize:
+                    10,
+
+                  marginBottom:
+                    8,
+
+                }}
+              >
+
+                Pending invitations
+
+              </div>
+
+
+              {pendingGroupInvitations.map(
+                (
+                  invitation,
+                  index
+                ) => {
+
+                  const selected =
+                    index ===
+                    selectedGroupInvitationIndex;
+
+
+                  const creatorName =
+                    [
+                      invitation?.creator?.firstName,
+                      invitation?.creator?.lastName,
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+
+
+                  return (
+
+                    <button
+
+                      key={
+                        invitation?.callId ||
+                        index
+                      }
+
+                      onClick={() =>
+                        selectGroupInvitation(
+                          index
+                        )
+                      }
+
+                      style={{
+
+                        width:
+                          "100%",
+
+                        textAlign:
+                          "left",
+
+                        padding:
+                          9,
+
+                        marginBottom:
+                          6,
+
+                        border:
+                          selected
+                            ? "1px solid #777"
+                            : "1px solid #282828",
+
+                        borderRadius:
+                          7,
+
+                        background:
+                          selected
+                            ? "#202020"
+                            : "#151515",
+
+                        color:
+                          "#fff",
+
+                        cursor:
+                          "pointer",
+
+                      }}
+
+                    >
+
+                      <div
+                        style={{
+                          fontWeight:
+                            "bold",
+
+                          fontSize:
+                            10,
+
+                          marginBottom:
+                            4,
+                        }}
+                      >
+
+                        {
+                          creatorName ||
+                          invitation?.creator?.email ||
+                          "Unknown caller"
+                        }
+
+                      </div>
+
+
+                      <div
+                        style={{
+
+                          color:
+                            "#777",
+
+                          fontSize:
+                            9,
+
+                          wordBreak:
+                            "break-all",
+
+                        }}
+                      >
+
+                        {invitation?.callId}
+
+                      </div>
+
+
+                      <div
+                        style={{
+
+                          color:
+                            "#777",
+
+                          fontSize:
+                            9,
+
+                          marginTop:
+                            3,
+
+                        }}
+                      >
+
+                        {invitation?.participant?.status ||
+                          invitation?.status ||
+                          "invited"}
+
+                      </div>
+
+                    </button>
+
+                  );
+
+                }
+              )}
+
+
+              <button
+
+                onClick={
+                  applySelectedInvitation
+                }
+
+                disabled={
+                  !selectedGroupInvitation
+                }
+
+                style={{
+
+                  width:
+                    "100%",
+
+                  minHeight:
+                    34,
+
+                  marginTop:
+                    4,
+
+                  cursor:
+                    selectedGroupInvitation
+                      ? "pointer"
+                      : "not-allowed",
+
+                  opacity:
+                    selectedGroupInvitation
+                      ? 1
+                      : 0.55,
+
+                }}
+
+              >
+
+                Use Selected Invitation
+
+              </button>
+
+            </div>
+
+          )}
+
+
+          {/* ---------------------------------------------
+              GROUP CALL ID
+          --------------------------------------------- */}
+
+          <label
+            style={{
+
+              display:
+                "block",
+
+              color:
+                "#aaa",
+
+              marginBottom:
+                5,
+
+              fontSize:
+                11,
+
+            }}
+          >
+
+            Group Call ID
+
+          </label>
+
+
+          <input
+
+            value={
+              groupCallIdInput
+            }
+
+            onChange={
+              event =>
+                setGroupCallIdInput(
+                  event.target.value
+                )
+            }
+
+            placeholder=
+              "Group call ObjectId"
+
+            style={{
+
+              width:
+                "100%",
+
+              boxSizing:
+                "border-box",
+
+              padding:
+                "9px 10px",
+
+              marginBottom:
+                8,
+
+              background:
+                "#111",
+
+              color:
+                "#fff",
+
+              border:
+                "1px solid #333",
+
+              borderRadius:
+                7,
+
+              fontFamily:
+                "monospace",
+
+              fontSize:
+                10,
+
+            }}
+
+          />
+
+
+          <div
+            style={{
+
+              padding:
+                8,
+
+              marginBottom:
+                8,
+
+              border:
+                "1px solid #242424",
+
+              borderRadius:
+                7,
+
+              background:
+                "#101010",
+
+              color:
+                "#777",
+
+              fontSize:
+                9,
+
+              wordBreak:
+                "break-all",
+
+            }}
+          >
+
+            Active test call:
+
+            <br />
+
+            {
+              activeGroupCallId ||
+              "none"
+            }
+
+          </div>
+
+
+          {/* ---------------------------------------------
+              ACCEPT / DECLINE
+          --------------------------------------------- */}
+
+          <div
+            style={{
+
+              display:
+                "flex",
+
+              gap:
+                8,
+
+              marginBottom:
+                8,
+
+            }}
+          >
+
+            <button
+
+              onClick={
+                testAcceptInvitation
+              }
+
+              disabled={
+                !activeGroupCallId ||
+                groupActionRunning
+              }
+
+              style={{
+
+                flex:
+                  1,
+
+                minHeight:
+                  36,
+
+                cursor:
+                  activeGroupCallId &&
+                  !groupActionRunning
+                    ? "pointer"
+                    : "not-allowed",
+
+                opacity:
+                  activeGroupCallId &&
+                  !groupActionRunning
+                    ? 1
+                    : 0.55,
+
+              }}
+
+            >
+
+              Accept Invitation
+
+            </button>
+
+
+            <button
+
+              onClick={
+                testDeclineInvitation
+              }
+
+              disabled={
+                !activeGroupCallId ||
+                groupActionRunning
+              }
+
+              style={{
+
+                flex:
+                  1,
+
+                minHeight:
+                  36,
+
+                cursor:
+                  activeGroupCallId &&
+                  !groupActionRunning
+                    ? "pointer"
+                    : "not-allowed",
+
+                opacity:
+                  activeGroupCallId &&
+                  !groupActionRunning
+                    ? 1
+                    : 0.55,
+
+              }}
+
+            >
+
+              Decline Invitation
+
+            </button>
+
+          </div>
+
+
+          {/* ---------------------------------------------
+              JOIN
+          --------------------------------------------- */}
+
+          <button
+
+            onClick={
+              testJoinGroupCall
+            }
+
+            disabled={
+              !activeGroupCallId ||
+              groupActionRunning
+            }
+
+            style={{
+
+              width:
+                "100%",
+
+              minHeight:
+                38,
+
+              marginBottom:
+                8,
+
+              cursor:
+                activeGroupCallId &&
+                !groupActionRunning
+                  ? "pointer"
+                  : "not-allowed",
+
+              opacity:
+                activeGroupCallId &&
+                !groupActionRunning
+                  ? 1
+                  : 0.55,
+
+            }}
+
+          >
+
+            Test Join Group Call
+
+          </button>
+
+
+          {/* ---------------------------------------------
+              LEAVE
+          --------------------------------------------- */}
+
+          <button
+
+            onClick={
+              testLeaveGroupCall
+            }
+
+            disabled={
+              !activeGroupCallId ||
+              groupActionRunning
+            }
+
+            style={{
+
+              width:
+                "100%",
+
+              minHeight:
+                36,
+
+              marginBottom:
+                8,
+
+              cursor:
+                activeGroupCallId &&
+                !groupActionRunning
+                  ? "pointer"
+                  : "not-allowed",
+
+              opacity:
+                activeGroupCallId &&
+                !groupActionRunning
+                  ? 1
+                  : 0.55,
+
+            }}
+
+          >
+
+            Test Leave Group Call
+
+          </button>
+
+
+          {/* ---------------------------------------------
+              END
+          --------------------------------------------- */}
+
+          <button
+
+            onClick={
+              testEndGroupCall
+            }
+
+            disabled={
+              !activeGroupCallId ||
+              groupActionRunning
+            }
+
+            style={{
+
+              width:
+                "100%",
+
+              minHeight:
+                36,
+
+              marginBottom:
+                8,
+
+              cursor:
+                activeGroupCallId &&
+                !groupActionRunning
+                  ? "pointer"
+                  : "not-allowed",
+
+              opacity:
+                activeGroupCallId &&
+                !groupActionRunning
+                  ? 1
+                  : 0.55,
+
+            }}
+
+          >
+
+            Test End Group Call
+
+          </button>
+
+
+          {/* ---------------------------------------------
+              RESET
+          --------------------------------------------- */}
+
+          <button
+
+            onClick={
+              clearGroupCallTest
+            }
+
+            disabled={
+              groupActionRunning
+            }
+
+            style={{
+
+              width:
+                "100%",
+
+              minHeight:
+                32,
+
+              cursor:
+                groupActionRunning
+                  ? "not-allowed"
+                  : "pointer",
+
+            }}
+
+          >
+
+            Clear Group Test Fields
+
+          </button>
+
+
+          {/* ---------------------------------------------
+              SELECTED INVITATION DEBUG
+          --------------------------------------------- */}
+
+          {selectedGroupInvitation && (
+
+            <details
+              style={{
+
+                marginTop:
+                  10,
+
+              }}
+            >
+
+              <summary
+                style={{
+
+                  cursor:
+                    "pointer",
+
+                  color:
+                    "#888",
+
+                  fontSize:
+                    10,
+
+                }}
+              >
+
+                Selected Invitation Debug
+
+              </summary>
+
+
+              <pre
+                style={{
+
+                  marginTop:
+                    8,
+
+                  padding:
+                    10,
+
+                  background:
+                    "#0d0d0d",
+
+                  border:
+                    "1px solid #242424",
+
+                  borderRadius:
+                    7,
+
+                  overflow:
+                    "auto",
+
+                  fontSize:
+                    9,
+
+                  color:
+                    "#bbb",
+
+                  whiteSpace:
+                    "pre-wrap",
+
+                  wordBreak:
+                    "break-word",
+
+                }}
+              >
+
+                {
+                  JSON.stringify(
+                    selectedGroupInvitation,
+                    null,
+                    2
+                  )
+                }
+
+              </pre>
+
+            </details>
+
+          )}
+
+        </div>
+
 
         <hr />
 
@@ -2640,7 +4549,13 @@ export default function RuntimeTestPanel() {
             Remote participants:
             {" "}
             {
-              remoteUserCount
+              groupRemoteUsers &&
+              typeof groupRemoteUsers ===
+                "object"
+                ? Object.keys(
+                    groupRemoteUsers
+                  ).length
+                : 0
             }
 
           </div>
@@ -2668,7 +4583,12 @@ export default function RuntimeTestPanel() {
                 10,
 
               color:
-                remoteUserCount > 0
+                groupRemoteUsers &&
+                typeof groupRemoteUsers ===
+                  "object" &&
+                Object.keys(
+                  groupRemoteUsers
+                ).length > 0
                   ? "#86efac"
                   : "#777",
 
@@ -2677,8 +4597,13 @@ export default function RuntimeTestPanel() {
           >
 
             {
-              remoteUserCount > 0
-                ? `✓ ${remoteUserCount} remote participant${remoteUserCount === 1 ? "" : "s"} available`
+              groupRemoteUsers &&
+              typeof groupRemoteUsers ===
+                "object" &&
+              Object.keys(
+                groupRemoteUsers
+              ).length > 0
+                ? `✓ ${Object.keys(groupRemoteUsers).length} remote participant${Object.keys(groupRemoteUsers).length === 1 ? "" : "s"} available`
                 : "No remote participants currently connected"
             }
 
