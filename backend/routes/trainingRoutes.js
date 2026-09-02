@@ -2245,5 +2245,426 @@ router.post(
   }
 );
 
+// =====================================================
+// LEAVE TRAINING SESSION
+// =====================================================
+//
+// POST /api/training/sessions/:sessionId/leave
+//
+// Participant leaves their current training session.
+//
+// This does NOT end the training session.
+//
+// Participant:
+//
+//   joined -> left
+//
+// Host:
+//
+//   must use /end instead
+//
+// The frontend action is responsible for leaving Agora.
+//
+// =====================================================
+
+router.post(
+  "/sessions/:sessionId/leave",
+  requireAuth,
+  requireTenant,
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const {
+        sessionId,
+      } =
+        req.params;
+
+
+      const userId =
+        req.user.userId;
+
+      const tenantId =
+        req.user.tenantId;
+
+
+      // =================================================
+      // VALIDATE SESSION ID
+      // =================================================
+
+      if (
+        !isValidObjectId(
+          sessionId
+        )
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            error:
+              "Invalid training session ID",
+
+          });
+
+      }
+
+
+      // =================================================
+      // FIND SESSION
+      // =================================================
+
+      const session =
+        await TrainingSession.findOne({
+
+          _id:
+            sessionId,
+
+          tenantId,
+
+        });
+
+
+      if (
+        !session
+      ) {
+
+        return res
+          .status(404)
+          .json({
+
+            error:
+              "Training session not found",
+
+          });
+
+      }
+
+
+      // =================================================
+      // HOST CANNOT "LEAVE"
+      // =================================================
+      //
+      // The host ends the entire training session.
+      //
+      // =================================================
+
+      if (
+        String(
+          session.hostUserId
+        ) ===
+        String(
+          userId
+        )
+      ) {
+
+        return res
+          .status(409)
+          .json({
+
+            error:
+              "TRAINING_HOST_MUST_END_SESSION",
+
+            message:
+              "The training host must end the training session instead of leaving it.",
+
+          });
+
+      }
+
+
+      // =================================================
+      // FIND PARTICIPANT
+      // =================================================
+
+      const participant =
+        await TrainingParticipant.findOne({
+
+          sessionId:
+            session._id,
+
+          tenantId,
+
+          userId,
+
+        });
+
+
+      if (
+        !participant
+      ) {
+
+        return res
+          .status(403)
+          .json({
+
+            error:
+              "TRAINING_PARTICIPANT_NOT_FOUND",
+
+          });
+
+      }
+
+
+      // =================================================
+      // ALREADY LEFT
+      // =================================================
+
+      if (
+        participant.status ===
+        "left"
+      ) {
+
+        return res.json({
+
+          ok:
+            true,
+
+          alreadyLeft:
+            true,
+
+          session: {
+
+            id:
+              String(
+                session._id
+              ),
+
+            tenantId:
+              String(
+                session.tenantId
+              ),
+
+            hostUserId:
+              String(
+                session.hostUserId
+              ),
+
+            channelName:
+              session.channelName,
+
+            status:
+              session.status,
+
+            startedAt:
+              session.startedAt ||
+              null,
+
+            endedAt:
+              session.endedAt ||
+              null,
+
+          },
+
+          participant: {
+
+            id:
+              String(
+                participant._id
+              ),
+
+            userId:
+              String(
+                participant.userId
+              ),
+
+            sessionId:
+              String(
+                participant.sessionId
+              ),
+
+            status:
+              participant.status,
+
+            invitedAt:
+              participant.invitedAt ||
+              null,
+
+            joinedAt:
+              participant.joinedAt ||
+              null,
+
+            leftAt:
+              participant.leftAt ||
+              null,
+
+          },
+
+        });
+
+      }
+
+
+      // =================================================
+      // ONLY A JOINED PARTICIPANT CAN LEAVE
+      // =================================================
+
+      if (
+        participant.status !==
+        "joined"
+      ) {
+
+        return res
+          .status(409)
+          .json({
+
+            error:
+              "TRAINING_PARTICIPANT_NOT_LEAVABLE",
+
+            message:
+              `Participant cannot leave from status "${participant.status}"`,
+
+          });
+
+      }
+
+
+      // =================================================
+      // MARK LEFT
+      // =================================================
+
+      const leftAt =
+        new Date();
+
+
+      participant.status =
+        "left";
+
+      participant.leftAt =
+        leftAt;
+
+
+      await participant.save();
+
+
+      // =================================================
+      // RESPONSE
+      // =================================================
+
+      console.log(
+        "[Training] Participant left training session",
+        {
+
+          sessionId:
+            String(
+              session._id
+            ),
+
+          userId:
+            String(
+              userId
+            ),
+
+          leftAt,
+
+        }
+      );
+
+
+      return res.json({
+
+        ok:
+          true,
+
+        alreadyLeft:
+          false,
+
+        session: {
+
+          id:
+            String(
+              session._id
+            ),
+
+          tenantId:
+            String(
+              session.tenantId
+            ),
+
+          hostUserId:
+            String(
+              session.hostUserId
+            ),
+
+          channelName:
+            session.channelName,
+
+          status:
+            session.status,
+
+          startedAt:
+            session.startedAt ||
+            null,
+
+          endedAt:
+            session.endedAt ||
+            null,
+
+        },
+
+        participant: {
+
+          id:
+            String(
+              participant._id
+            ),
+
+          userId:
+            String(
+              participant.userId
+            ),
+
+          sessionId:
+            String(
+              participant.sessionId
+            ),
+
+          status:
+            participant.status,
+
+          invitedAt:
+            participant.invitedAt ||
+            null,
+
+          joinedAt:
+            participant.joinedAt ||
+            null,
+
+          leftAt:
+            participant.leftAt ||
+            null,
+
+        },
+
+      });
+
+    }
+    catch (
+      error
+    ) {
+
+      console.error(
+        "[Training] Leave training session failed",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          error:
+            "Failed to leave training session",
+
+        });
+
+    }
+
+  }
+);
+
 
 export default router;

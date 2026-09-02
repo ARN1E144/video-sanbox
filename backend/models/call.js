@@ -3,6 +3,207 @@
 import mongoose from "mongoose";
 
 
+// =====================================================
+// GROUP CALL PARTICIPANT
+// =====================================================
+//
+// One participant record per application user in a
+// group-call session.
+//
+// Application lifecycle:
+//
+//   invited
+//   accepted
+//   declined
+//   joined
+//   left
+//
+// Agora media lifecycle is separate and remains owned by
+// AgoraEngine on the client.
+//
+// agoraUid is intentionally stored on the participant
+// record because the mapping is:
+//
+//   application user
+//        ↓
+//   group-call participant
+//        ↓
+//   Agora UID for THIS session
+//
+// The UID is therefore NOT a permanent user identity.
+// A participant may receive a new Agora UID when they
+// join a later call.
+//
+// =====================================================
+
+const groupCallParticipantSchema =
+  new mongoose.Schema(
+    {
+
+      // =================================================
+      // APPLICATION USER
+      // =================================================
+
+      userId: {
+
+        type:
+          mongoose.Schema.Types.ObjectId,
+
+        ref:
+          "User",
+
+        required:
+          true,
+
+      },
+
+
+      // =================================================
+      // AGORA UID
+      // =====================================================
+      //
+      // The Agora UID used by this participant for the
+      // current group-call session.
+      //
+      // Stored as a string so the application consistently
+      // treats values such as:
+      //
+      //   23176
+      //
+      // and:
+      //
+      //   "23176"
+      //
+      // as the same identifier.
+      //
+      // null means the participant is not currently
+      // associated with an active Agora join lifecycle.
+      //
+      // =================================================
+
+      agoraUid: {
+
+        type:
+          String,
+
+        default:
+          null,
+
+        index:
+          true,
+
+      },
+
+
+      // =================================================
+      // APPLICATION PARTICIPANT STATE
+      // =================================================
+
+      status: {
+
+        type:
+          String,
+
+        enum: [
+
+          "invited",
+
+          "accepted",
+
+          "declined",
+
+          "joined",
+
+          "left",
+
+        ],
+
+        default:
+          "invited",
+
+      },
+
+
+      // =================================================
+      // INVITATION TIMING
+      // =================================================
+
+      invitedAt: {
+
+        type:
+          Date,
+
+        default:
+          null,
+
+      },
+
+
+      acceptedAt: {
+
+        type:
+          Date,
+
+        default:
+          null,
+
+      },
+
+
+      declinedAt: {
+
+        type:
+          Date,
+
+        default:
+          null,
+
+      },
+
+
+      // =================================================
+      // PARTICIPATION TIMING
+      // =================================================
+
+      joinedAt: {
+
+        type:
+          Date,
+
+        default:
+          null,
+
+      },
+
+
+      leftAt: {
+
+        type:
+          Date,
+
+        default:
+          null,
+
+      },
+
+    },
+
+    {
+
+      // Participant records are embedded inside Call and
+      // do not need their own MongoDB _id.
+      _id:
+        false,
+
+    }
+
+  );
+
+
+// =====================================================
+// CALL
+// =====================================================
+
 const callSchema =
   new mongoose.Schema(
     {
@@ -30,11 +231,16 @@ const callSchema =
 
       // =================================================
       // CALL CREATOR
-      // =================================================
+      // =====================================================
       //
-      // For Remote Training this is the Host.
+      // Queue:
+      //   original caller/client
       //
-      // For queue calls this is the client/caller.
+      // Targeted:
+      //   caller/initiator
+      //
+      // Group:
+      //   group-call host/creator
       //
       // =================================================
 
@@ -56,14 +262,52 @@ const callSchema =
 
 
       // =================================================
-      // TARGETED RECIPIENT
+      // CALL TYPE
       // =================================================
       //
-      // null
-      //   = queue call
+      // queue
+      //   One available responder claims it.
       //
-      // user id
-      //   = targeted call
+      // targeted
+      //   One specific recipient is invited.
+      //
+      // group
+      //   Multiple tenant users can participate.
+      //
+      // =================================================
+
+      type: {
+
+        type:
+          String,
+
+        enum: [
+
+          "queue",
+
+          "targeted",
+
+          "group",
+
+        ],
+
+        default:
+          "queue",
+
+        index:
+          true,
+
+      },
+
+
+      // =================================================
+      // TARGETED RECIPIENT
+      // =====================================================
+      //
+      // Used by targeted calls.
+      //
+      // Null for queue/group calls unless a future
+      // workflow deliberately needs it.
       //
       // =================================================
 
@@ -85,7 +329,14 @@ const callSchema =
 
 
       // =================================================
-      // EMPLOYEE / PARTICIPANT WHO CLAIMED THE CALL
+      // CLAIMED BY
+      // =====================================================
+      //
+      // Primarily used by queue calls.
+      //
+      // Group participation is represented by
+      // participants[].
+      //
       // =================================================
 
       claimedByUserId: {
@@ -160,6 +411,49 @@ const callSchema =
 
 
       // =================================================
+      // GROUP PARTICIPANTS
+      // =====================================================
+      //
+      // Used when:
+      //
+      //   type = "group"
+      //
+      // Example:
+      //
+      // [
+      //   {
+      //     userId: Bob,
+      //     agoraUid: "9803",
+      //     status: "joined"
+      //   },
+      //   {
+      //     userId: Anish,
+      //     agoraUid: "62111",
+      //     status: "joined"
+      //   },
+      //   {
+      //     userId: Arn144,
+      //     agoraUid: "85373",
+      //     status: "joined"
+      //   }
+      // ]
+      //
+      // =================================================
+
+      participants: {
+
+        type:
+          [
+            groupCallParticipantSchema
+          ],
+
+        default:
+          [],
+
+      },
+
+
+      // =================================================
       // CLAIM TIMING
       // =================================================
 
@@ -176,21 +470,45 @@ const callSchema =
 
       // =================================================
       // TARGETED INVITATION EXPIRY
-      // =================================================
+      // =====================================================
       //
-      // Used when status = "ringing".
+      // Existing targeted-call behaviour.
       //
-      // Example:
+      // Primarily relevant when:
       //
-      // createdAt:
-      //   10:00
-      //
-      // invitationExpiresAt:
-      //   10:05
+      //   type   = targeted
+      //   status = ringing
       //
       // =================================================
 
       invitationExpiresAt: {
+
+        type:
+          Date,
+
+        default:
+          null,
+
+        index:
+          true,
+
+      },
+
+
+      // =================================================
+      // GENERAL CALL EXPIRY
+      // =====================================================
+      //
+      // Used by group calls and future call lifecycle
+      // logic.
+      //
+      // When expiresAt is reached the call becomes
+      // expired and outstanding invitations are no longer
+      // actionable.
+      //
+      // =================================================
+
+      expiresAt: {
 
         type:
           Date,
@@ -235,12 +553,7 @@ const callSchema =
 
 
       // =================================================
-      // GENERAL EXPIRY
-      // =================================================
-      //
-      // Used when a waiting/ringing call is explicitly
-      // transitioned to expired.
-      //
+      // CALL EXPIRY
       // =================================================
 
       expiredAt: {
@@ -256,8 +569,10 @@ const callSchema =
     },
 
     {
+
       timestamps:
         true,
+
     }
 
   );
@@ -265,6 +580,10 @@ const callSchema =
 
 // =====================================================
 // GENERAL CALL INDEX
+// =====================================================
+//
+// Common tenant-level call lookups.
+//
 // =====================================================
 
 callSchema.index({
@@ -282,14 +601,36 @@ callSchema.index({
 
 
 // =====================================================
+// CALL TYPE INDEX
+// =====================================================
+//
+// Helps separate queue / targeted / group calls while
+// preserving efficient recent-call lookups.
+//
+// =====================================================
+
+callSchema.index({
+
+  tenantId:
+    1,
+
+  type:
+    1,
+
+  status:
+    1,
+
+  createdAt:
+    -1,
+
+});
+
+
+// =====================================================
 // TARGETED INVITATION INDEX
 // =====================================================
 //
-// Makes:
-//
-// recipientUserId + status
-//
-// lookups efficient for:
+// Supports:
 //
 // GET /api/calls/pending
 //
@@ -316,10 +657,7 @@ callSchema.index({
 // INVITATION EXPIRY INDEX
 // =====================================================
 //
-// Helps expiry queries:
-//
-// status = ringing
-// invitationExpiresAt < now
+// Supports targeted invitation expiry operations.
 //
 // =====================================================
 
@@ -337,8 +675,68 @@ callSchema.index({
 });
 
 
-export default
-  mongoose.model(
-    "Call",
-    callSchema
-  );
+// =====================================================
+// GROUP INVITATION INDEX
+// =====================================================
+//
+// Supports:
+//
+// GET /api/group-calls/invitations
+//
+// which searches within participants[].
+//
+// =====================================================
+
+callSchema.index({
+
+  tenantId:
+    1,
+
+  type:
+    1,
+
+  "participants.userId":
+    1,
+
+  "participants.status":
+    1,
+
+  createdAt:
+    -1,
+
+});
+
+
+// =====================================================
+// GROUP EXPIRY INDEX
+// =====================================================
+//
+// Supports group-call expiry cleanup.
+//
+// =====================================================
+
+callSchema.index({
+
+  tenantId:
+    1,
+
+  type:
+    1,
+
+  status:
+    1,
+
+  expiresAt:
+    1,
+
+});
+
+
+// =====================================================
+// EXPORT
+// =====================================================
+
+export default mongoose.model(
+  "Call",
+  callSchema
+);
