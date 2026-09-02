@@ -450,18 +450,50 @@ export default function RuntimeTestPanel() {
   );
 
 
-  const [
-    groupCallParticipantCount,
-    setGroupCallParticipantCount,
-  ] =
-  useState(
-    () =>
-      Number(
-        runtime.get?.(
-          "call.participants"
-        ) || 0
+  // =====================================================
+// GROUP CALL PARTICIPANT COUNT
+// =====================================================
+//
+// call.participants is now normally an array of participant
+// objects rather than a numeric count.
+//
+// Keep the panel state as a number so the existing UI can
+// continue displaying:
+// 
+//   Participants: 3
+//
+// Supports both the new array format and the old numeric
+// format for backwards compatibility.
+//
+// =====================================================
+
+const [
+  groupCallParticipantCount,
+  setGroupCallParticipantCount,
+] =
+useState(
+  () => {
+
+    const initialParticipants =
+      runtime.get?.(
+        "call.participants"
+      );
+
+
+    const initialParticipantCount =
+      Array.isArray(
+        initialParticipants
       )
-  );
+        ? initialParticipants.length
+        : Number(
+            initialParticipants || 0
+          );
+
+
+    return initialParticipantCount;
+
+  }
+);
 
 
   const [
@@ -843,20 +875,27 @@ export default function RuntimeTestPanel() {
         }
       );
 
+  const unsubscribeParticipants =
+  runtime.subscribe?.(
+    "call.participants",
+    value => {
 
-    const unsubscribeParticipants =
-      runtime.subscribe?.(
-        "call.participants",
-        value => {
-
-          setGroupCallParticipantCount(
-            Number(
+      const count =
+        Array.isArray(
+          value
+        )
+          ? value.length
+          : Number(
               value || 0
-            )
-          );
+            );
 
-        }
+
+      setGroupCallParticipantCount(
+        count
       );
+
+    }
+  );
 
 
     const unsubscribeRemoteUsers =
@@ -1903,6 +1942,53 @@ export default function RuntimeTestPanel() {
       );
 
     };
+
+  
+// =====================================================
+// REFRESH GROUP CALL
+// =====================================================
+
+// =====================================================
+// REFRESH GROUP CALL
+// =====================================================
+
+const testRefreshGroupCall =
+  async () => {
+
+    const callId =
+      activeGroupCallId;
+
+
+    if (
+      !callId
+    ) {
+
+      console.warn(
+        "[RuntimeTest] No group call ID available"
+      );
+
+      return;
+
+    }
+
+
+    console.log(
+      "[RuntimeTest] Refreshing group call",
+      {
+        callId,
+      }
+    );
+
+
+    await runGroupAction(
+      "call.refreshGroupCall",
+      {
+        callId,
+      }
+    );
+
+  };
+
 
 
   // =====================================================
@@ -3519,6 +3605,53 @@ export default function RuntimeTestPanel() {
             Test Join Group Call
 
           </button>
+
+        {/* ---------------------------------------------
+            REFRESH GROUP CALL
+        --------------------------------------------- */}
+
+        <button
+
+          onClick={
+            testRefreshGroupCall
+          }
+
+          disabled={
+            !activeGroupCallId ||
+            groupActionRunning
+          }
+
+          style={{
+
+            width:
+              "100%",
+
+            minHeight:
+              38,
+
+            marginBottom:
+              8,
+
+            cursor:
+              activeGroupCallId &&
+              !groupActionRunning
+                ? "pointer"
+                : "not-allowed",
+
+            opacity:
+              activeGroupCallId &&
+              !groupActionRunning
+                ? 1
+                : 0.55,
+
+          }}
+
+        >
+
+          Test Refresh Group Call
+
+        </button>
+
 
 
           {/* ---------------------------------------------

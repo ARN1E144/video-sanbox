@@ -1,8 +1,13 @@
 // src/runtime/auth/roles/rolePermissions.js
 
-console.log("🔥 rolePermissions.js EXECUTED");
+console.log(
+  "🔥 rolePermissions.js EXECUTED"
+);
 
-// src/config/ROLE_PERMISSIONS.js
+
+// =====================================================
+// ROLE PERMISSIONS
+// =====================================================
 
 export const ROLE_PERMISSIONS = {
 
@@ -29,6 +34,7 @@ export const ROLE_PERMISSIONS = {
 
       "ControlButton",
 
+
       // -----------------------------------------------
       // VIDEO
       // -----------------------------------------------
@@ -41,6 +47,7 @@ export const ROLE_PERMISSIONS = {
 
       "MediaFeed",
 
+
       // -----------------------------------------------
       // CALL
       // -----------------------------------------------
@@ -50,6 +57,7 @@ export const ROLE_PERMISSIONS = {
       "AvailabilityButton",
 
       "FetchCallsDebug",
+
 
       // -----------------------------------------------
       // GROUP CALL
@@ -61,6 +69,11 @@ export const ROLE_PERMISSIONS = {
 
       "GroupCallControls",
 
+      // -----------------------------------------------
+      // REMOTE TRAINING
+      // -----------------------------------------------
+      
+      "TrainingInvitation",
     ],
 
 
@@ -108,6 +121,10 @@ export const ROLE_PERMISSIONS = {
       "call.declineInvitation",
 
       "call.joinGroupCall",
+
+      "call.refreshGroupCall",
+
+      "call.inviteGroupParticipants",
 
       "call.leaveGroupCall",
 
@@ -156,6 +173,8 @@ export const ROLE_PERMISSIONS = {
 
       "training.joinSession",
 
+      "training.leaveSession",
+
       "training.endSession",
 
     ],
@@ -197,6 +216,8 @@ export const ROLE_PERMISSIONS = {
       "IncomingGroupCallAlert",
 
       "GroupCallControls",
+
+      "TrainingInvitation"
 
     ],
 
@@ -246,9 +267,29 @@ export const ROLE_PERMISSIONS = {
 
       "call.joinGroupCall",
 
+      "call.refreshGroupCall",
+
+      "call.inviteGroupParticipants",
+
       "call.leaveGroupCall",
 
       "call.endGroupCall",
+
+      // =================================================
+      // TRAINING
+      // =================================================
+
+      "training.createSession",
+
+      "training.startSession",
+
+      "training.fetchPendingSessions",
+
+      "training.joinSession",
+
+      "training.leaveSession",
+
+      "training.endSession",
 
     ],
 
@@ -278,7 +319,11 @@ export const ROLE_PERMISSIONS = {
 
       "ChatPanel",
 
-      // Group-call experience
+
+      // -----------------------------------------------
+      // GROUP CALL EXPERIENCE
+      // -----------------------------------------------
+
       "ParticipantSelector",
 
       "IncomingGroupCallAlert",
@@ -323,9 +368,29 @@ export const ROLE_PERMISSIONS = {
 
       "call.joinGroupCall",
 
+      "call.refreshGroupCall",
+
+      "call.inviteGroupParticipants",
+
       "call.leaveGroupCall",
 
       "call.endGroupCall",
+
+      // =================================================
+      // TRAINING
+      // =================================================
+
+      "training.createSession",
+
+      "training.startSession",
+
+      "training.fetchPendingSessions",
+
+      "training.joinSession",
+
+      "training.leaveSession",
+
+      "training.endSession",
 
     ],
 
@@ -356,11 +421,22 @@ export const ROLE_PERMISSIONS = {
       "ChatPanel",
 
       "Text",
+      
 
-      // Group-call participant experience
+
+      // -----------------------------------------------
+      // GROUP CALL PARTICIPANT EXPERIENCE
+      // -----------------------------------------------
+
       "IncomingGroupCallAlert",
 
       "GroupCallControls",
+
+       // -----------------------------------------------
+      // REMOTE TRAINING
+      // -----------------------------------------------
+      
+      "TrainingInvitation",
 
     ],
 
@@ -392,7 +468,20 @@ export const ROLE_PERMISSIONS = {
 
       "call.joinGroupCall",
 
+      // Used by realtime socket lifecycle reconciliation.
+      "call.refreshGroupCall",
+
       "call.leaveGroupCall",
+
+      // =================================================
+      // TRAINING
+      // =================================================
+
+      "training.fetchPendingSessions",
+
+      "training.joinSession",
+
+      "training.leaveSession",
 
     ],
 
@@ -431,4 +520,4 @@ export const ROLE_PERMISSIONS = {
 
   },
 
-};
+}; 

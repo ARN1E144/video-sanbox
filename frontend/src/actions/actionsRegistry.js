@@ -78,6 +78,9 @@ import fetchPendingInvitations
 import acceptInvitation
   from "./call/group/acceptInvitation";
 
+import inviteGroupParticipants
+  from "./call/group/inviteGroupParticipants";
+
 import declineInvitation
   from "./call/group/declineInvitation";
 
@@ -90,6 +93,8 @@ import leaveGroupCall
 import endGroupCall
   from "./call/group/endGroupCall";
 
+import refreshGroupCall
+  from "./call/group/refreshGroupCall";
 
 import startInterview
   from "./interview/startInterview";
@@ -121,6 +126,9 @@ import fetchPendingSessions
 
 import joinTrainingSession
   from "./training/joinTrainingSession";
+
+import leaveTrainingSession
+  from "./training/leaveTrainingSession";
 
 import endTrainingSession
   from "./training/endTrainingSession";
@@ -189,6 +197,9 @@ export const ACTIONS = {
   CALL_DECLINE_INVITATION:
     "call.declineInvitation",
 
+  CALL_INVITE_PARTICIPANTS:
+    "call.inviteGroupParticipants",
+
   CALL_JOIN_GROUP:
     "call.joinGroupCall",
 
@@ -198,7 +209,8 @@ export const ACTIONS = {
   CALL_END_GROUP:
     "call.endGroupCall",
 
-
+  CALL_REFRESH_GROUP: 
+    "call.refreshGroupCall",
   // =======================================================
   // CALL MEDIA
   // =======================================================
@@ -280,6 +292,9 @@ export const ACTIONS = {
 
   TRAINING_JOIN_SESSION:
     "training.joinSession",
+
+  TRAINING_LEAVE_SESSION:
+  "training.leaveSession",
 
   TRAINING_END_SESSION:
     "training.endSession",
@@ -985,6 +1000,73 @@ export const actionRegistry = {
 
     }),
 
+    inviteGroupParticipants: createAction({
+
+      value:
+        ACTIONS.CALL_INVITE_GROUP,
+
+      label:
+        "Invite / Re-invite Group Participants",
+
+      category:
+        "call",
+
+      run:
+        inviteGroupParticipants,
+
+      targets: [
+        "ParticipantSelector",
+        "CallPanel",
+      ],
+
+      requires: [
+        "call.id",
+      ],
+
+      produces: [
+        "call.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_TYPE,
+        PATH_CALL_STATE,
+        PATH_CALL_PARTICIPANTS,
+      ],
+
+      nextActions: [
+        "call.inviteGroupParticipants",
+        "call.fetchPendingInvitations",
+      ],
+
+      params: {
+
+        callId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        userIds: {
+
+          type:
+            "array",
+
+          itemType:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
 
     leaveCall: createAction({
 
@@ -1593,6 +1675,62 @@ export const actionRegistry = {
       },
 
     }),
+
+    refreshGroupCall: createAction({
+      value:
+        ACTIONS.CALL_REFRESH_GROUP,
+
+      label:
+        "Refresh Group Call",
+
+      category:
+        "call",
+
+      run:
+        refreshGroupCall,
+
+      targets: [
+        "RemoteVideoGrid",
+        "AgoraFeed",
+        "CallPanel",
+      ],
+
+      requires: [
+        "call.id",
+      ],
+
+      produces: [
+        "call.state",
+        "call.channel",
+        "call.type",
+        "call.participants",
+        "call.remoteUsers",
+      ],
+
+      conditionPaths: [
+        PATH_CALL_ID,
+        PATH_CALL_CHANNEL,
+        PATH_CALL_STATE,
+        PATH_CALL_JOINED,
+        PATH_CALL_PARTICIPANTS,
+        PATH_CALL_REMOTE_USERS,
+      ],
+
+      nextActions: [],
+
+      autoNextActions: [],
+
+      params: {
+        callId: {
+          type:
+            "string",
+
+          required:
+            false,
+        },
+      },
+    }),
+
 
 
     leaveGroupCall: createAction({
@@ -2234,6 +2372,45 @@ export const actionRegistry = {
 
     }),
 
+    leaveSession: createAction({
+
+      value:
+        ACTIONS.TRAINING_LEAVE_SESSION,
+
+      label:
+        "Leave Training Session",
+
+      category:
+        "training",
+
+      run:
+        leaveTrainingSession,
+
+      targets: [
+        "AgoraFeed",
+        "TrainingInvitation",
+      ],
+
+      requires: [
+        "training.sessionId",
+      ],
+
+      produces: [
+        "training.state",
+        "call.joined",
+      ],
+
+      conditionPaths: [
+        PATH_TRAINING_STATE,
+        PATH_CALL_JOINED,
+      ],
+
+      nextActions: [
+        "training.fetchPendingSessions",
+      ],
+
+    }),
+
 
     endSession: createAction({
 
@@ -2677,6 +2854,22 @@ console.log(
     joinGroupCall:
       actionRegistry.call
         ?.joinGroupCall,
+    
+    refreshGroupCall:
+      actionRegistry.call
+        ?.refreshGroupCall,
+
+    leaveGroupCall:
+      actionRegistry.call
+        ?.leaveGroupCall,
+
+    endGroupCall:
+      actionRegistry.call
+        ?.endGroupCall,
+
+    inviteGroupParticipants:
+      actionRegistry.call
+        ?.inviteGroupParticipants,
 
   }
 );

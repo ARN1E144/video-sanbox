@@ -39,7 +39,7 @@
       },
 
       {
-        "id": "training-host-video",
+    "id": "training-host-video",
         "type": "AgoraFeed",
         "role": "host",
         "x": 40,
@@ -47,8 +47,8 @@
         "width": 800,
         "height": 450,
         "props": {
-          "channel": "{{call.channel}}",
-          "autoJoin": true,
+          "channel": "{{training.channel}}",
+          "autoJoin": false,
           "publishLocal": true,
           "muted": false,
           "cameraOff": false,
@@ -200,7 +200,7 @@
         "width": 800,
         "height": 450,
         "props": {
-          "channel": "{{call.channel}}",
+          "channel": "{{training.channel}}",
           "autoJoin": false,
           "publishLocal": true,
           "muted": false,
@@ -224,7 +224,7 @@
         "height": 44,
         "props": {
           "label": "Join Training",
-          "action": "call.joinInvitedCall",
+          "action": "training.joinSession",
           "targetId": "training-client-video"
         }
       },
@@ -269,7 +269,7 @@
         "height": 44,
         "props": {
           "label": "Leave Training",
-          "action": "call.endCall",
+          "action": "training.leaveSession",
           "targetId": "training-client-video"
         }
       }

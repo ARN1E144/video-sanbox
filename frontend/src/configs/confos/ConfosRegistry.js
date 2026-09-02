@@ -1,5 +1,9 @@
 // src/configs/confosRegistry.js
 
+// =====================================================
+// CONFOS
+// =====================================================
+
 import oneToOne
   from "./1-to-1.json";
 
@@ -24,8 +28,19 @@ import mediaFeed
 import remoteVideoGrid
   from "./remote-video-grid.json";
 
+import groupCall
+  from "./group_call.json";
+
+
+// =====================================================
+// CONFO REGISTRY
+// =====================================================
 
 const ConfosRegistry = {
+
+  // ===================================================
+  // VIDEO CALLS
+  // ===================================================
 
   "confo.one_to_one":
     oneToOne,
@@ -36,8 +51,21 @@ const ConfosRegistry = {
   "confo.host_to_many":
     hostToMany,
 
+  "confo.group_call":
+    groupCall,
+
+
+  // ===================================================
+  // TRAINING
+  // ===================================================
+
   "confo.remote_training":
     remoteTraining,
+
+
+  // ===================================================
+  // AI
+  // ===================================================
 
   "confo.ai_video_interviewer":
     aiVideoInterviewer,
@@ -58,5 +86,24 @@ const ConfosRegistry = {
 
 };
 
+
+// =====================================================
+// DEBUG
+// =====================================================
+
+console.log(
+  "[CONFOS REGISTRY LOADED]",
+  {
+    confos:
+      Object.keys(
+        ConfosRegistry
+      ),
+  }
+);
+
+
+// =====================================================
+// EXPORT
+// =====================================================
 
 export default ConfosRegistry;

@@ -15,9 +15,23 @@ import {
 } from "../context/RuntimeStateContext";
 
 
-const DEFAULT_POLL_INTERVAL_MS =
-  5000;
+// =====================================================
+// CONFIG
+// =====================================================
+//
+// Socket.IO is now the primary realtime invitation path.
+//
+// HTTP polling remains a reconciliation fallback.
+//
+// =====================================================
 
+const DEFAULT_POLL_INTERVAL_MS =
+  10000;
+
+
+// =====================================================
+// HOOK
+// =====================================================
 
 export default function useGroupCallInvitations({
 
@@ -30,7 +44,7 @@ export default function useGroupCallInvitations({
 } = {}) {
 
   // ===================================================
-  // RUNTIME / ACTION CONTEXT
+  // CONTEXT
   // ===================================================
 
   const {
@@ -46,6 +60,29 @@ export default function useGroupCallInvitations({
   // ===================================================
   // REFS
   // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // Do not place the runtime context object itself
+  // inside effect dependencies.
+  //
+  // Runtime state commits can change the context object
+  // identity and would otherwise recreate the polling
+  // effect and immediately fetch again.
+  //
+  // ===================================================
+
+  const runActionRef =
+    useRef(
+      runAction
+    );
+
+
+  const runtimeRef =
+    useRef(
+      runtime
+    );
+
 
   const intervalRef =
     useRef(null);
@@ -60,6 +97,18 @@ export default function useGroupCallInvitations({
 
 
   // ===================================================
+  // KEEP SERVICE REFS CURRENT
+  // ===================================================
+
+  runActionRef.current =
+    runAction;
+
+
+  runtimeRef.current =
+    runtime;
+
+
+  // ===================================================
   // FETCH INVITATIONS
   // ===================================================
 
@@ -70,7 +119,7 @@ export default function useGroupCallInvitations({
       } = {}) => {
 
         // ---------------------------------------------
-        // Don't run after unmount.
+        // Mounted
         // ---------------------------------------------
 
         if (
@@ -83,11 +132,28 @@ export default function useGroupCallInvitations({
 
 
         // ---------------------------------------------
-        // Runtime must be ready.
+        // Enabled
         // ---------------------------------------------
 
         if (
-          !runtime.runtimeReady
+          !enabled
+        ) {
+
+          return null;
+
+        }
+
+
+        // ---------------------------------------------
+        // Runtime readiness
+        // ---------------------------------------------
+
+        const currentRuntime =
+          runtimeRef.current;
+
+
+        if (
+          !currentRuntime?.runtimeReady
         ) {
 
           console.log(
@@ -104,7 +170,7 @@ export default function useGroupCallInvitations({
 
 
         // ---------------------------------------------
-        // Prevent overlapping requests.
+        // Prevent overlap
         // ---------------------------------------------
 
         if (
@@ -139,7 +205,7 @@ export default function useGroupCallInvitations({
 
 
           const result =
-            await runAction(
+            await runActionRef.current(
               "call.fetchPendingInvitations",
               {}
             );
@@ -152,8 +218,11 @@ export default function useGroupCallInvitations({
             console.warn(
               "[useGroupCallInvitations] Fetch failed",
               {
+
                 reason,
+
                 result,
+
               }
             );
 
@@ -180,8 +249,11 @@ export default function useGroupCallInvitations({
           console.error(
             "[useGroupCallInvitations] Fetch exception",
             {
+
               reason,
+
               error,
+
             }
           );
 
@@ -207,14 +279,13 @@ export default function useGroupCallInvitations({
 
       },
       [
-        runAction,
-        runtime,
+        enabled,
       ]
     );
 
 
   // ===================================================
-  // START / STOP POLLING
+  // POLLING LIFECYCLE
   // ===================================================
 
   useEffect(() => {
@@ -223,13 +294,18 @@ export default function useGroupCallInvitations({
       true;
 
 
-    // -----------------------------------------------
+    // -------------------------------------------------
     // Disabled
-    // -----------------------------------------------
+    // -------------------------------------------------
 
     if (
       !enabled
     ) {
+
+      console.log(
+        "[useGroupCallInvitations] Polling disabled"
+      );
+
 
       return () => {
 
@@ -241,13 +317,13 @@ export default function useGroupCallInvitations({
     }
 
 
-    // -----------------------------------------------
-    // Normalise interval.
-    // -----------------------------------------------
+    // -------------------------------------------------
+    // SAFE INTERVAL
+    // -------------------------------------------------
 
     const safeInterval =
       Math.max(
-        1000,
+        5000,
         Number(
           intervalMs
         ) ||
@@ -255,12 +331,15 @@ export default function useGroupCallInvitations({
       );
 
 
-    // -----------------------------------------------
-    // Immediate initial fetch.
+    // -------------------------------------------------
+    // INITIAL FETCH
+    // -------------------------------------------------
     //
-    // This means the user does not have to wait for
-    // the first interval.
-    // -----------------------------------------------
+    // Only once when the hook instance starts.
+    //
+    // Runtime commits will NOT restart this effect.
+    //
+    // -------------------------------------------------
 
     fetchInvitations({
       reason:
@@ -268,9 +347,9 @@ export default function useGroupCallInvitations({
     });
 
 
-    // -----------------------------------------------
-    // Polling interval.
-    // -----------------------------------------------
+    // -------------------------------------------------
+    // FALLBACK POLLING
+    // -------------------------------------------------
 
     intervalRef.current =
       window.setInterval(
@@ -289,15 +368,17 @@ export default function useGroupCallInvitations({
     console.log(
       "[useGroupCallInvitations] Polling started",
       {
+
         intervalMs:
           safeInterval,
+
       }
     );
 
 
-    // -----------------------------------------------
-    // Cleanup.
-    // -----------------------------------------------
+    // -------------------------------------------------
+    // CLEANUP
+    // -------------------------------------------------
 
     return () => {
 
@@ -327,10 +408,16 @@ export default function useGroupCallInvitations({
 
     };
 
+    // IMPORTANT:
+    //
+    // Deliberately NOT depending on runtime or
+    // runAction.
+    //
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [
     enabled,
     intervalMs,
-    fetchInvitations,
   ]);
 
 
@@ -344,7 +431,9 @@ export default function useGroupCallInvitations({
       fetchInvitations,
 
     isPolling:
-      enabled,
+      Boolean(
+        enabled
+      ),
 
   };
 

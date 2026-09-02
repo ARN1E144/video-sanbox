@@ -1,0 +1,268 @@
+{
+  "id": "confo.group_call",
+  "name": "Group Video Call",
+  "version": 2,
+  "type": "confo",
+  "description": "Live multi-participant video calling with participant selection, invitations, re-invitations and runtime-driven media.",
+
+  "capabilities": [
+    "video",
+    "audio",
+    "group-call",
+    "invitations",
+    "realtime"
+  ],
+
+  "tree": {
+    "id": "group-call-root",
+    "type": "Container",
+
+    "props": {
+      "layout": "vertical",
+      "backgroundColor": "#0f172a"
+    },
+
+    "children": [
+
+      {
+        "id": "group-call-header",
+        "type": "TextLabel",
+
+        "props": {
+          "label": "Group Video Call"
+        }
+      },
+
+
+      {
+        "id": "group-call-participants",
+        "type": "ParticipantSelector",
+
+        "width": 620,
+        "height": 180,
+
+        "props": {
+          "label": "Invite Participants",
+          "placeholder": "Select participants..."
+        }
+      },
+
+
+      {
+        "id": "group-call-controls",
+        "type": "ControlPanel",
+
+        "width": 760,
+        "height": 96,
+
+        "props": {
+          "layout": "horizontal"
+        },
+
+        "children": [
+
+          {
+            "id": "group-call-start",
+            "type": "ControlButton",
+
+            "props": {
+              "label": "Start Group Call",
+              "action": "call.createGroupCall"
+            }
+          },
+
+
+          {
+            "id": "group-call-invite",
+            "type": "ControlButton",
+
+            "props": {
+              "label": "Invite / Re-invite",
+              "action": "call.inviteGroupParticipants"
+            }
+          },
+
+
+          {
+            "id": "group-call-leave",
+            "type": "ControlButton",
+
+            "props": {
+              "label": "Leave Call",
+              "action": "call.leaveGroupCall"
+            }
+          },
+
+
+          {
+            "id": "group-call-end",
+            "type": "ControlButton",
+
+            "props": {
+              "label": "End Group Call",
+              "action": "call.endGroupCall"
+            }
+          },
+
+
+          {
+            "id": "group-call-mic",
+            "type": "ControlButton",
+
+            "props": {
+              "label": "Toggle Mic",
+              "action": "call.toggleMic"
+            }
+          },
+
+
+          {
+            "id": "group-call-video",
+            "type": "ControlButton",
+
+            "props": {
+              "label": "Toggle Video",
+              "action": "call.toggleVideo"
+            }
+          }
+
+        ]
+      },
+
+
+      {
+        "id": "group-call-local-video",
+        "type": "AgoraFeed",
+
+        "width": 800,
+        "height": 450,
+
+        "props": {
+          "localLayout": "full",
+          "publishLocal": true,
+          "autoJoin": false,
+          "mirror": true,
+          "objectFit": "cover",
+          "borderRadius": 12
+        }
+      },
+
+
+      {
+        "id": "group-call-remote-grid",
+        "type": "RemoteVideoGrid",
+
+        "width": 800,
+        "height": 300,
+
+        "props": {
+          "source": "call.remoteUsers",
+          "columns": 2,
+          "gap": 8,
+          "emptyText": "Waiting for participants..."
+        }
+      },
+
+
+      {
+        "id": "group-call-client-section",
+        "type": "Container",
+
+        "width": 760,
+
+        "props": {
+          "layout": "vertical",
+          "backgroundColor": "#111827",
+          "borderRadius": 12,
+          "padding": 12
+        },
+
+        "children": [
+
+          {
+            "id": "group-call-client-header",
+            "type": "TextLabel",
+
+            "props": {
+              "label": "Incoming Group Calls"
+            }
+          },
+
+
+          {
+            "id": "group-call-client-alert",
+            "type": "IncomingGroupCallAlert",
+
+            "width": 720,
+
+            "props": {
+              "source": "calls.pendingInvitations"
+            }
+          },
+
+
+          {
+            "id": "group-call-client-actions",
+            "type": "ControlPanel",
+
+            "width": 720,
+            "height": 96,
+
+            "props": {
+              "layout": "horizontal"
+            },
+
+            "children": [
+
+              {
+                "id": "group-call-client-refresh",
+                "type": "ControlButton",
+
+                "props": {
+                  "label": "Refresh Invitations",
+                  "action": "call.fetchPendingInvitations"
+                }
+              },
+
+
+              {
+                "id": "group-call-client-accept",
+                "type": "ControlButton",
+
+                "props": {
+                  "label": "Accept Invitation",
+                  "action": "call.acceptInvitation"
+                }
+              },
+
+
+              {
+                "id": "group-call-client-decline",
+                "type": "ControlButton",
+
+                "props": {
+                  "label": "Decline Invitation",
+                  "action": "call.declineInvitation"
+                }
+              },
+
+
+              {
+                "id": "group-call-client-join",
+                "type": "ControlButton",
+
+                "props": {
+                  "label": "Join Group Call",
+                  "action": "call.joinGroupCall"
+                }
+              }
+
+            ]
+          }
+
+        ]
+      }
+
+    ]
+  }
+}

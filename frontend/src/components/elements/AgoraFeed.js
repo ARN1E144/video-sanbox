@@ -2,6 +2,7 @@
 
 import React, {
   useEffect,
+  useMemo,
   useRef,
 } from "react";
 
@@ -30,25 +31,7 @@ export default function AgoraFeed(
 ) {
 
   // ===================================================
-  // COMPONENT PROPS
-  // ===================================================
-  //
-  // IMPORTANT:
-  //
-  // Runtime / Confo properties are deliberately removed
-  // from the DOM props.
-  //
-  // This prevents React warnings for:
-  //
-  // publishLocal
-  // cameraOff
-  // emit
-  // action
-  // targetId
-  // params
-  // nextActions
-  // bindings
-  //
+  // PROPS
   // ===================================================
 
   const {
@@ -74,6 +57,9 @@ export default function AgoraFeed(
 
     tokenEndpoint,
 
+    localLayout =
+      "preview",
+
     emit,
 
     action,
@@ -92,6 +78,41 @@ export default function AgoraFeed(
 
     ...domProps
   } = props;
+
+
+  // ===================================================
+  // NORMALISE LOCAL LAYOUT
+  // ===================================================
+
+  const resolvedLocalLayout =
+    useMemo(
+      () => {
+
+        const value =
+          String(
+            localLayout ||
+            "preview"
+          )
+            .trim()
+            .toLowerCase();
+
+
+        return (
+          value === "full"
+            ? "full"
+            : "preview"
+        );
+
+      },
+      [
+        localLayout,
+      ]
+    );
+
+
+  const isLocalFull =
+    resolvedLocalLayout ===
+    "full";
 
 
   // ===================================================
@@ -132,20 +153,6 @@ export default function AgoraFeed(
     );
 
 
-  // ===================================================
-  // CALL TYPE
-  // ===================================================
-  //
-  // Group calls are rendered differently:
-  //
-  // AgoraFeed
-  //   -> local camera
-  //
-  // RemoteVideoGrid
-  //   -> remote participants
-  //
-  // ===================================================
-
   const callType =
     useRuntimeValue(
       "call.type"
@@ -153,7 +160,8 @@ export default function AgoraFeed(
 
 
   const isGroupCall =
-    callType === "group";
+    callType ===
+    "group";
 
 
   // ===================================================
@@ -169,12 +177,12 @@ export default function AgoraFeed(
 
 
   // ===================================================
-  // ACTIVE TRACK REFERENCES
+  // TRACK REFS
   // ===================================================
   //
-  // These remain local to this component.
+  // These hold non-serialisable Agora objects locally.
   //
-  // They must NEVER be written to RuntimeState.
+  // They NEVER enter RuntimeState.
   //
   // ===================================================
 
@@ -191,7 +199,9 @@ export default function AgoraFeed(
   // ===================================================
 
   const playLocalTrack =
-    track => {
+    (
+      track
+    ) => {
 
       const container =
         localRef.current;
@@ -202,29 +212,37 @@ export default function AgoraFeed(
         !track
       ) {
 
-        return;
+        return false;
 
       }
 
 
-      // -----------------------------------------------
-      // Already playing
-      // -----------------------------------------------
+      // -------------------------------------------------
+      // Same track already mounted
+      // -------------------------------------------------
 
       if (
         activeLocalTrackRef.current ===
         track
       ) {
 
-        return;
+        return true;
 
       }
 
 
       try {
 
+        // ------------------------------------------------
+        // Clear previous Agora DOM
+        // ------------------------------------------------
+
         container.replaceChildren();
 
+
+        // ------------------------------------------------
+        // Play
+        // ------------------------------------------------
 
         track.play(
           container
@@ -236,31 +254,62 @@ export default function AgoraFeed(
 
 
         console.log(
-          "[AgoraFeed] local video playing"
+          "[AgoraFeed] local video playing",
+          {
+            localLayout:
+              resolvedLocalLayout,
+
+            isGroupCall,
+
+          }
         );
 
+
+        return true;
+
       }
-      catch (error) {
+      catch (
+        error
+      ) {
 
         console.error(
           "[AgoraFeed] local video play failed",
-          error
+          {
+            error,
+
+            localLayout:
+              resolvedLocalLayout,
+
+            isGroupCall,
+
+          }
         );
+
+
+        activeLocalTrackRef.current =
+          null;
+
+
+        return false;
 
       }
 
     };
 
 
-  // =====================================================
-  // LOCAL VIDEO
-  // =====================================================
+  // ===================================================
+  // LOCAL VIDEO LIFECYCLE
+  // ===================================================
   //
-  // AgoraEngine owns the actual camera track.
+  // AgoraEngine owns:
+  // - creation
+  // - publishing
+  // - stopping
+  // - closing
   //
-  // AgoraFeed only owns the DOM surface.
+  // AgoraFeed owns only the DOM playback surface.
   //
-  // =====================================================
+  // ===================================================
 
   useEffect(
     () => {
@@ -275,7 +324,7 @@ export default function AgoraFeed(
 
 
       // -------------------------------------------------
-      // Track already exists
+      // Track already available
       // -------------------------------------------------
 
       const existingTrack =
@@ -321,25 +370,25 @@ export default function AgoraFeed(
     },
     [
       publishLocal,
+      resolvedLocalLayout,
+      isGroupCall,
     ]
   );
 
 
-  // =====================================================
-  // LOCAL CLEANUP
-  // =====================================================
-  //
-  // AgoraEngine owns the track lifecycle.
-  //
-  // This component must NOT stop or close the track.
-  //
-  // =====================================================
+  // ===================================================
+  // LOCAL PLAYBACK CLEANUP
+  // ===================================================
 
   useEffect(
     () => {
 
       return () => {
 
+        // IMPORTANT:
+        //
+        // Never stop or close the shared Agora track.
+        //
         activeLocalTrackRef.current =
           null;
 
@@ -350,18 +399,9 @@ export default function AgoraFeed(
   );
 
 
-  // =====================================================
+  // ===================================================
   // CLEAR REMOTE PLAYBACK
-  // =====================================================
-  //
-  // Important:
-  //
-  // We clear ONLY this component's DOM surface.
-  //
-  // We do not stop the shared Agora track because
-  // RemoteVideoGrid may own it.
-  //
-  // =====================================================
+  // ===================================================
 
   const clearRemotePlayback =
     () => {
@@ -374,37 +414,48 @@ export default function AgoraFeed(
         remoteRef.current
       ) {
 
-        remoteRef.current.replaceChildren();
+        try {
+
+          remoteRef.current.replaceChildren();
+
+        }
+        catch (
+          error
+        ) {
+
+          console.warn(
+            "[AgoraFeed] remote DOM cleanup failed",
+            error
+          );
+
+        }
 
       }
 
     };
 
 
-  // =====================================================
-  // REMOTE VIDEO
-  // =====================================================
+  // ===================================================
+  // NON-GROUP REMOTE VIDEO
+  // ===================================================
   //
-  // NON-GROUP:
+  // Normal / targeted calls may still use AgoraFeed
+  // as the single remote video surface.
   //
-  // AgoraFeed may display the first remote participant.
+  // Group calls do NOT.
   //
-  // GROUP:
-  //
-  // RemoteVideoGrid owns remote playback.
-  //
-  // =====================================================
+  // ===================================================
 
   useEffect(
     () => {
 
-      const container =
-        remoteRef.current;
-
-
-      // -----------------------------------------------
-      // Group calls do not use the remote surface.
-      // -----------------------------------------------
+      // -------------------------------------------------
+      // GROUP CALL
+      // -------------------------------------------------
+      //
+      // RemoteVideoGrid owns all remote playback.
+      //
+      // -------------------------------------------------
 
       if (
         isGroupCall
@@ -423,6 +474,14 @@ export default function AgoraFeed(
       }
 
 
+      // -------------------------------------------------
+      // Non-group call
+      // -------------------------------------------------
+
+      const container =
+        remoteRef.current;
+
+
       if (
         !container
       ) {
@@ -431,10 +490,6 @@ export default function AgoraFeed(
 
       }
 
-
-      // ------------------------------------------------
-      // Resolve first remote participant
-      // ------------------------------------------------
 
       const users =
         Object.values(
@@ -447,9 +502,9 @@ export default function AgoraFeed(
         null;
 
 
-      // ------------------------------------------------
+      // -------------------------------------------------
       // No remote user
-      // ------------------------------------------------
+      // -------------------------------------------------
 
       if (
         !remoteUser
@@ -458,9 +513,28 @@ export default function AgoraFeed(
         clearRemotePlayback();
 
 
-        console.log(
-          "[AgoraFeed] no remote user"
-        );
+        return undefined;
+
+      }
+
+
+      // -------------------------------------------------
+      // Resolve remote UID
+      // -------------------------------------------------
+
+      const remoteUid =
+        remoteUser.uid ??
+        remoteUser.id ??
+        remoteUser.userId ??
+        null;
+
+
+      if (
+        remoteUid === null ||
+        remoteUid === undefined
+      ) {
+
+        clearRemotePlayback();
 
 
         return undefined;
@@ -468,19 +542,9 @@ export default function AgoraFeed(
       }
 
 
-      // ------------------------------------------------
-      // Runtime UID
-      // ------------------------------------------------
-
-      const remoteUid =
-        remoteUser.uid ??
-        remoteUser.id ??
-        remoteUser.userId;
-
-
-      // ------------------------------------------------
-      // Find live Agora user
-      // ------------------------------------------------
+      // -------------------------------------------------
+      // Get actual Agora user
+      // -------------------------------------------------
 
       const agoraRemoteUser =
         AgoraEngine.getRemoteUser(
@@ -508,15 +572,13 @@ export default function AgoraFeed(
           hasVideoTrack:
             !!remoteTrack,
 
-          isGroupCall,
-
         }
       );
 
 
-      // ------------------------------------------------
-      // No video track
-      // ------------------------------------------------
+      // -------------------------------------------------
+      // No remote track yet
+      // -------------------------------------------------
 
       if (
         !remoteTrack
@@ -530,9 +592,9 @@ export default function AgoraFeed(
       }
 
 
-      // ------------------------------------------------
+      // -------------------------------------------------
       // Already playing
-      // ------------------------------------------------
+      // -------------------------------------------------
 
       if (
         activeRemoteTrackRef.current ===
@@ -544,16 +606,16 @@ export default function AgoraFeed(
       }
 
 
-      // ------------------------------------------------
-      // Clear previous playback
-      // ------------------------------------------------
+      // -------------------------------------------------
+      // Replace previous remote playback
+      // -------------------------------------------------
 
       clearRemotePlayback();
 
 
-      // ------------------------------------------------
+      // -------------------------------------------------
       // Play remote
-      // ------------------------------------------------
+      // -------------------------------------------------
 
       try {
 
@@ -575,7 +637,9 @@ export default function AgoraFeed(
         );
 
       }
-      catch (error) {
+      catch (
+        error
+      ) {
 
         console.error(
           "[AgoraFeed] remote video play failed",
@@ -604,15 +668,9 @@ export default function AgoraFeed(
   );
 
 
-  // =====================================================
+  // ===================================================
   // REMOTE CLEANUP
-  // =====================================================
-  //
-  // Do not stop/close the Agora track.
-  //
-  // The engine owns it.
-  //
-  // =====================================================
+  // ===================================================
 
   useEffect(
     () => {
@@ -627,7 +685,18 @@ export default function AgoraFeed(
           remoteRef.current
         ) {
 
-          remoteRef.current.replaceChildren();
+          try {
+
+            remoteRef.current.replaceChildren();
+
+          }
+          catch (
+            error
+          ) {
+
+            // Ignore cleanup errors.
+
+          }
 
         }
 
@@ -638,19 +707,20 @@ export default function AgoraFeed(
   );
 
 
-  // =====================================================
+  // ===================================================
   // AUTO JOIN
-  // =====================================================
+  // ===================================================
   //
-  // Auto join remains available for normal calls.
+  // Only normal calls use the generic call.joinCall
+  // path.
   //
-  // Group calls use:
+  // Group calls deliberately use:
   //
-  // call.joinGroupCall
+  //   call.joinGroupCall
   //
-  // so the backend participant state is updated first.
+  // through the runtime action system.
   //
-  // =====================================================
+  // ===================================================
 
   useEffect(
     () => {
@@ -662,7 +732,7 @@ export default function AgoraFeed(
         isGroupCall
       ) {
 
-        return;
+        return undefined;
 
       }
 
@@ -706,7 +776,9 @@ export default function AgoraFeed(
             );
 
           }
-          catch (error) {
+          catch (
+            error
+          ) {
 
             if (
               cancelled
@@ -750,7 +822,7 @@ export default function AgoraFeed(
   );
 
 
-  // =====================================================
+  // ===================================================
   // REMOTE STATE
   // =====================================================
 
@@ -761,10 +833,112 @@ export default function AgoraFeed(
 
 
   const hasRemote =
-    remoteUserList.length > 0;
+    remoteUserList.length >
+    0;
 
 
+  // ===================================================
+  // LOCAL SURFACE STYLE
   // =====================================================
+
+  const localSurfaceStyle =
+    isLocalFull
+      ? {
+
+          position:
+            "absolute",
+
+          inset:
+            0,
+
+          width:
+            "100%",
+
+          height:
+            "100%",
+
+          background:
+            "#000",
+
+          border:
+            "none",
+
+          borderRadius:
+            0,
+
+          overflow:
+            "hidden",
+
+          zIndex:
+            1,
+
+        }
+
+      : {
+
+          position:
+            "absolute",
+
+          bottom:
+            "4%",
+
+          right:
+            "4%",
+
+          width:
+            "25%",
+
+          height:
+            "25%",
+
+          minWidth:
+            100,
+
+          minHeight:
+            80,
+
+          background:
+            "#000",
+
+          border:
+            "1px solid #333",
+
+          borderRadius:
+            8,
+
+          overflow:
+            "hidden",
+
+          zIndex:
+            10,
+
+        };
+
+
+  // ===================================================
+  // LOCAL VIDEO STYLE
+  // =====================================================
+
+  const localVideoStyle =
+    {
+
+      width:
+        "100%",
+
+      height:
+        "100%",
+
+      transform:
+        mirror
+          ? "scaleX(-1)"
+          : "none",
+
+      objectFit,
+
+    };
+
+
+  // ===================================================
   // RENDER
   // =====================================================
 
@@ -806,9 +980,7 @@ export default function AgoraFeed(
     >
 
       {/* =================================================
-          NON-GROUP REMOTE VIDEO
-
-          Only rendered for normal / targeted calls.
+          NON-GROUP REMOTE SURFACE
       ================================================= */}
 
       {!isGroupCall && (
@@ -898,11 +1070,13 @@ export default function AgoraFeed(
 
 
       {/* =================================================
-          GROUP CALL INDICATOR
+          GROUP CALL LABEL
+          Only shown when using preview layout.
       ================================================= */}
 
       {isGroupCall &&
-      joined && (
+      joined &&
+      !isLocalFull && (
 
         <div
 
@@ -947,57 +1121,15 @@ export default function AgoraFeed(
 
 
       {/* =================================================
-          LOCAL CAMERA PREVIEW
+          LOCAL CAMERA
       ================================================= */}
 
       {publishLocal && (
 
         <div
-
-          style={{
-
-            position:
-              "absolute",
-
-            bottom:
-              "4%",
-
-            right:
-              "4%",
-
-            width:
-              isGroupCall
-                ? "28%"
-                : "25%",
-
-            height:
-              isGroupCall
-                ? "28%"
-                : "25%",
-
-            minWidth:
-              100,
-
-            minHeight:
-              80,
-
-            background:
-              "#000",
-
-            border:
-              "1px solid #333",
-
-            borderRadius:
-              8,
-
-            overflow:
-              "hidden",
-
-            zIndex:
-              10,
-
-          }}
-
+          style={
+            localSurfaceStyle
+          }
         >
 
           <div
@@ -1006,29 +1138,16 @@ export default function AgoraFeed(
               localRef
             }
 
-            style={{
-
-              width:
-                "100%",
-
-              height:
-                "100%",
-
-              transform:
-                mirror
-                  ? "scaleX(-1)"
-                  : "none",
-
-              objectFit,
-
-            }}
+            style={
+              localVideoStyle
+            }
 
           />
 
 
-          {/* ---------------------------------------------
+          {/* =============================================
               CAMERA OFF
-          --------------------------------------------- */}
+          ============================================= */}
 
           {(
             !videoEnabled ||
@@ -1064,7 +1183,9 @@ export default function AgoraFeed(
                   2,
 
                 fontSize:
-                  11,
+                  isLocalFull
+                    ? 14
+                    : 11,
 
               }}
 
@@ -1077,9 +1198,9 @@ export default function AgoraFeed(
           )}
 
 
-          {/* ---------------------------------------------
+          {/* =============================================
               MUTED INDICATOR
-          --------------------------------------------- */}
+          ============================================= */}
 
           {muted && (
 

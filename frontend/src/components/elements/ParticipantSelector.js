@@ -20,13 +20,133 @@ import {
 
 
 const PAGE_SIZE = 25;
+
 const SEARCH_DEBOUNCE_MS = 300;
 
+
+// =====================================================
+// HELPERS
+// =====================================================
+
+function normaliseId(
+  value
+) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    typeof value === "object"
+  ) {
+
+    value =
+      value?.userId ||
+      value?.id ||
+      value?._id ||
+      null;
+
+  }
+
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  const id =
+    String(
+      value
+    ).trim();
+
+
+  return id ||
+    null;
+
+}
+
+
+function normaliseIds(
+  values
+) {
+
+  if (
+    !Array.isArray(
+      values
+    )
+  ) {
+
+    return [];
+
+  }
+
+
+  return [
+    ...new Set(
+
+      values
+
+        .map(
+          normaliseId
+        )
+
+        .filter(Boolean)
+
+    ),
+  ];
+
+}
+
+
+function getDisplayName(
+  member
+) {
+
+  const fullName =
+    [
+      member?.firstName,
+      member?.lastName,
+    ]
+      .filter(Boolean)
+      .map(
+        value =>
+          String(
+            value
+          ).trim()
+      )
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+
+  return (
+    fullName ||
+    member?.email ||
+    "Unnamed user"
+  );
+
+}
+
+
+// =====================================================
+// COMPONENT
+// =====================================================
 
 export default function ParticipantSelector({
 
   label =
-    "Invite Participants",
+    "Select Participants",
 
   placeholder =
     "Search participants...",
@@ -34,12 +154,16 @@ export default function ParticipantSelector({
   roleFilter =
     "",
 
+  multiple =
+    true,
+
   // ---------------------------------------------------
-  // Runtime state destination
+  // Runtime destination.
   //
-  // Examples:
-  //
+  // Group call:
   // call.selectedParticipantIds
+  //
+  // Training:
   // training.participantIds
   // ---------------------------------------------------
 
@@ -48,10 +172,15 @@ export default function ParticipantSelector({
 
 }) {
 
+  // ===================================================
+  // CONTEXT
+  // ===================================================
+
   const {
     session,
   } =
     useAuth();
+
 
   const runtime =
     useRuntimeState();
@@ -62,28 +191,39 @@ export default function ParticipantSelector({
   // ===================================================
 
   const currentUserId =
-    session?.user?.id ||
-    runtime.get?.("auth.user.id") ||
-    runtime.get?.("user.id") ||
-    null;
-
-
-  console.log(
-    "[ParticipantSelector] CURRENT USER DEBUG",
-    {
-      currentUserId,
-      selectionPath,
-    }
-  );
+    normaliseId(
+      session?.user?.id
+    ) ||
+    normaliseId(
+      runtime.get?.(
+        "auth.user.id"
+      )
+    ) ||
+    normaliseId(
+      runtime.get?.(
+        "user.id"
+      )
+    );
 
 
   // ===================================================
-  // INITIAL SELECTION
+  // NORMALISE PATH
   // ===================================================
 
-  const initialSelectedIds =
+  const resolvedSelectionPath =
+    typeof selectionPath === "string" &&
+    selectionPath.trim()
+      ? selectionPath.trim()
+      : "call.selectedParticipantIds";
+
+
+  // ===================================================
+  // INITIAL RUNTIME SELECTION
+  // ===================================================
+
+  const initialSelection =
     runtime.get?.(
-      selectionPath
+      resolvedSelectionPath
     );
 
 
@@ -110,14 +250,9 @@ export default function ParticipantSelector({
     setSelectedIds,
   ] =
     useState(
-      Array.isArray(
-        initialSelectedIds
+      normaliseIds(
+        initialSelection
       )
-        ? initialSelectedIds.map(
-            id =>
-              String(id)
-          )
-        : []
     );
 
 
@@ -132,36 +267,40 @@ export default function ParticipantSelector({
     loading,
     setLoading,
   ] =
-  useState(false);
+    useState(false);
 
 
   const [
     loadingMore,
     setLoadingMore,
   ] =
-  useState(false);
+    useState(false);
 
 
   const [
     error,
     setError,
   ] =
-  useState(null);
+    useState(null);
 
 
   const [
     page,
     setPage,
   ] =
-  useState(1);
+    useState(1);
 
 
   const [
     hasNext,
     setHasNext,
   ] =
-  useState(false);
+    useState(false);
 
+
+  // ===================================================
+  // REFS
+  // ===================================================
 
   const searchTimeoutRef =
     useRef(null);
@@ -169,6 +308,52 @@ export default function ParticipantSelector({
 
   const loadingRef =
     useRef(false);
+
+
+  const selectedIdsRef =
+    useRef(
+      normaliseIds(
+        initialSelection
+      )
+    );
+
+
+  // ===================================================
+  // KEEP REF CURRENT
+  // ===================================================
+
+  useEffect(() => {
+
+    selectedIdsRef.current =
+      selectedIds;
+
+  }, [
+    selectedIds,
+  ]);
+
+
+  // ===================================================
+  // DEBUG
+  // ===================================================
+
+  console.log(
+    "[ParticipantSelector] RENDER",
+    {
+
+      selectionPath:
+        resolvedSelectionPath,
+
+      currentUserId,
+
+      selectedIds,
+
+      runtimeSelection:
+        runtime.get?.(
+          resolvedSelectionPath
+        ),
+
+    }
+  );
 
 
   // ===================================================
@@ -179,8 +364,28 @@ export default function ParticipantSelector({
     useCallback(
       member => {
 
-        if (!member) {
+        if (
+          !member
+        ) {
+
           return null;
+
+        }
+
+
+        const id =
+          normaliseId(
+            member.id ??
+            member._id
+          );
+
+
+        if (
+          !id
+        ) {
+
+          return null;
+
         }
 
 
@@ -188,12 +393,7 @@ export default function ParticipantSelector({
 
           ...member,
 
-          id:
-            String(
-              member.id ??
-              member._id ??
-              ""
-            ),
+          id,
 
         };
 
@@ -293,11 +493,15 @@ export default function ParticipantSelector({
             Array.isArray(
               response?.data?.members
             )
+
               ? response.data.members
+
                   .map(
                     normaliseMember
                   )
+
                   .filter(Boolean)
+
                   .filter(
                     member =>
                       !currentUserId ||
@@ -308,6 +512,7 @@ export default function ParticipantSelector({
                         currentUserId
                       )
                   )
+
               : [];
 
 
@@ -319,10 +524,12 @@ export default function ParticipantSelector({
           setMembers(
             previous =>
               append
+
                 ? [
                     ...previous,
                     ...loadedMembers,
                   ]
+
                 : loadedMembers
           );
 
@@ -331,48 +538,42 @@ export default function ParticipantSelector({
           // Preserve selected member objects
           // --------------------------------------------
 
-          if (
-            loadedMembers.length > 0
-          ) {
+          setSelectedMembersMap(
+            previous => {
 
-            setSelectedMembersMap(
-              previous => {
-
-                const next = {
-                  ...previous,
-                };
+              const next = {
+                ...previous,
+              };
 
 
-                loadedMembers.forEach(
-                  member => {
+              loadedMembers.forEach(
+                member => {
 
-                    const id =
-                      String(
-                        member.id
-                      );
+                  const id =
+                    String(
+                      member.id
+                    );
 
 
-                    if (
-                      selectedIds.includes(
-                        id
-                      )
-                    ) {
+                  if (
+                    selectedIdsRef.current.includes(
+                      id
+                    )
+                  ) {
 
-                      next[id] =
-                        member;
-
-                    }
+                    next[id] =
+                      member;
 
                   }
-                );
+
+                }
+              );
 
 
-                return next;
+              return next;
 
-              }
-            );
-
-          }
+            }
+          );
 
 
           setPage(
@@ -388,17 +589,21 @@ export default function ParticipantSelector({
 
 
           console.log(
-            "[ParticipantSelector] Members loaded",
+            "[ParticipantSelector] MEMBERS LOADED",
             {
-              selectionPath,
+
+              selectionPath:
+                resolvedSelectionPath,
+
               search:
                 searchValue,
+
               page:
                 nextPage,
+
               count:
                 loadedMembers.length,
-              total:
-                pagination.total,
+
             }
           );
 
@@ -408,7 +613,7 @@ export default function ParticipantSelector({
         ) {
 
           console.error(
-            "[ParticipantSelector] Failed to load members",
+            "[ParticipantSelector] MEMBER LOAD FAILED",
             requestError
           );
 
@@ -439,9 +644,8 @@ export default function ParticipantSelector({
       [
         currentUserId,
         normaliseMember,
+        resolvedSelectionPath,
         roleFilter,
-        selectedIds,
-        selectionPath,
       ]
     );
 
@@ -455,15 +659,16 @@ export default function ParticipantSelector({
     loadMembers({
       nextPage:
         1,
+
       append:
         false,
+
       searchValue:
         "",
     });
 
   }, [
-    roleFilter,
-    currentUserId,
+    loadMembers,
   ]);
 
 
@@ -485,10 +690,13 @@ export default function ParticipantSelector({
           loadMembers({
             nextPage:
               1,
+
             append:
               false,
+
             searchValue:
               search.trim(),
+
           });
 
         },
@@ -511,57 +719,79 @@ export default function ParticipantSelector({
 
 
   // ===================================================
-  // RUNTIME SYNC
-  // ===================================================
-  //
-  // This is now generic.
-  //
-  // Group call:
-  //
-  // call.selectedParticipantIds
-  //
-  // Training:
-  //
-  // training.participantIds
-  //
+  // WRITE RUNTIME SELECTION
   // ===================================================
 
-  const syncSelectedParticipants =
+  const writeSelection =
     useCallback(
       nextIds => {
 
         const normalisedIds =
-          [
-            ...new Set(
-              nextIds
-                .map(
-                  id =>
-                    String(id).trim()
-                )
-                .filter(Boolean)
-            ),
-          ];
+          normaliseIds(
+            nextIds
+          );
 
 
-        runtime.set(
-          selectionPath,
+        selectedIdsRef.current =
+          normalisedIds;
+
+
+        // ---------------------------------------------
+        // Local state
+        // ---------------------------------------------
+
+        setSelectedIds(
           normalisedIds
         );
 
 
+        // ---------------------------------------------
+        // Runtime state
+        // ---------------------------------------------
+
+        runtime.set(
+          resolvedSelectionPath,
+          normalisedIds
+        );
+
+
+        // ---------------------------------------------
+        // Immediate verification
+        // ---------------------------------------------
+
+        const runtimeValue =
+          runtime.get?.(
+            resolvedSelectionPath
+          );
+
+
         console.log(
-          "[ParticipantSelector] Selection changed",
+          "[ParticipantSelector] RUNTIME SELECTION WRITTEN",
           {
-            selectionPath,
+
+            selectionPath:
+              resolvedSelectionPath,
+
             participantIds:
               normalisedIds,
+
+            runtimeValue,
+
+            verified:
+              Array.isArray(
+                runtimeValue
+              )
+                ? runtimeValue.length ===
+                  normalisedIds.length
+                : false,
+
           }
         );
 
       },
       [
+        resolvedSelectionPath,
         runtime,
-        selectionPath,
       ]
     );
 
@@ -575,9 +805,8 @@ export default function ParticipantSelector({
       member => {
 
         const memberId =
-          String(
-            member?.id ||
-            ""
+          normaliseId(
+            member?.id
           );
 
 
@@ -603,68 +832,112 @@ export default function ParticipantSelector({
         }
 
 
-        setSelectedIds(
+        const currentIds =
+          selectedIdsRef.current;
+
+
+        const alreadySelected =
+          currentIds.includes(
+            memberId
+          );
+
+
+        let nextIds;
+
+
+        if (
+          alreadySelected
+        ) {
+
+          nextIds =
+            currentIds.filter(
+              id =>
+                id !==
+                memberId
+            );
+
+        }
+        else if (
+          multiple
+        ) {
+
+          nextIds =
+            [
+              ...currentIds,
+              memberId,
+            ];
+
+        }
+        else {
+
+          nextIds =
+            [
+              memberId,
+            ];
+
+        }
+
+
+        // --------------------------------------------
+        // Member cache
+        // --------------------------------------------
+
+        setSelectedMembersMap(
           previous => {
 
-            const exists =
-              previous.includes(
-                memberId
+            const next = {
+              ...previous,
+            };
+
+
+            if (
+              alreadySelected ||
+              (
+                !multiple &&
+                currentIds.length > 0
+              )
+            ) {
+
+              Object.keys(
+                next
+              ).forEach(
+                id => {
+
+                  if (
+                    !nextIds.includes(
+                      id
+                    )
+                  ) {
+
+                    delete next[id];
+
+                  }
+
+                }
               );
 
-
-            const next =
-              exists
-
-                ? previous.filter(
-                    id =>
-                      id !==
-                      memberId
-                  )
-
-                : [
-                    ...previous,
-                    memberId,
-                  ];
+            }
 
 
-            setSelectedMembersMap(
-              previousMembers => {
+            if (
+              nextIds.includes(
+                memberId
+              )
+            ) {
 
-                const nextMembers = {
-                  ...previousMembers,
-                };
+              next[memberId] =
+                normaliseMember(
+                  member
+                );
 
+            }
+            else {
 
-                if (
-                  exists
-                ) {
+              delete next[
+                memberId
+              ];
 
-                  delete nextMembers[
-                    memberId
-                  ];
-
-                }
-                else {
-
-                  nextMembers[
-                    memberId
-                  ] =
-                    normaliseMember(
-                      member
-                    );
-
-                }
-
-
-                return nextMembers;
-
-              }
-            );
-
-
-            syncSelectedParticipants(
-              next
-            );
+            }
 
 
             return next;
@@ -672,17 +945,27 @@ export default function ParticipantSelector({
           }
         );
 
+
+        // --------------------------------------------
+        // Single source of truth
+        // --------------------------------------------
+
+        writeSelection(
+          nextIds
+        );
+
       },
       [
         currentUserId,
+        multiple,
         normaliseMember,
-        syncSelectedParticipants,
+        writeSelection,
       ]
     );
 
 
   // ===================================================
-  // REMOVE SELECTED
+  // REMOVE PARTICIPANT
   // ===================================================
 
   const removeParticipant =
@@ -690,44 +973,37 @@ export default function ParticipantSelector({
       memberId => {
 
         const id =
-          String(
+          normaliseId(
             memberId
           );
 
 
-        setSelectedIds(
+        if (
+          !id
+        ) {
+
+          return;
+
+        }
+
+
+        const nextIds =
+          selectedIdsRef.current.filter(
+            selectedId =>
+              selectedId !==
+              id
+          );
+
+
+        setSelectedMembersMap(
           previous => {
 
-            const next =
-              previous.filter(
-                selectedId =>
-                  selectedId !==
-                  id
-              );
+            const next = {
+              ...previous,
+            };
 
 
-            setSelectedMembersMap(
-              previousMembers => {
-
-                const nextMembers = {
-                  ...previousMembers,
-                };
-
-
-                delete nextMembers[
-                  id
-                ];
-
-
-                return nextMembers;
-
-              }
-            );
-
-
-            syncSelectedParticipants(
-              next
-            );
+            delete next[id];
 
 
             return next;
@@ -735,9 +1011,14 @@ export default function ParticipantSelector({
           }
         );
 
+
+        writeSelection(
+          nextIds
+        );
+
       },
       [
-        syncSelectedParticipants,
+        writeSelection,
       ]
     );
 
@@ -763,10 +1044,13 @@ export default function ParticipantSelector({
         loadMembers({
           nextPage:
             page + 1,
+
           append:
             true,
+
           searchValue:
             search.trim(),
+
         });
 
       },
@@ -788,20 +1072,27 @@ export default function ParticipantSelector({
     useMemo(
       () =>
         selectedIds
+
           .map(
             id =>
               selectedMembersMap[
                 String(id)
               ] ||
+
               members.find(
                 member =>
                   String(
                     member.id
                   ) ===
-                  String(id)
+                  String(
+                    id
+                  )
               )
+
           )
+
           .filter(Boolean),
+
       [
         selectedIds,
         selectedMembersMap,
@@ -827,6 +1118,7 @@ export default function ParticipantSelector({
               currentUserId
             )
         ),
+
       [
         members,
         currentUserId,
@@ -872,7 +1164,9 @@ export default function ParticipantSelector({
             "#888",
         }}
       >
+
         {label}
+
       </div>
 
 
@@ -932,7 +1226,31 @@ export default function ParticipantSelector({
 
 
       {/* =============================================
-          SELECTION COUNT
+          DEBUG PATH
+      ============================================= */}
+
+      <div
+        style={{
+          marginTop:
+            6,
+
+          fontSize:
+            9,
+
+          color:
+            "#666",
+        }}
+      >
+
+        Runtime:
+        {" "}
+        {resolvedSelectionPath}
+
+      </div>
+
+
+      {/* =============================================
+          COUNT
       ============================================= */}
 
       <div
@@ -952,8 +1270,15 @@ export default function ParticipantSelector({
       >
 
         {selectedIds.length === 0
+
           ? "No participants selected"
-          : `${selectedIds.length} participant${selectedIds.length === 1 ? "" : "s"} selected`}
+
+          : `${selectedIds.length} participant${
+              selectedIds.length === 1
+                ? ""
+                : "s"
+            } selected`
+        }
 
       </div>
 
@@ -1022,14 +1347,16 @@ export default function ParticipantSelector({
 
               >
 
-                {`${member.firstName || ""} ${member.lastName || ""}`.trim() ||
-                  member.email}
+                {getDisplayName(
+                  member
+                )}
 
                 {" ×"}
 
               </button>
 
             )
+
           )}
 
         </div>
@@ -1067,14 +1394,16 @@ export default function ParticipantSelector({
               11,
           }}
         >
+
           {error}
+
         </div>
 
       )}
 
 
       {/* =============================================
-          RESULTS
+          MEMBER LIST
       ============================================= */}
 
       <div
@@ -1113,7 +1442,9 @@ export default function ParticipantSelector({
                 "center",
             }}
           >
+
             Loading participants...
+
           </div>
 
         )}
@@ -1137,7 +1468,9 @@ export default function ParticipantSelector({
                 "center",
             }}
           >
+
             No participants found.
+
           </div>
 
         )}
@@ -1157,13 +1490,6 @@ export default function ParticipantSelector({
                 selectedIds.includes(
                   memberId
                 );
-
-
-              const displayName =
-                `${member.firstName || ""} ${member.lastName || ""}`
-                  .trim() ||
-                member.email ||
-                "Unnamed user";
 
 
               return (
@@ -1218,7 +1544,6 @@ export default function ParticipantSelector({
                     cursor:
                       "pointer",
                   }}
-
                 >
 
                   <span
@@ -1261,7 +1586,8 @@ export default function ParticipantSelector({
 
                     {selected
                       ? "✓"
-                      : ""}
+                      : ""
+                    }
 
                   </span>
 
@@ -1297,7 +1623,11 @@ export default function ParticipantSelector({
                           "ellipsis",
                       }}
                     >
-                      {displayName}
+
+                      {getDisplayName(
+                        member
+                      )}
+
                     </span>
 
 
@@ -1325,7 +1655,9 @@ export default function ParticipantSelector({
                           "ellipsis",
                       }}
                     >
+
                       {member.email}
+
                     </span>
 
                   </span>
@@ -1342,7 +1674,9 @@ export default function ParticipantSelector({
                           "#777",
                       }}
                     >
+
                       {member.role}
+
                     </span>
 
                   )}
@@ -1352,6 +1686,7 @@ export default function ParticipantSelector({
               );
 
             }
+
           )}
 
       </div>
@@ -1405,12 +1740,12 @@ export default function ParticipantSelector({
                 ? "default"
                 : "pointer",
           }}
-
         >
 
           {loadingMore
             ? "Loading..."
-            : "Load more"}
+            : "Load more"
+          }
 
         </button>
 
@@ -1421,3 +1756,4 @@ export default function ParticipantSelector({
   );
 
 }
+

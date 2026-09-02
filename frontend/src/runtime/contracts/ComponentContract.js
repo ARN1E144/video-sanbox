@@ -1,5 +1,3 @@
-// src/runtime/contracts/ComponentContract.js
-
 // =====================================================
 // COMPONENT CONTRACTS
 // =====================================================
@@ -55,6 +53,9 @@ import participantSelector
 import trainingInvitation
   from "./components/TrainingInvitation.contract.js";
 
+import incomingGroupCallAlert
+  from "./components/IncomingGroupCallAlert.contract.js";
+
 
 // =====================================================
 // COMPONENT CONTRACT REGISTRY
@@ -109,6 +110,9 @@ const ComponentContract = {
   TrainingInvitation:
     trainingInvitation,
 
+  IncomingGroupCallAlert:
+    incomingGroupCallAlert,
+
 
   // ===================================================
   // LAYOUT
@@ -146,4 +150,3 @@ const ComponentContract = {
 
 
 export default ComponentContract;
-

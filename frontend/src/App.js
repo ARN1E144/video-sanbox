@@ -1,3 +1,5 @@
+// src/App.js
+
 import React from "react";
 
 import {
@@ -65,6 +67,12 @@ import ConfoTest
 import useGroupCallInvitations
   from "./hooks/useGroupCallInvitations";
 
+import useGroupCallSync
+  from "./hooks/useGroupCallSync";
+
+import GroupCallSocketRuntime
+  from "./runtime/GroupCallSocketRuntime";
+
 
 // =====================================================
 // LOADING
@@ -100,7 +108,9 @@ function AuthLoading() {
           "sans-serif",
       }}
     >
+
       Loading...
+
     </div>
   );
 
@@ -132,17 +142,14 @@ function RuntimeAuthDebug() {
 // GROUP CALL INVITATION RUNTIME
 // =====================================================
 //
-// IMPORTANT:
+// Responsible for:
 //
-// This component must:
-// - live at module scope
-// - be rendered below ActionProvider
-// - be rendered only for authenticated users
+//   - discovering pending invitations
+//   - initial fetch
+//   - temporary polling fallback
 //
-// The hook itself performs:
-//   initial fetch
-//   5 second polling
-//   call.fetchPendingInvitations
+// Realtime invitation delivery can later move to
+// Socket.IO while this remains as reconciliation.
 //
 // =====================================================
 
@@ -157,15 +164,8 @@ function GroupCallInvitationRuntime() {
       enabled:
         true,
 
-      intervalMs:
-        5000,
-
     });
 
-
-  // ---------------------------------------------------
-  // DEVELOPMENT DIAGNOSTICS
-  // ---------------------------------------------------
 
   React.useEffect(() => {
 
@@ -190,17 +190,92 @@ function GroupCallInvitationRuntime() {
   ]);
 
 
-  // ---------------------------------------------------
-  // Expose refresh only through runtime/hook.
-  //
-  // We deliberately do not render anything.
-  // ---------------------------------------------------
-
   React.useEffect(() => {
 
     console.log(
       "[GroupCallInvitationRuntime] refresh available",
-      typeof refresh === "function"
+      typeof refresh ===
+        "function"
+    );
+
+  }, [
+    refresh,
+  ]);
+
+
+  return null;
+
+}
+
+
+// =====================================================
+// GROUP CALL SYNC RUNTIME
+// =====================================================
+//
+// Responsible for:
+//
+//   - detecting an active joined group call
+//   - refreshing authoritative server state
+//   - refreshing participant identity mappings
+//   - polling as a temporary reconciliation layer
+//
+// =====================================================
+
+function GroupCallRuntimeSync() {
+
+  const {
+    refresh,
+    isActive,
+  } =
+    useGroupCallSync({
+
+      enabled:
+        true,
+
+    });
+
+
+  React.useEffect(() => {
+
+    console.log(
+      "[GroupCallRuntimeSync] mounted",
+      {
+        isActive,
+      }
+    );
+
+
+    return () => {
+
+      console.log(
+        "[GroupCallRuntimeSync] unmounted"
+      );
+
+    };
+
+  }, []);
+
+
+  React.useEffect(() => {
+
+    console.log(
+      "[GroupCallRuntimeSync] active",
+      {
+        isActive,
+      }
+    );
+
+  }, [
+    isActive,
+  ]);
+
+
+  React.useEffect(() => {
+
+    console.log(
+      "[GroupCallRuntimeSync] refresh available",
+      typeof refresh ===
+        "function"
     );
 
   }, [
@@ -288,15 +363,41 @@ function AuthenticatedApp() {
           <ActionProvider>
 
             {/* =========================================
-                GROUP INVITATION POLLING
-
-                MUST be below ActionProvider because
-                useGroupCallInvitations() uses
-                useActionContext().
+                GROUP INVITATION RUNTIME
             ========================================= */}
 
             <GroupCallInvitationRuntime />
 
+
+            {/* =========================================
+                ACTIVE GROUP CALL SYNC
+            ========================================= */}
+
+            <GroupCallRuntimeSync />
+
+
+            {/* =========================================
+                GROUP CALL SOCKET RUNTIME
+            =========================================
+            
+            Responsibilities:
+
+              authenticated socket connection
+              group-call room membership
+              realtime participant events
+              realtime call-ended events
+              unexpected host disconnect handling
+
+            Must remain mounted independently of
+            MainApp's current screen/view.
+            ========================================= */}
+
+            <GroupCallSocketRuntime />
+
+
+            {/* =========================================
+                RUNTIME TRIGGERS
+            ========================================= */}
 
             <RuntimeTriggersProvider>
 
@@ -305,17 +406,40 @@ function AuthenticatedApp() {
               <ContractTest />
 
 
+              {/* =======================================
+                  PROJECT RUNTIME
+              ======================================= */}
+
               <ProjectProvider>
 
                 <CanvasProvider>
 
                   <PreviewProvider>
 
+                    {/* =================================
+                        APPLICATION UI
+                    ================================= */}
+
                     <MainApp />
+
+
+                    {/* =================================
+                        CONFO RENDERER
+                    ================================= */}
 
                     <ConfoRenderer />
 
+
+                    {/* =================================
+                        RUNTIME TEST PANEL
+                    ================================= */}
+
                     <RuntimeTestPanel />
+
+
+                    {/* =================================
+                        CONFO TEST
+                    ================================= */}
 
                     <ConfoTest />
 

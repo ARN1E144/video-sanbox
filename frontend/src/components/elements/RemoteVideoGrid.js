@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -59,53 +60,57 @@ function safeText(
   }
 
 
+  return fallback;
+
+}
+
+
+// =====================================================
+// RESOLVE RUNTIME PATH
+// =====================================================
+
+function resolveRuntimePath(
+  source
+) {
+
   if (
-    isObject(
-      value
-    )
+    typeof source !== "string"
   ) {
 
-    const candidate =
-      value.uid ??
-      value.id ??
-      value.name ??
-      value.userId ??
-      value.type ??
-      null;
-
-
-    if (
-      candidate !== null &&
-      candidate !== value
-    ) {
-
-      return safeText(
-        candidate,
-        fallback
-      );
-
-    }
-
-
-    try {
-
-      return JSON.stringify(
-        value
-      );
-
-    }
-    catch (
-      error
-    ) {
-
-      return fallback;
-
-    }
+    return null;
 
   }
 
 
-  return fallback;
+  const trimmed =
+    source.trim();
+
+
+  if (
+    !trimmed
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    trimmed.startsWith("{{") &&
+    trimmed.endsWith("}}")
+  ) {
+
+    return trimmed
+      .slice(
+        2,
+        -2
+      )
+      .trim();
+
+  }
+
+
+  return trimmed;
 
 }
 
@@ -120,106 +125,14 @@ function resolveRemoteUsers(
 ) {
 
   // ---------------------------------------------------
-  // No source
-  // ---------------------------------------------------
-
-  if (
-    source === null ||
-    source === undefined ||
-    source === ""
-  ) {
-
-    return (
-      runtime.get?.(
-        "call.remoteUsers"
-      ) || {}
-    );
-
-  }
-
-
-  // ---------------------------------------------------
-  // String source
-  // ---------------------------------------------------
-
-  if (
-    typeof source === "string"
-  ) {
-
-    const trimmed =
-      source.trim();
-
-
-    if (
-      !trimmed
-    ) {
-
-      return (
-        runtime.get?.(
-          "call.remoteUsers"
-        ) || {}
-      );
-
-    }
-
-
-    // -------------------------------------------------
-    // Binding syntax:
-    //
-    // {{call.remoteUsers}}
-    // -------------------------------------------------
-
-    if (
-      trimmed.startsWith(
-        "{{"
-      ) &&
-      trimmed.endsWith(
-        "}}"
-      )
-    ) {
-
-      const path =
-        trimmed
-          .slice(
-            2,
-            -2
-          )
-          .trim();
-
-
-      if (
-        !path
-      ) {
-
-        return {};
-
-      }
-
-
-      return (
-        runtime.get?.(
-          path
-        ) || {}
-      );
-
-    }
-
-
-    return (
-      runtime.get?.(
-        trimmed
-      ) || {}
-    );
-
-  }
-
-
-  // ---------------------------------------------------
-  // Already resolved object
+  // Direct object
   // ---------------------------------------------------
 
   if (
     isObject(
+      source
+    ) &&
+    !Array.isArray(
       source
     )
   ) {
@@ -229,17 +142,73 @@ function resolveRemoteUsers(
   }
 
 
-  console.warn(
-    "[RemoteVideoGrid] Unsupported source",
-    {
-      source,
-      sourceType:
-        typeof source,
-    }
+  // ---------------------------------------------------
+  // Runtime path
+  // ---------------------------------------------------
+
+  const path =
+    resolveRuntimePath(
+      source
+    );
+
+
+  if (
+    path
+  ) {
+
+    return (
+      runtime.get?.(
+        path
+      ) || {}
+    );
+
+  }
+
+
+  // ---------------------------------------------------
+  // Default
+  // ---------------------------------------------------
+
+  return (
+    runtime.get?.(
+      "call.remoteUsers"
+    ) || {}
   );
 
+}
 
-  return {};
+
+// =====================================================
+// PARTICIPANT KEY
+// =====================================================
+
+function safeParticipantKey(
+  participant,
+  index
+) {
+
+  const candidate =
+    participant?.uid ??
+    participant?.id ??
+    participant?.userId ??
+    index;
+
+
+  const text =
+    safeText(
+      candidate,
+      String(
+        index
+      )
+    );
+
+
+  return (
+    text ||
+    String(
+      index
+    )
+  );
 
 }
 
@@ -273,17 +242,44 @@ function normaliseParticipants(
         (
           participant,
           index
-        ) => ({
+        ) => {
 
-          participant,
+          const participantWithUid =
+            isObject(
+              participant
+            )
+              ? {
+                  ...participant,
 
-          key:
-            safeParticipantKey(
-              participant,
-              index
-            ),
+                  uid:
+                    participant.uid ??
+                    participant.id ??
+                    participant.userId ??
+                    index,
+                }
 
-        })
+              : {
+                  uid:
+                    participant,
+                  value:
+                    participant,
+                };
+
+
+          return {
+
+            participant:
+              participantWithUid,
+
+            key:
+              safeParticipantKey(
+                participantWithUid,
+                index
+              ),
+
+          };
+
+        }
       );
 
   }
@@ -323,7 +319,6 @@ function normaliseParticipants(
 
 
           const participantWithUid =
-
             isObject(
               participant
             )
@@ -335,6 +330,7 @@ function normaliseParticipants(
                   uid:
                     participant.uid ??
                     participant.id ??
+                    participant.userId ??
                     key,
 
                 }
@@ -379,45 +375,36 @@ function normaliseParticipants(
 
 
 // =====================================================
-// SAFE PARTICIPANT KEY
-// =====================================================
-
-function safeParticipantKey(
-  participant,
-  index
-) {
-
-  const candidate =
-    participant?.uid ??
-    participant?.id ??
-    participant?.userId ??
-    index;
-
-
-  const text =
-    safeText(
-      candidate,
-      String(index)
-    );
-
-
-  return text ||
-    String(index);
-
-}
-
-
-
-// =====================================================
 // REMOTE PARTICIPANT TILE
 // =====================================================
 
 function RemoteParticipantTile({
+
   participant,
+
+  refreshVersion,
+
 }) {
 
   const tileRef =
-    React.useRef(null);
+    useRef(null);
+
+
+  const activeTrackRef =
+    useRef(null);
+
+
+  const retryTimerRef =
+    useRef(null);
+
+
+  const [
+    playbackState,
+    setPlaybackState,
+  ] =
+  useState(
+    "waiting"
+  );
 
 
   const rawUid =
@@ -434,186 +421,494 @@ function RemoteParticipantTile({
     );
 
 
-  const [, forceRender] =
-    React.useState(0);
+  // ===================================================
+  // DISPLAY NAME
+  // ===================================================
+
+  const displayName =
+    safeText(
+      participant?.displayName ??
+      participant?.username ??
+      participant?.name ??
+      (
+        [
+          participant?.firstName,
+          participant?.lastName,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      ),
+      ""
+    ) ||
+    "Participant";
 
 
-  React.useEffect(() => {
+  // ===================================================
+  // STOP PLAYBACK
+  // ===================================================
 
-    // =================================================
-    // LOOK UP ACTUAL AGORA USER
-    // =================================================
+  const stopPlayback =
+    useCallback(
+      () => {
 
-    const agoraUser =
-      agoraEngine.getRemoteUser(
-        rawUid
-      );
-
-
-    // =================================================
-    // LOOK UP ACTUAL VIDEO TRACK
-    // =================================================
-
-    const videoTrack =
-      agoraUser?.videoTrack;
+        const activeTrack =
+          activeTrackRef.current;
 
 
-    // =================================================
-    // TRACK DIAGNOSTIC
-    // =================================================
+        if (
+          activeTrack
+        ) {
 
-    console.log(
-      "[RemoteVideoTile] TRACK DIAGNOSTIC",
-      {
+          try {
 
-        rawUid,
+            activeTrack.stop();
 
+          }
+          catch (error) {
+
+            console.warn(
+              "[RemoteVideoTile] track stop failed",
+              {
+                uid,
+                error,
+              }
+            );
+
+          }
+
+        }
+
+
+        activeTrackRef.current =
+          null;
+
+
+        const container =
+          tileRef.current;
+
+
+        if (
+          container
+        ) {
+
+          try {
+
+            container.replaceChildren();
+
+          }
+          catch (error) {
+
+            console.warn(
+              "[RemoteVideoTile] DOM cleanup failed",
+              {
+                uid,
+                error,
+              }
+            );
+
+          }
+
+        }
+
+      },
+      [
         uid,
+      ]
+    );
 
-        hasAgoraUser:
-          !!agoraUser,
 
-        agoraUserUid:
-          agoraUser?.uid,
+  // ===================================================
+  // RECONCILE PLAYBACK
+  // ===================================================
 
-        hasVideoTrack:
-          !!videoTrack,
+  const reconcilePlayback =
+    useCallback(
+      () => {
 
-        trackState:
+        if (
+          rawUid === null ||
+          rawUid === undefined
+        ) {
+
+          setPlaybackState(
+            "waiting"
+          );
+
+
+          return false;
+
+        }
+
+
+        const agoraUser =
+          agoraEngine.getRemoteUser(
+            rawUid
+          );
+
+
+        const videoTrack =
+          agoraUser?.videoTrack ||
+          null;
+
+
+        const readyState =
           videoTrack
             ?.mediaStreamTrack
-            ?.readyState,
-
-        enabled:
-          videoTrack?.enabled,
-
-        muted:
-          videoTrack?.isMuted,
-
-      }
-    );
+            ?.readyState;
 
 
-    // =================================================
-    // NO TRACK YET
-    // =================================================
-
-    if (
-      !videoTrack ||
-      !tileRef.current
-    ) {
-
-      console.log(
-        "[RemoteVideoTile] waiting for video track",
-        {
-          uid,
-          rawUid,
-          hasAgoraUser:
-            !!agoraUser,
-        }
-      );
-
-
-      return;
-
-    }
-
-
-    const container =
-      tileRef.current;
-
-
-    // =================================================
-    // PLAY
-    // =================================================
-
-    console.log(
-      "[RemoteVideoTile] PLAY",
-      {
-        uid,
-        rawUid,
-        container,
-        track:
-          videoTrack,
-      }
-    );
-
-
-    try {
-
-      videoTrack.play(
-        container
-      );
-
-
-      forceRender(
-        value =>
-          value + 1
-      );
-
-
-      console.log(
-        "[RemoteVideoTile] PLAYING",
-        {
-          uid,
-          rawUid,
-        }
-      );
-
-
-    }
-    catch (
-      error
-    ) {
-
-      console.error(
-        "[RemoteVideoTile] play failed",
-        {
-          uid,
-          rawUid,
-          error,
-        }
-      );
-
-    }
-
-
-    // =================================================
-    // CLEANUP
-    // =================================================
-
-    return () => {
-
-      try {
-
-        videoTrack.stop();
-
-      }
-      catch (
-        error
-      ) {
-
-        console.warn(
-          "[RemoteVideoTile] stop failed",
+        console.log(
+          "[RemoteVideoTile] TRACK CHECK",
           {
+
             uid,
-            error,
+
+            displayName,
+
+            rawUid,
+
+            hasAgoraUser:
+              !!agoraUser,
+
+            agoraUserUid:
+              agoraUser?.uid,
+
+            hasVideoTrack:
+              !!videoTrack,
+
+            readyState,
+
+            refreshVersion,
+
           }
         );
 
+
+        // ------------------------------------------------
+        // No track
+        // ------------------------------------------------
+
+        if (
+          !videoTrack
+        ) {
+
+          stopPlayback();
+
+
+          setPlaybackState(
+            "waiting"
+          );
+
+
+          return false;
+
+        }
+
+
+        // ------------------------------------------------
+        // Track exists but native track is not live
+        // ------------------------------------------------
+
+        if (
+          readyState &&
+          readyState !== "live"
+        ) {
+
+          stopPlayback();
+
+
+          setPlaybackState(
+            "waiting"
+          );
+
+
+          return false;
+
+        }
+
+
+        // ------------------------------------------------
+        // Already playing this exact track
+        // ------------------------------------------------
+
+        if (
+          activeTrackRef.current ===
+          videoTrack
+        ) {
+
+          setPlaybackState(
+            "playing"
+          );
+
+
+          return true;
+
+        }
+
+
+        const container =
+          tileRef.current;
+
+
+        if (
+          !container
+        ) {
+
+          setPlaybackState(
+            "waiting"
+          );
+
+
+          return false;
+
+        }
+
+
+        // ------------------------------------------------
+        // Replace previous track
+        // ------------------------------------------------
+
+        stopPlayback();
+
+
+        try {
+
+          console.log(
+            "[RemoteVideoTile] PLAY",
+            {
+
+              uid,
+
+              displayName,
+
+              rawUid,
+
+              refreshVersion,
+
+            }
+          );
+
+
+          videoTrack.play(
+            container
+          );
+
+
+          activeTrackRef.current =
+            videoTrack;
+
+
+          setPlaybackState(
+            "playing"
+          );
+
+
+          console.log(
+            "[RemoteVideoTile] PLAYING",
+            {
+              uid,
+              displayName,
+              rawUid,
+            }
+          );
+
+
+          return true;
+
+        }
+        catch (error) {
+
+          console.error(
+            "[RemoteVideoTile] PLAY FAILED",
+            {
+
+              uid,
+
+              displayName,
+
+              rawUid,
+
+              error,
+
+            }
+          );
+
+
+          activeTrackRef.current =
+            null;
+
+
+          setPlaybackState(
+            "error"
+          );
+
+
+          return false;
+
+        }
+
+      },
+      [
+        rawUid,
+        uid,
+        displayName,
+        refreshVersion,
+        stopPlayback,
+      ]
+    );
+
+
+  // ===================================================
+  // RETRY
+  // ===================================================
+
+  const scheduleRetry =
+    useCallback(
+      () => {
+
+        if (
+          retryTimerRef.current !==
+          null
+        ) {
+
+          return;
+
+        }
+
+
+        retryTimerRef.current =
+          window.setTimeout(
+            () => {
+
+              retryTimerRef.current =
+                null;
+
+
+              const playing =
+                reconcilePlayback();
+
+
+              if (
+                !playing
+              ) {
+
+                scheduleRetry();
+
+              }
+
+            },
+            250
+          );
+
+      },
+      [
+        reconcilePlayback,
+      ]
+    );
+
+
+  // ===================================================
+  // PLAYBACK EFFECT
+  // ===================================================
+
+  useEffect(
+    () => {
+
+      if (
+        retryTimerRef.current !==
+        null
+      ) {
+
+        window.clearTimeout(
+          retryTimerRef.current
+        );
+
+
+        retryTimerRef.current =
+          null;
+
       }
 
-    };
 
-  }, [
-    rawUid,
-    uid,
-  ]);
+      const playing =
+        reconcilePlayback();
 
 
-  // =================================================
+      if (
+        !playing
+      ) {
+
+        scheduleRetry();
+
+      }
+
+
+      return () => {
+
+        if (
+          retryTimerRef.current !==
+          null
+        ) {
+
+          window.clearTimeout(
+            retryTimerRef.current
+          );
+
+
+          retryTimerRef.current =
+            null;
+
+        }
+
+      };
+
+    },
+    [
+      reconcilePlayback,
+      scheduleRetry,
+    ]
+  );
+
+
+  // ===================================================
+  // CLEANUP
+  // ===================================================
+
+  useEffect(
+    () => {
+
+      return () => {
+
+        if (
+          retryTimerRef.current !==
+          null
+        ) {
+
+          window.clearTimeout(
+            retryTimerRef.current
+          );
+
+
+          retryTimerRef.current =
+            null;
+
+        }
+
+
+        stopPlayback();
+
+      };
+
+    },
+    [
+      stopPlayback,
+    ]
+  );
+
+
+  // ===================================================
   // RENDER
-  // =================================================
+  // ===================================================
 
   return (
 
@@ -641,8 +936,15 @@ function RemoteParticipantTile({
         background:
           "#000",
 
+        border:
+          "1px solid #222",
+
       }}
     >
+
+      {/* ===============================================
+          VIDEO SURFACE
+      =============================================== */}
 
       <div
         ref={
@@ -666,9 +968,72 @@ function RemoteParticipantTile({
           overflow:
             "hidden",
 
+          background:
+            "#000",
+
         }}
       />
 
+
+      {/* ===============================================
+          WAITING / ERROR
+      =============================================== */}
+
+      {playbackState !== "playing" && (
+
+        <div
+          style={{
+
+            position:
+              "absolute",
+
+            inset:
+              0,
+
+            display:
+              "flex",
+
+            alignItems:
+              "center",
+
+            justifyContent:
+              "center",
+
+            color:
+              "#aaa",
+
+            background:
+              "#111",
+
+            fontSize:
+              11,
+
+            textAlign:
+              "center",
+
+            pointerEvents:
+              "none",
+
+          }}
+        >
+
+          {
+            playbackState ===
+              "error"
+
+              ? "Unable to play remote video"
+
+              : "Waiting for remote video"
+          }
+
+        </div>
+
+      )}
+
+
+      {/* ===============================================
+          PARTICIPANT NAME
+      =============================================== */}
 
       <div
         style={{
@@ -686,13 +1051,13 @@ function RemoteParticipantTile({
             10,
 
           padding:
-            "3px 6px",
+            "4px 7px",
 
           borderRadius:
             4,
 
           background:
-            "rgba(0,0,0,.65)",
+            "rgba(0,0,0,.7)",
 
           color:
             "#fff",
@@ -700,10 +1065,13 @@ function RemoteParticipantTile({
           fontSize:
             10,
 
+          fontWeight:
+            600,
+
         }}
       >
 
-        {uid}
+        {displayName}
 
       </div>
 
@@ -712,7 +1080,6 @@ function RemoteParticipantTile({
   );
 
 }
-
 
 
 // =====================================================
@@ -743,74 +1110,15 @@ export default function RemoteVideoGrid({
 
 
   // ===================================================
-  // STATE
-  // ===================================================
-
-  const [
-    runtimeRemoteUsers,
-    setRuntimeRemoteUsers,
-  ] =
-    useState(
-      {}
-    );
-
-
-  const [, forceRemoteRender] =
-    useState(0);
-
-
-  // ===================================================
   // RUNTIME PATH
   // ===================================================
 
   const runtimePath =
     useMemo(
-      () => {
-
-        if (
-          typeof source !== "string"
-        ) {
-
-          return null;
-
-        }
-
-
-        const trimmed =
-          source.trim();
-
-
-        if (
-          !trimmed
-        ) {
-
-          return null;
-
-        }
-
-
-        if (
-          trimmed.startsWith(
-            "{{"
-          ) &&
-          trimmed.endsWith(
-            "}}"
-          )
-        ) {
-
-          return trimmed
-            .slice(
-              2,
-              -2
-            )
-            .trim();
-
-        }
-
-
-        return trimmed;
-
-      },
+      () =>
+        resolveRuntimePath(
+          source
+        ),
       [
         source,
       ]
@@ -818,178 +1126,307 @@ export default function RemoteVideoGrid({
 
 
   // ===================================================
-  // INITIAL VALUE + RUNTIME SUBSCRIPTION
+  // RUNTIME USERS
   // ===================================================
 
-  useEffect(() => {
-
-    // -------------------------------------------------
-    // Already resolved object
-    // -------------------------------------------------
-
-    if (
-      typeof source !== "string"
-    ) {
-
-      setRuntimeRemoteUsers(
-        source || {}
-      );
+  const [
+    runtimeRemoteUsers,
+    setRuntimeRemoteUsers,
+  ] =
+  useState(
+    () =>
+      resolveRemoteUsers(
+        runtime,
+        source
+      )
+  );
 
 
-      return undefined;
+  // ===================================================
+  // REFRESH VERSION
+  // ===================================================
 
-    }
+  const [
+    refreshVersion,
+    setRefreshVersion,
+  ] =
+  useState(
+    0
+  );
 
 
-    // -------------------------------------------------
-    // No runtime path
-    // -------------------------------------------------
+  // ===================================================
+  // RUNTIME SUBSCRIPTION
+  // ===================================================
 
-    if (
-      !runtimePath
-    ) {
+  useEffect(
+    () => {
 
-      setRuntimeRemoteUsers(
+      // -------------------------------------------------
+      // Direct object source
+      // -------------------------------------------------
+
+      if (
+        typeof source !== "string"
+      ) {
+
+        setRuntimeRemoteUsers(
+          source || {}
+        );
+
+
+        return undefined;
+
+      }
+
+
+      const path =
+        runtimePath ||
+        "call.remoteUsers";
+
+
+      // -------------------------------------------------
+      // Initial value
+      // -------------------------------------------------
+
+      const initialValue =
         runtime.get?.(
-          "call.remoteUsers"
-        ) || {}
+          path
+        ) || {};
+
+
+      setRuntimeRemoteUsers(
+        initialValue
       );
 
 
-      return undefined;
+      // -------------------------------------------------
+      // Subscribe
+      // -------------------------------------------------
 
-    }
+      const unsubscribe =
+        runtime.subscribe?.(
+          path,
+          value => {
 
+            console.log(
+              "[RemoteVideoGrid] RUNTIME UPDATE",
+              {
 
-    // -------------------------------------------------
-    // Initial runtime value
-    // -------------------------------------------------
+                path,
 
-    const initialValue =
-      runtime.get?.(
-        runtimePath
-      ) || {};
+                users:
+                  value,
 
-
-    setRuntimeRemoteUsers(
-      initialValue
-    );
-
-
-    // -------------------------------------------------
-    // Runtime subscription
-    // -------------------------------------------------
-
-    const unsubscribe =
-      runtime.subscribe?.(
-        runtimePath,
-        value => {
-
-          console.log(
-            "[RemoteVideoGrid] RUNTIME UPDATE",
-            {
-              path:
-                runtimePath,
-
-              users:
-                value,
-            }
-          );
+              }
+            );
 
 
-          setRuntimeRemoteUsers(
-            value || {}
-          );
+            setRuntimeRemoteUsers(
+              value || {}
+            );
 
 
-          forceRemoteRender(
-            value =>
-              value + 1
-          );
+            setRefreshVersion(
+              current =>
+                current + 1
+            );
 
-        }
-      );
+          }
+        );
 
 
-    return () => {
+      return () => {
 
-      unsubscribe?.();
+        unsubscribe?.();
 
-    };
+      };
 
-  }, [
-    runtime,
-    runtimePath,
-    source,
-  ]);
+    },
+    [
+      runtime,
+      runtimePath,
+      source,
+    ]
+  );
 
 
   // ===================================================
-  // AGORA REFRESH
+  // AGORA EVENTS
   // ===================================================
 
-  useEffect(() => {
+  useEffect(
+    () => {
 
-    const unsubscribe =
-      agoraEngine.on(
-        "REMOTE_USERS_CHANGED",
-        payload => {
+      const handleAgoraRefresh =
+        (
+          event,
+          payload = {}
+        ) => {
 
           console.log(
-            "[RemoteVideoGrid] REMOTE_USERS_CHANGED",
+            `[RemoteVideoGrid] ${event}`,
             payload
           );
 
 
-          forceRemoteRender(
-            value =>
-              value + 1
+          setRefreshVersion(
+            current =>
+              current + 1
           );
 
-        }
-      );
+        };
 
 
-    return () => {
+      // -------------------------------------------------
+      // Remote collection changed
+      // -------------------------------------------------
 
-      unsubscribe?.();
+      const unsubscribeRemoteUsers =
+        agoraEngine.on(
+          "REMOTE_USERS_CHANGED",
+          payload =>
+            handleAgoraRefresh(
+              "REMOTE_USERS_CHANGED",
+              payload
+            )
+        );
 
-    };
 
-  }, []);
+      // -------------------------------------------------
+      // Individual remote video track ready
+      // -------------------------------------------------
+
+      const unsubscribeVideoReady =
+        agoraEngine.on(
+          "REMOTE_VIDEO_TRACK_READY",
+          payload =>
+            handleAgoraRefresh(
+              "REMOTE_VIDEO_TRACK_READY",
+              payload
+            )
+        );
+
+
+      // -------------------------------------------------
+      // Individual remote video track unavailable
+      // -------------------------------------------------
+
+      const unsubscribeVideoUnavailable =
+        agoraEngine.on(
+          "REMOTE_VIDEO_TRACK_UNAVAILABLE",
+          payload =>
+            handleAgoraRefresh(
+              "REMOTE_VIDEO_TRACK_UNAVAILABLE",
+              payload
+            )
+        );
+
+
+      // -------------------------------------------------
+      // User published
+      // -------------------------------------------------
+
+      const unsubscribePublished =
+        agoraEngine.on(
+          "USER_PUBLISHED",
+          payload =>
+            handleAgoraRefresh(
+              "USER_PUBLISHED",
+              payload
+            )
+        );
+
+
+      // -------------------------------------------------
+      // User unpublished
+      // -------------------------------------------------
+
+      const unsubscribeUnpublished =
+        agoraEngine.on(
+          "USER_UNPUBLISHED",
+          payload =>
+            handleAgoraRefresh(
+              "USER_UNPUBLISHED",
+              payload
+            )
+        );
+
+
+      // -------------------------------------------------
+      // User left
+      // -------------------------------------------------
+
+      const unsubscribeLeft =
+        agoraEngine.on(
+          "USER_LEFT",
+          payload =>
+            handleAgoraRefresh(
+              "USER_LEFT",
+              payload
+            )
+        );
+
+
+      return () => {
+
+        unsubscribeRemoteUsers?.();
+
+        unsubscribeVideoReady?.();
+
+        unsubscribeVideoUnavailable?.();
+
+        unsubscribePublished?.();
+
+        unsubscribeUnpublished?.();
+
+        unsubscribeLeft?.();
+
+      };
+
+    },
+    []
+  );
 
 
   // ===================================================
   // PARTICIPANTS
   // ===================================================
 
-  const remoteUsers =
+  const resolvedRemoteUsers =
     resolveRemoteUsers(
       runtime,
       source
     );
 
 
+  const effectiveRemoteUsers =
+    isObject(
+      runtimeRemoteUsers
+    ) &&
+    Object.keys(
+      runtimeRemoteUsers
+    ).length > 0
+
+      ? runtimeRemoteUsers
+
+      : resolvedRemoteUsers;
+
+
   const participants =
     useMemo(
       () =>
         normaliseParticipants(
-          runtimeRemoteUsers &&
-          Object.keys(
-            runtimeRemoteUsers
-          ).length
-            ? runtimeRemoteUsers
-            : remoteUsers
+          effectiveRemoteUsers
         ),
       [
-        runtimeRemoteUsers,
-        remoteUsers,
+        effectiveRemoteUsers,
       ]
     );
 
 
   // ===================================================
-  // GRID CONFIG
+  // GRID SETTINGS
   // ===================================================
 
   const columnCount =
@@ -1027,8 +1464,7 @@ export default function RemoteVideoGrid({
 
       source,
 
-      sourceType:
-        typeof source,
+      runtimePath,
 
       participantCount:
         participants.length,
@@ -1037,7 +1473,11 @@ export default function RemoteVideoGrid({
 
       gridGap,
 
-      runtimeRemoteUsers,
+      refreshVersion,
+
+      runtimeRemoteUsers:
+
+        runtimeRemoteUsers,
 
     }
   );
@@ -1045,7 +1485,7 @@ export default function RemoteVideoGrid({
 
   // ===================================================
   // RENDER
-  // ===================================================
+  // =====================================================
 
   return (
 
@@ -1121,6 +1561,10 @@ export default function RemoteVideoGrid({
 
               participant={
                 participant
+              }
+
+              refreshVersion={
+                refreshVersion
               }
 
             />

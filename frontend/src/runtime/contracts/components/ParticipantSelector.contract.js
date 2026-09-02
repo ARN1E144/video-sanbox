@@ -1,3 +1,5 @@
+// src/runtime/contracts/components/ParticipantSelector.contract.js
+
 const ParticipantSelectorContract = {
 
   name:
@@ -7,13 +9,13 @@ const ParticipantSelectorContract = {
     "component",
 
   version:
-    1,
+    3,
 
   category:
-    "call",
+    "communication",
 
   description:
-    "A runtime-driven selector that allows a host to choose a tenant member as the recipient of a targeted call or training session.",
+    "A runtime-driven selector for choosing one or more tenant members for calls, training sessions, meetings and other participant-based workflows.",
 
 
   // =====================================================
@@ -23,28 +25,35 @@ const ParticipantSelectorContract = {
   props: {
 
     label: {
+
       type:
         "string",
 
       default:
-        "Invite Participant",
+        "Select Participants",
 
       description:
         "Label displayed above the participant selector.",
+
     },
 
+
     placeholder: {
+
       type:
         "string",
 
       default:
-        "Select participant",
+        "Search participants...",
 
       description:
-        "Placeholder displayed when no participant is selected.",
+        "Placeholder displayed in the participant search field.",
+
     },
 
+
     roleFilter: {
+
       type:
         "string",
 
@@ -52,7 +61,36 @@ const ParticipantSelectorContract = {
         "",
 
       description:
-        "Optional membership role used to filter selectable participants.",
+        "Optional tenant membership role filter.",
+
+    },
+
+
+    multiple: {
+
+      type:
+        "boolean",
+
+      default:
+        true,
+
+      description:
+        "Allows multiple participants to be selected.",
+
+    },
+
+
+    selectionPath: {
+
+      type:
+        "string",
+
+      default:
+        "call.selectedParticipantIds",
+
+      description:
+        "Runtime state path receiving the selected participant IDs.",
+
     },
 
   },
@@ -68,10 +106,10 @@ const ParticipantSelectorContract = {
       "Participant Selector",
 
     icon:
-      "👤",
+      "👥",
 
     description:
-      "Select a tenant member to receive a targeted call or training session.",
+      "Select tenant members for a runtime workflow.",
 
   },
 
@@ -80,7 +118,13 @@ const ParticipantSelectorContract = {
   // ACTIONS
   // =====================================================
 
-  actions: [],
+  actions: {
+
+    inputs: [],
+
+    outputs: [],
+
+  },
 
 
   // =====================================================
@@ -89,22 +133,25 @@ const ParticipantSelectorContract = {
 
   runtime: {
 
-  state: {
+    state: {
 
-    reads: [
-      "call.recipientIds",
-    ],
+      reads: [
 
-    writes: [
-      "call.recipientIds",
-      "call.recipientId",
-    ],
+        "selectionPath",
+
+      ],
+
+      writes: [
+
+        "selectionPath",
+
+      ],
+
+    },
+
+    actions: [],
 
   },
-
-  actions: [],
-
-},
 
 
   // =====================================================
@@ -113,9 +160,106 @@ const ParticipantSelectorContract = {
 
   targets: [
 
-    "call.startCall",
+    "call.createGroupCall",
+
+    "call.inviteGroupParticipants",
+
+    "training.createSession",
 
   ],
+
+
+  // =====================================================
+  // EDITABLE PROPS
+  // =====================================================
+
+  editableProps: {
+
+    label: {
+
+      type:
+        "string",
+
+      label:
+        "Label",
+
+    },
+
+
+    placeholder: {
+
+      type:
+        "string",
+
+      label:
+        "Placeholder",
+
+    },
+
+
+    roleFilter: {
+
+      type:
+        "string",
+
+      label:
+        "Role Filter",
+
+    },
+
+
+    multiple: {
+
+      type:
+        "boolean",
+
+      label:
+        "Allow Multiple",
+
+    },
+
+
+    selectionPath: {
+
+      type:
+        "string",
+
+      label:
+        "Selection Path",
+
+    },
+
+  },
+
+
+  // =====================================================
+  // BINDINGS
+  // =====================================================
+
+  bindings: {
+
+    runtimeSelection:
+      true,
+
+  },
+
+
+  // =====================================================
+  // CAPABILITIES
+  // =====================================================
+
+  capabilities: {
+
+    participantSelection:
+      true,
+
+    multipleSelection:
+      true,
+
+    tenantMembers:
+      true,
+
+  },
 
 };
 

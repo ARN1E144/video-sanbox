@@ -3,6 +3,201 @@
 import api from "../../services/api";
 
 
+// =====================================================
+// NORMALISE SINGLE ID
+// =====================================================
+
+function normaliseId(
+  value
+) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  // ---------------------------------------------------
+  // Support:
+  //
+  // "695..."
+  // { id: "695..." }
+  // { userId: "695..." }
+  // { _id: "695..." }
+  // ---------------------------------------------------
+
+  if (
+    typeof value === "object"
+  ) {
+
+    value =
+      value?.userId ||
+      value?.id ||
+      value?._id ||
+      null;
+
+  }
+
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  const id =
+    String(
+      value
+    ).trim();
+
+
+  return id ||
+    null;
+
+}
+
+
+// =====================================================
+// NORMALISE IDS
+// =====================================================
+
+function normaliseIds(
+  values
+) {
+
+  if (
+    !Array.isArray(
+      values
+    )
+  ) {
+
+    return [];
+
+  }
+
+
+  return [
+    ...new Set(
+
+      values
+
+        .map(
+          normaliseId
+        )
+
+        .filter(Boolean)
+
+    ),
+  ];
+
+}
+
+
+// =====================================================
+// READ FIRST NON-EMPTY ARRAY
+// =====================================================
+//
+// The current ParticipantSelector should normally use:
+//
+//   training.selectedParticipantIds
+//
+// Older configurations may still use:
+//
+//   training.participantIds
+//
+// We support both.
+//
+// =====================================================
+
+function readFirstArray(
+  ctx,
+  paths
+) {
+
+  for (
+    const path of
+      paths
+  ) {
+
+    const value =
+      ctx.get?.(
+        path
+      );
+
+
+    if (
+      Array.isArray(
+        value
+      ) &&
+      value.length > 0
+    ) {
+
+      return {
+
+        path,
+
+        value,
+
+      };
+
+    }
+
+  }
+
+
+  return {
+
+    path:
+      null,
+
+    value:
+      [],
+
+  };
+
+}
+
+
+// =====================================================
+// CREATE TRAINING SESSION
+// =====================================================
+//
+// Lifecycle:
+//
+//   ParticipantSelector
+//          ↓
+//   training.selectedParticipantIds
+//          ↓
+//   training.createSession
+//          ↓
+//   backend creates:
+//      TrainingSession
+//      TrainingParticipant[]
+//          ↓
+//   training.status = inviting
+//
+// IMPORTANT:
+//
+// This action does NOT:
+//   - start Agora
+//   - join Agora
+//   - start the training session
+//
+// Those belong to:
+//
+//   training.startSession
+//   training.joinSession
+//
+// =====================================================
+
 export default async function createTrainingSession(
   ctx,
   params = {}
@@ -24,53 +219,223 @@ export default async function createTrainingSession(
   try {
 
     // =================================================
-    // RESOLVE PARTICIPANTS
-    // =================================================
-    //
-    // Prefer explicit action params.
-    //
-    // Otherwise use the runtime session selection:
-    //
-    // training.participantIds
-    //
+    // CURRENT TRAINING STATE
     // =================================================
 
-    const rawParticipantIds =
-      Array.isArray(
-        params?.participantIds
-      )
-        ? params.participantIds
-        : (
-            ctx.get?.(
-              "training.participantIds"
-            ) || []
-          );
-
-
-    const participantIds = [
-      ...new Set(
-
-        rawParticipantIds
-
-          .map(
-            id =>
-              String(id).trim()
-          )
-
-          .filter(Boolean)
-
-      ),
-    ];
+    const currentTraining =
+      ctx.get?.(
+        "training"
+      ) || {};
 
 
     console.log(
-      "[createTrainingSession] RESOLVED PARTICIPANTS",
+      "[createTrainingSession] CURRENT TRAINING STATE",
+      currentTraining
+    );
+
+
+    // =================================================
+    // RESOLVE PARTICIPANTS
+    // =================================================
+    //
+    // Priority:
+    //
+    // 1. params.participantIds
+    // 2. params.userIds
+    // 3. params.selectedParticipantIds
+    // 4. training.selectedParticipantIds
+    // 5. training.participantIds
+    //
+    // =================================================
+
+    const explicitParticipantIds =
+      normaliseIds(
+        params?.participantIds
+      );
+
+
+    const explicitUserIds =
+      normaliseIds(
+        params?.userIds
+      );
+
+
+    const explicitSelectedIds =
+      normaliseIds(
+        params?.selectedParticipantIds
+      );
+
+
+    const runtimeSelection =
+        readFirstArray(
+            ctx,
+            [
+
+            // New Remote Training selection path
+            "training.selectedParticipantIds",
+
+            // Generic selection path
+            "selectedParticipantIds",
+
+            // Existing selector compatibility
+            "call.recipientIds",
+
+            // Optional aliases
+            "training.participantSelection",
+
+            "call.selectedParticipantIds",
+
+            // Persisted training participant list
+            "training.participantIds",
+
+            ]
+        );
+
+
+    const runtimeSelectedIds =
+  normaliseIds(
+    runtimeSelection.value
+  );
+
+
+console.log(
+  "[createTrainingSession] PARTICIPANT RESOLUTION",
+  {
+
+    source:
+      runtimeSelection.path,
+
+    runtimeSelectedIds,
+
+    trainingSelectedParticipantIds:
+      ctx.get?.(
+        "training.selectedParticipantIds"
+      ),
+
+    callRecipientIds:
+      ctx.get?.(
+        "call.recipientIds"
+      ),
+
+    callSelectedParticipantIds:
+      ctx.get?.(
+        "call.selectedParticipantIds"
+      ),
+
+    trainingParticipantIds:
+      ctx.get?.(
+        "training.participantIds"
+      ),
+
+  }
+);
+
+
+    let participantIds =
+      [];
+
+
+    let participantSource =
+      "none";
+
+
+    // -------------------------------------------------
+    // Explicit participantIds
+    // -------------------------------------------------
+
+    if (
+      explicitParticipantIds.length > 0
+    ) {
+
+      participantIds =
+        explicitParticipantIds;
+
+      participantSource =
+        "params.participantIds";
+
+    }
+
+    // -------------------------------------------------
+    // Explicit userIds
+    // -------------------------------------------------
+
+    else if (
+      explicitUserIds.length > 0
+    ) {
+
+      participantIds =
+        explicitUserIds;
+
+      participantSource =
+        "params.userIds";
+
+    }
+
+    // -------------------------------------------------
+    // Explicit selected IDs
+    // -------------------------------------------------
+
+    else if (
+      explicitSelectedIds.length > 0
+    ) {
+
+      participantIds =
+        explicitSelectedIds;
+
+      participantSource =
+        "params.selectedParticipantIds";
+
+    }
+
+    // -------------------------------------------------
+    // Runtime selection
+    // -------------------------------------------------
+
+    else if (
+      runtimeSelectedIds.length > 0
+    ) {
+
+      participantIds =
+        runtimeSelectedIds;
+
+      participantSource =
+        runtimeSelection.path;
+
+    }
+
+
+    // =================================================
+    // FINAL NORMALISATION
+    // =================================================
+
+    participantIds =
+      normaliseIds(
+        participantIds
+      );
+
+
+    // =================================================
+    // DEBUG
+    // =================================================
+
+    console.log(
+      "[createTrainingSession] PARTICIPANT RESOLUTION",
       {
+
+        participantSource,
 
         participantIds,
 
-        count:
-          participantIds.length,
+        explicitParticipantIds,
+
+        explicitUserIds,
+
+        explicitSelectedIds,
+
+        runtimeSelectionPath:
+          runtimeSelection.path,
+
+        runtimeSelectedIds,
 
       }
     );
@@ -81,8 +446,7 @@ export default async function createTrainingSession(
     // =================================================
 
     if (
-      participantIds.length ===
-      0
+      participantIds.length === 0
     ) {
 
       console.warn(
@@ -91,7 +455,7 @@ export default async function createTrainingSession(
 
 
       ctx.notify?.(
-        "Select at least one participant before sending invitations."
+        "Select at least one participant before sending training invitations."
       );
 
 
@@ -103,40 +467,137 @@ export default async function createTrainingSession(
         error:
           "NO_TRAINING_PARTICIPANTS",
 
+        result: {
+
+          participantSource,
+
+          participantIds: [],
+
+        },
+
       };
 
     }
 
 
     // =================================================
-    // CHECK FOR EXISTING TRAINING SESSION
+    // CURRENT USER
     // =================================================
     //
-    // Do not silently create another session if the
-    // runtime already contains an active/inviting
-    // session.
+    // The host should not be invited as a participant.
     //
     // =================================================
 
-    const currentSession =
-      ctx.get?.(
-        "training"
-      ) || {};
+    const currentUserId =
+      normaliseId(
+        ctx.get?.(
+          "auth.userId"
+        )
+      ) ||
+      normaliseId(
+        ctx.get?.(
+          "user.id"
+        )
+      ) ||
+      normaliseId(
+        ctx.get?.(
+          "auth.id"
+        )
+      ) ||
+      null;
 
 
-    console.log(
-      "[createTrainingSession] CURRENT TRAINING STATE",
-      currentSession
-    );
+    const hostFilteredParticipantIds =
+      currentUserId
+
+        ? participantIds.filter(
+            participantId =>
+              String(
+                participantId
+              ) !==
+              String(
+                currentUserId
+              )
+          )
+
+        : participantIds;
 
 
     if (
-      currentSession.sessionId &&
-      (
-        currentSession.status ===
-          "inviting" ||
-        currentSession.status ===
-          "active"
+      hostFilteredParticipantIds.length === 0
+    ) {
+
+      console.warn(
+        "[createTrainingSession] BLOCKED - host only selection",
+        {
+
+          currentUserId,
+
+          participantIds,
+
+        }
+      );
+
+
+      ctx.notify?.(
+        "Select at least one other participant for the training session."
+      );
+
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          "TRAINING_HOST_CANNOT_BE_PARTICIPANT",
+
+        result: {
+
+          requestedParticipantIds:
+            participantIds,
+
+          currentUserId,
+
+        },
+
+      };
+
+    }
+
+
+    participantIds =
+      hostFilteredParticipantIds;
+
+
+    // =================================================
+    // EXISTING SESSION CHECK
+    // =================================================
+    //
+    // Do not create another training session while the
+    // runtime already owns an inviting/active session.
+    //
+    // =================================================
+
+    const existingSessionId =
+      normaliseId(
+        currentTraining.sessionId
+      );
+
+
+    const existingStatus =
+      currentTraining.status ||
+      null;
+
+
+    if (
+      existingSessionId &&
+      [
+        "inviting",
+        "active",
+        "started",
+      ].includes(
+        existingStatus
       )
     ) {
 
@@ -145,10 +606,10 @@ export default async function createTrainingSession(
         {
 
           sessionId:
-            currentSession.sessionId,
+            existingSessionId,
 
           status:
-            currentSession.status,
+            existingStatus,
 
         }
       );
@@ -165,10 +626,10 @@ export default async function createTrainingSession(
         result: {
 
           sessionId:
-            currentSession.sessionId,
+            existingSessionId,
 
           status:
-            currentSession.status,
+            existingStatus,
 
         },
 
@@ -178,19 +639,23 @@ export default async function createTrainingSession(
 
 
     // =================================================
-    // CREATE SESSION + INVITATIONS
+    // API REQUEST
     // =================================================
-    //
-    // Backend creates:
-    //
-    // TrainingSession
-    // TrainingParticipant[]
-    //
-    // The session remains:
-    //
-    // inviting
-    //
-    // =================================================
+
+    console.log(
+      "[createTrainingSession] Creating training session",
+      {
+
+        participantIds,
+
+        participantSource,
+
+        participantCount:
+          participantIds.length,
+
+      }
+    );
+
 
     const {
       data,
@@ -211,8 +676,13 @@ export default async function createTrainingSession(
     );
 
 
+    // =================================================
+    // EXTRACT RESPONSE
+    // =================================================
+
     const session =
-      data?.session;
+      data?.session ||
+      null;
 
 
     const participants =
@@ -227,14 +697,26 @@ export default async function createTrainingSession(
     // VALIDATE RESPONSE
     // =================================================
 
+    const sessionId =
+      normaliseId(
+        session?.id
+      );
+
+
+    const channel =
+      session?.channelName ||
+      null;
+
+
     if (
-      !session?.id ||
-      !session?.channelName
+      !sessionId
     ) {
 
       console.error(
-        "[createTrainingSession] INVALID SESSION RESPONSE",
-        data
+        "[createTrainingSession] INVALID SESSION ID",
+        {
+          data,
+        }
       );
 
 
@@ -245,6 +727,44 @@ export default async function createTrainingSession(
 
         error:
           "INVALID_TRAINING_SESSION_RESPONSE",
+
+        result:
+          data ||
+          null,
+
+      };
+
+    }
+
+
+    if (
+      !channel
+    ) {
+
+      console.error(
+        "[createTrainingSession] INVALID TRAINING CHANNEL",
+        {
+          data,
+        }
+      );
+
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          "MISSING_TRAINING_CHANNEL",
+
+        result: {
+
+          sessionId,
+
+          response:
+            data,
+
+        },
 
       };
 
@@ -270,6 +790,8 @@ export default async function createTrainingSession(
           created:
             participants.length,
 
+          participantIds,
+
         }
       );
 
@@ -277,17 +799,41 @@ export default async function createTrainingSession(
 
 
     // =================================================
-    // STORE TRAINING SESSION IN RUNTIME
+    // RESOLVE ACTUAL PARTICIPANT IDS
     // =================================================
     //
-    // IMPORTANT:
+    // Keep the requested IDs even if the backend's
+    // enriched participant objects do not expose every
+    // field in the same shape.
     //
-    // We deliberately DO NOT join Agora here.
+    // =================================================
+
+    const resolvedParticipantIds =
+      normaliseIds(
+
+        participants.length > 0
+
+          ? participants.map(
+              participant =>
+                participant?.userId
+            )
+
+          : participantIds
+
+      );
+
+
+    // =================================================
+    // STORE TRAINING SESSION
+    // =================================================
     //
-    // The session remains "inviting" until the host
-    // explicitly runs:
+    // Backend is authoritative.
     //
-    // training.startSession
+    // Session is now:
+    //
+    //   inviting
+    //
+    // It is NOT joined.
     //
     // =================================================
 
@@ -295,20 +841,26 @@ export default async function createTrainingSession(
       "training",
       {
 
-        sessionId:
-          session.id,
+        sessionId,
 
-        channel:
-          session.channelName,
+        channel,
 
         status:
           session.status ||
           "inviting",
 
         hostUserId:
-          session.hostUserId,
+          normaliseId(
+            session.hostUserId
+          ) ||
+          currentTraining.hostUserId ||
+          currentUserId ||
+          null,
 
-        participantIds,
+        participantIds:
+          resolvedParticipantIds.length > 0
+            ? resolvedParticipantIds
+            : participantIds,
 
         participants,
 
@@ -316,6 +868,7 @@ export default async function createTrainingSession(
           false,
 
         startedAt:
+          session.startedAt ||
           null,
 
         endedAt:
@@ -326,29 +879,65 @@ export default async function createTrainingSession(
 
 
     // =================================================
-    // CLEAR TEMPORARY CALL STATE
+    // CLEAR TEMPORARY SELECTION
     // =================================================
     //
-    // We are now moving Remote Training onto the
-    // training namespace.
+    // This is picker state only.
     //
-    // Keep the old call bridge untouched unless a
-    // current running call needs it.
+    // Do NOT clear training.participantIds because that
+    // now represents persisted session participants.
     //
+    // =================================================
+
+    ctx.set?.(
+      "training.selectedParticipantIds",
+      []
+    );
+
+
+    // =================================================
+    // ALSO CLEAR OPTIONAL SELECTION ALIASES
+    // =================================================
+    //
+    // Safe cleanup for configurations that temporarily
+    // used one of these paths.
+    //
+    // =================================================
+
+    ctx.set?.(
+      "training.participantSelection",
+      []
+    );
+
+
+    ctx.set?.(
+      "selectedParticipantIds",
+      []
+    );
+
+
+    // =================================================
+    // DEBUG
     // =================================================
 
     console.log(
       "[createTrainingSession] TRAINING SESSION STORED",
       {
 
-        sessionId:
-          session.id,
+        sessionId,
 
-        channel:
-          session.channelName,
+        channel,
 
         status:
-          session.status,
+          session.status ||
+          "inviting",
+
+        participantSource,
+
+        requestedParticipantIds:
+          participantIds,
+
+        resolvedParticipantIds,
 
         participantCount:
           participants.length,
@@ -381,34 +970,43 @@ export default async function createTrainingSession(
 
       result: {
 
-        sessionId:
-          session.id,
+        sessionId,
 
-        channel:
-          session.channelName,
+        channel,
 
         status:
           session.status ||
           "inviting",
 
         hostUserId:
-          session.hostUserId,
+          normaliseId(
+            session.hostUserId
+          ) ||
+          currentUserId ||
+          null,
 
-        participantIds,
+        participantIds:
+          resolvedParticipantIds.length > 0
+            ? resolvedParticipantIds
+            : participantIds,
 
         participants,
 
         joined:
           false,
 
+        participantSource,
+
       },
 
     };
 
   }
-  catch (
-    error
-  ) {
+  catch (error) {
+
+    // =================================================
+    // API / RUNTIME ERROR
+    // =================================================
 
     console.error(
       "[createTrainingSession] FAILED",
@@ -417,9 +1015,109 @@ export default async function createTrainingSession(
 
 
     console.error(
-      "[createTrainingSession] Backend error",
+      "[createTrainingSession] BACKEND ERROR",
       error?.response?.data
     );
+
+
+    const status =
+      error?.response?.status;
+
+
+    const serverError =
+      error?.response?.data?.error;
+
+
+    // =================================================
+    // MAP COMMON SERVER ERRORS
+    // =================================================
+
+    if (
+      status === 400
+    ) {
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          serverError ||
+          "INVALID_TRAINING_SESSION_REQUEST",
+
+        result:
+          error?.response?.data ||
+          null,
+
+      };
+
+    }
+
+
+    if (
+      status === 403
+    ) {
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          serverError ||
+          "TRAINING_SESSION_ACCESS_DENIED",
+
+        result:
+          error?.response?.data ||
+          null,
+
+      };
+
+    }
+
+
+    if (
+      status === 404
+    ) {
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          serverError ||
+          "TRAINING_PARTICIPANT_NOT_FOUND",
+
+        result:
+          error?.response?.data ||
+          null,
+
+      };
+
+    }
+
+
+    if (
+      status === 409
+    ) {
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          serverError ||
+          "TRAINING_SESSION_CONFLICT",
+
+        result:
+          error?.response?.data ||
+          null,
+
+      };
+
+    }
 
 
     return {
@@ -428,9 +1126,13 @@ export default async function createTrainingSession(
         false,
 
       error:
-        error?.response?.data?.error ||
+        serverError ||
         error?.message ||
         "CREATE_TRAINING_SESSION_FAILED",
+
+      result:
+        error?.response?.data ||
+        null,
 
     };
 

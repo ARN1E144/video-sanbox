@@ -3,13 +3,61 @@
 import api from "../../services/api";
 
 
+// =====================================================
+// NORMALISE ID
+// =====================================================
+
+function normaliseId(
+  value
+) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  const result =
+    String(
+      value
+    ).trim();
+
+
+  return result ||
+    null;
+
+}
+
+
+// =====================================================
+// JOIN TRAINING SESSION
+// =====================================================
+//
+// Responsibilities:
+//
+//   1. Resolve training session
+//   2. Join backend training session
+//   3. Store authoritative training state
+//   4. Join Agora directly
+//   5. Mark training connected
+//
+// This action does NOT rely on call.joinCall.
+//
+// Training owns the training lifecycle.
+// AgoraEngine owns the media lifecycle.
+// =====================================================
+
 export default async function joinTrainingSession(
   ctx,
   params = {}
 ) {
 
   console.log(
-    "=============================================="
+    "================================================="
   );
 
   console.log(
@@ -17,7 +65,7 @@ export default async function joinTrainingSession(
   );
 
   console.log(
-    "=============================================="
+    "================================================="
   );
 
 
@@ -26,30 +74,23 @@ export default async function joinTrainingSession(
     // =================================================
     // RESOLVE SESSION
     // =================================================
-    //
-    // Priority:
-    //
-    // 1. Explicit params.sessionId
-    // 2. training.pendingSession.id
-    // 3. training.pendingSession._id
-    // 4. training.sessionId
-    //
-    // =================================================
 
     const pendingSession =
       ctx.get?.(
         "training.pendingSession"
-      ) || null;
+      ) ||
+      null;
 
 
     const sessionId =
-      params?.sessionId ||
-      pendingSession?.id ||
-      pendingSession?._id ||
-      ctx.get?.(
-        "training.sessionId"
-      ) ||
-      null;
+      normaliseId(
+        params?.sessionId ||
+        pendingSession?.id ||
+        pendingSession?._id ||
+        ctx.get?.(
+          "training.sessionId"
+        )
+      );
 
 
     console.log(
@@ -73,12 +114,12 @@ export default async function joinTrainingSession(
     ) {
 
       console.warn(
-        "[joinTrainingSession] BLOCKED - no training session available"
+        "[joinTrainingSession] No training session"
       );
 
 
       ctx.notify?.(
-        "No training invitation is available."
+        "No training session is available."
       );
 
 
@@ -88,7 +129,7 @@ export default async function joinTrainingSession(
           false,
 
         error:
-          "NO_PENDING_TRAINING_SESSION",
+          "NO_TRAINING_SESSION",
 
       };
 
@@ -96,19 +137,72 @@ export default async function joinTrainingSession(
 
 
     // =================================================
-    // JOIN BACKEND SESSION
+    // RESOLVE AGORA ENGINE
     // =================================================
-    //
-    // Backend will:
-    //
-    // invited → joined
-    //
-    // and return:
-    //
-    // session
-    // participant
-    //
+
+    const agora =
+      ctx?.agora ||
+      null;
+
+
+    if (
+      !agora
+    ) {
+
+      console.error(
+        "[joinTrainingSession] Agora engine unavailable"
+      );
+
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          "AGORA_ENGINE_UNAVAILABLE",
+
+      };
+
+    }
+
+
+    if (
+      typeof agora.joinCall !==
+      "function"
+    ) {
+
+      console.error(
+        "[joinTrainingSession] Agora joinCall unavailable"
+      );
+
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          "AGORA_JOIN_UNAVAILABLE",
+
+      };
+
+    }
+
+
     // =================================================
+    // JOIN BACKEND TRAINING SESSION
+    // =================================================
+
+    console.log(
+      "[joinTrainingSession] Joining backend session",
+      {
+
+        sessionId,
+
+      }
+    );
+
 
     const {
       data,
@@ -125,15 +219,17 @@ export default async function joinTrainingSession(
 
 
     const session =
-      data?.session;
+      data?.session ||
+      null;
 
 
     const participant =
-      data?.participant;
+      data?.participant ||
+      null;
 
 
     // =================================================
-    // VALIDATE SESSION
+    // VALIDATE BACKEND RESPONSE
     // =================================================
 
     if (
@@ -142,8 +238,12 @@ export default async function joinTrainingSession(
     ) {
 
       console.error(
-        "[joinTrainingSession] INVALID SESSION RESPONSE",
-        data
+        "[joinTrainingSession] Invalid backend response",
+        {
+
+          data,
+
+        }
       );
 
 
@@ -160,8 +260,31 @@ export default async function joinTrainingSession(
     }
 
 
+    const channel =
+      String(
+        session.channelName
+      ).trim();
+
+
+    if (
+      !channel
+    ) {
+
+      return {
+
+        ok:
+          false,
+
+        error:
+          "MISSING_TRAINING_CHANNEL",
+
+      };
+
+    }
+
+
     // =================================================
-    // STORE TRAINING SESSION
+    // STORE TRAINING STATE BEFORE AGORA JOIN
     // =================================================
 
     ctx.patch?.(
@@ -169,10 +292,11 @@ export default async function joinTrainingSession(
       {
 
         sessionId:
-          session.id,
+          String(
+            session.id
+          ),
 
-        channel:
-          session.channelName,
+        channel,
 
         status:
           session.status ||
@@ -210,112 +334,74 @@ export default async function joinTrainingSession(
 
 
     // =================================================
-    // TEMPORARY CALL BRIDGE
-    // =================================================
-    //
-    // AgoraFeed and call.joinCall currently use:
-    //
-    //   call.channel
-    //
-    // Keep this bridge until the Agora layer is fully
-    // migrated to training.*.
-    //
-    // =================================================
-
-    ctx.patch?.(
-      "call",
-      {
-
-        id:
-          session.id,
-
-        channel:
-          session.channelName,
-
-        state:
-          "active",
-
-        joined:
-          false,
-
-      }
-    );
-
-
-    // =================================================
-    // JOIN AGORA
+    // AGORA JOIN
     // =================================================
 
     console.log(
-      "[joinTrainingSession] JOINING AGORA",
+      "[joinTrainingSession] JOINING AGORA DIRECTLY",
       {
 
         sessionId:
-          session.id,
+          String(
+            session.id
+          ),
 
-        channel:
-          session.channelName,
+        channel,
+
+        agoraAvailable:
+          !!agora,
 
       }
     );
 
 
-    const joinResult =
-      await ctx.runAction?.(
-        "call.joinCall",
-        {
+    const agoraResult =
+      await agora.joinCall({
 
-          channel:
-            session.channelName,
+        appId:
+          ctx.get?.(
+            "agora.appId"
+          ),
 
-        }
-      );
+        channel,
+
+        token:
+          params?.token ||
+          null,
+
+        uid:
+          params?.uid ||
+          ctx.get?.(
+            "user.id"
+          ) ||
+          null,
+
+      });
 
 
     console.log(
       "[joinTrainingSession] AGORA JOIN RESULT",
-      joinResult
+      agoraResult
     );
 
 
     // =================================================
-    // AGORA JOIN FAILED
+    // AGORA FAILED
     // =================================================
 
     if (
-      !joinResult?.ok
+      agoraResult === null ||
+      agoraResult === undefined
     ) {
 
       console.error(
-        "[joinTrainingSession] Backend participant marked joined but Agora join failed",
-        joinResult
+        "[joinTrainingSession] Agora returned no result"
       );
 
-
-      // -----------------------------------------------
-      // Keep the runtime honest.
-      // The backend participant record has already
-      // become "joined", but the media connection did
-      // not succeed.
-      // -----------------------------------------------
 
       ctx.patch?.(
         "training",
         {
-
-          joined:
-            false,
-
-        }
-      );
-
-
-      ctx.patch?.(
-        "call",
-        {
-
-          state:
-            "active",
 
           joined:
             false,
@@ -330,19 +416,16 @@ export default async function joinTrainingSession(
           false,
 
         error:
-          "TRAINING_PARTICIPANT_JOINED_BUT_AGORA_FAILED",
+          "TRAINING_AGORA_JOIN_FAILED",
 
         result: {
 
           sessionId:
-            session.id,
+            String(
+              session.id
+            ),
 
-          channel:
-            session.channelName,
-
-          participant,
-
-          joinResult,
+          channel,
 
         },
 
@@ -360,10 +443,11 @@ export default async function joinTrainingSession(
       {
 
         sessionId:
-          session.id,
+          String(
+            session.id
+          ),
 
-        channel:
-          session.channelName,
+        channel,
 
         status:
           "active",
@@ -399,11 +483,54 @@ export default async function joinTrainingSession(
 
 
     // =================================================
+    // COMPATIBILITY BRIDGE
+    // =================================================
+    //
+    // Keep this temporarily because AgoraFeed currently
+    // understands call.* runtime state.
+    //
+    // IMPORTANT:
+    // This is now only UI compatibility state.
+    // It is no longer used to perform the Agora join.
+    //
+    // =================================================
+
+    ctx.patch?.(
+      "call",
+      {
+
+        id:
+          String(
+            session.id
+          ),
+
+        channel,
+
+        type:
+          "training",
+
+        state:
+          "connected",
+
+        joined:
+          true,
+
+      }
+    );
+
+
+    // =================================================
     // SUCCESS
     // =================================================
 
+    const uid =
+      agora?.uid ||
+      agoraResult?.uid ||
+      null;
+
+
     console.log(
-      "=============================================="
+      "================================================="
     );
 
     console.log(
@@ -411,7 +538,7 @@ export default async function joinTrainingSession(
     );
 
     console.log(
-      "=============================================="
+      "================================================="
     );
 
 
@@ -420,10 +547,11 @@ export default async function joinTrainingSession(
       {
 
         sessionId:
-          session.id,
+          String(
+            session.id
+          ),
 
-        channel:
-          session.channelName,
+        channel,
 
         status:
           "active",
@@ -431,8 +559,7 @@ export default async function joinTrainingSession(
         joined:
           true,
 
-        uid:
-          joinResult?.result?.uid,
+        uid,
 
       }
     );
@@ -446,10 +573,11 @@ export default async function joinTrainingSession(
       result: {
 
         sessionId:
-          session.id,
+          String(
+            session.id
+          ),
 
-        channel:
-          session.channelName,
+        channel,
 
         status:
           "active",
@@ -464,8 +592,7 @@ export default async function joinTrainingSession(
           participant ||
           null,
 
-        uid:
-          joinResult?.result?.uid,
+        uid,
 
       },
 
@@ -488,6 +615,17 @@ export default async function joinTrainingSession(
     );
 
 
+    ctx.patch?.(
+      "training",
+      {
+
+        joined:
+          false,
+
+      }
+    );
+
+
     return {
 
       ok:
@@ -498,9 +636,12 @@ export default async function joinTrainingSession(
         error?.message ||
         "JOIN_TRAINING_SESSION_FAILED",
 
+      result:
+        error?.response?.data ||
+        null,
+
     };
 
   }
 
 }
-

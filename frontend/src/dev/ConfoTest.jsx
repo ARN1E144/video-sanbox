@@ -34,10 +34,6 @@ import ConfosRegistry
 
 const AVAILABLE_CONFOS = [
 
-  // ===================================================
-  // REALTIME / APPLICATION TEMPLATES
-  // ===================================================
-
   {
     id:
       "confo.one_to_one",
@@ -45,6 +41,7 @@ const AVAILABLE_CONFOS = [
     name:
       "1-to-1 Video Call",
   },
+
 
   {
     id:
@@ -54,6 +51,7 @@ const AVAILABLE_CONFOS = [
       "1-to-Many Video Call",
   },
 
+
   {
     id:
       "confo.host_to_many",
@@ -61,6 +59,16 @@ const AVAILABLE_CONFOS = [
     name:
       "Host-to-Many Video Call",
   },
+
+
+  {
+    id:
+      "confo.group_call",
+
+    name:
+      "Group Video Call",
+  },
+
 
   {
     id:
@@ -70,6 +78,7 @@ const AVAILABLE_CONFOS = [
       "Remote Training",
   },
 
+
   {
     id:
       "confo.ai_video_interviewer",
@@ -78,36 +87,8 @@ const AVAILABLE_CONFOS = [
       "AI Video Interviewer",
   },
 
-
-  // ===================================================
-  // MEDIA COMPONENT TESTS
-  // ===================================================
-
-  {
-    id:
-      "confo.media_test",
-
-    name:
-      "Media Feed Test",
-  },
-
-  {
-    id:
-      "confo.pdf_preview",
-
-    name:
-      "File Preview Test",
-  },
-
-  {
-    id:
-      "confo.remote_video_grid",
-
-    name:
-      "Remote Video Grid Test",
-  },
-
 ];
+
 
 
 // =====================================================
