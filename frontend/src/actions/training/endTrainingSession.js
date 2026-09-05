@@ -3,13 +3,76 @@
 import api from "../../services/api";
 
 
+// =====================================================
+// NORMALISE ID
+// =====================================================
+
+function normaliseId(
+  value
+) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  const result =
+    String(
+      value
+    ).trim();
+
+
+  return result ||
+    null;
+
+}
+
+
+// =====================================================
+// END TRAINING SESSION
+// =====================================================
+//
+// Responsibilities:
+//
+//   1. Resolve the current training session.
+//   2. Tell the backend to end the session.
+//   3. Consume cancellationResult returned by the backend.
+//   4. Leave Agora.
+//   5. Clear the training runtime.
+//   6. Clear the temporary call bridge.
+//
+// Backend is authoritative for:
+//
+//   TrainingSession.status
+//   TrainingParticipant.status
+//   cancelled invitations
+//
+// AgoraEngine / call.leaveCall owns media cleanup.
+//
+// IMPORTANT:
+//
+// An ended training session must NOT remain in:
+//
+//   training.sessionId
+//   training.channel
+//
+// Otherwise a subsequent training can inherit stale
+// session identity.
+//
+// =====================================================
+
 export default async function endTrainingSession(
   ctx,
   params = {}
 ) {
 
   console.log(
-    "=============================================="
+    "================================================="
   );
 
   console.log(
@@ -17,23 +80,15 @@ export default async function endTrainingSession(
   );
 
   console.log(
-    "=============================================="
+    "================================================="
   );
 
 
   try {
 
     // =================================================
-    // RESOLVE SESSION
+    // CURRENT TRAINING
     // =================================================
-
-    const sessionId =
-      params?.sessionId ||
-      ctx.get?.(
-        "training.sessionId"
-      ) ||
-      null;
-
 
     const currentTraining =
       ctx.get?.(
@@ -45,6 +100,20 @@ export default async function endTrainingSession(
       "[endTrainingSession] CURRENT TRAINING",
       currentTraining
     );
+
+
+    // =================================================
+    // RESOLVE SESSION
+    // =================================================
+
+    const sessionId =
+      normaliseId(
+        params?.sessionId ||
+        currentTraining?.sessionId ||
+        ctx.get?.(
+          "training.sessionId"
+        )
+      );
 
 
     console.log(
@@ -62,6 +131,11 @@ export default async function endTrainingSession(
     if (
       !sessionId
     ) {
+
+      console.warn(
+        "[endTrainingSession] No training session to end"
+      );
+
 
       ctx.notify?.(
         "No training session is currently active."
@@ -84,6 +158,29 @@ export default async function endTrainingSession(
     // =================================================
     // END BACKEND SESSION
     // =================================================
+    //
+    // The backend is responsible for:
+    //
+    //   TrainingSession -> ended
+    //   outstanding invited participants ->
+    //       cancelled
+    //
+    // and returns:
+    //
+    //   {
+    //     session,
+    //     cancellationResult
+    //   }
+    //
+    // =================================================
+
+    console.log(
+      "[endTrainingSession] Ending backend training session",
+      {
+        sessionId,
+      }
+    );
+
 
     const {
       data,
@@ -99,8 +196,18 @@ export default async function endTrainingSession(
     );
 
 
+    // =================================================
+    // RESPONSE VALIDATION
+    // =================================================
+
     const session =
-      data?.session;
+      data?.session ||
+      null;
+
+
+    const cancellationResult =
+      data?.cancellationResult ||
+      null;
 
 
     if (
@@ -109,7 +216,9 @@ export default async function endTrainingSession(
 
       console.error(
         "[endTrainingSession] INVALID END RESPONSE",
-        data
+        {
+          data,
+        }
       );
 
 
@@ -121,52 +230,78 @@ export default async function endTrainingSession(
         error:
           "INVALID_TRAINING_END_RESPONSE",
 
+        result:
+          data ||
+          null,
+
       };
 
     }
 
 
+    const endedSessionId =
+      normaliseId(
+        session.id
+      );
+
+
     // =================================================
-    // UPDATE TRAINING RUNTIME
+    // CANCELLATION RESULT
+    // =================================================
+    //
+    // This tells the runtime exactly what happened to
+    // outstanding participant invitations.
+    //
+    // Example:
+    //
+    // {
+    //   cancelledCount: 1,
+    //   participantIds: ["..."]
+    // }
+    //
+    // We do not infer this locally.
+    //
     // =================================================
 
-    ctx.patch?.(
-      "training",
+    console.log(
+      "[endTrainingSession] CANCELLATION RESULT",
       {
 
         sessionId:
-          session.id,
+          endedSessionId,
 
-        channel:
-          session.channelName,
-
-        status:
-          "ended",
-
-        hostUserId:
-          session.hostUserId,
-
-        joined:
-          false,
-
-        startedAt:
-          session.startedAt ||
-          null,
-
-        endedAt:
-          session.endedAt ||
-          Date.now(),
+        cancellationResult,
 
       }
     );
+
+
+    const cancelledCount =
+      Number(
+        cancellationResult?.cancelledCount
+      ) || 0;
+
+
+    const cancelledParticipantIds =
+      Array.isArray(
+        cancellationResult?.participantIds
+      )
+        ? cancellationResult.participantIds
+            .map(
+              normaliseId
+            )
+            .filter(Boolean)
+        : [];
 
 
     // =================================================
     // LEAVE AGORA
     // =================================================
     //
-    // Keep using the existing Agora lifecycle action
-    // as the media bridge.
+    // call.leaveCall remains the existing media bridge.
+    //
+    // The backend has already ended the application
+    // session; now we tear down local media.
     //
     // =================================================
 
@@ -175,15 +310,86 @@ export default async function endTrainingSession(
     );
 
 
-    const leaveResult =
-      await ctx.runAction?.(
-        "call.leaveCall"
+    let leaveResult =
+      null;
+
+
+    try {
+
+      leaveResult =
+        await ctx.runAction?.(
+          "call.leaveCall"
+        );
+
+
+      console.log(
+        "[endTrainingSession] Agora leave result",
+        leaveResult
+      );
+
+    }
+    catch (leaveError) {
+
+      console.warn(
+        "[endTrainingSession] Agora leave warning",
+        leaveError
       );
 
 
-    console.log(
-      "[endTrainingSession] Agora leave result",
-      leaveResult
+      leaveResult = {
+
+        ok:
+          false,
+
+        error:
+          leaveError?.message ||
+          "AGORA_LEAVE_FAILED",
+
+      };
+
+    }
+
+
+    // =================================================
+    // CLEAR TRAINING RUNTIME
+    // =================================================
+    //
+    // IMPORTANT:
+    //
+    // sessionId and channel are cleared.
+    //
+    // The session is over and must not remain the
+    // current runtime session.
+    //
+    // =================================================
+
+    ctx.patch?.(
+    "training",
+    {
+        sessionId: null,
+
+        channel: null,
+
+        status: "ended",
+
+        hostUserId:
+        session.hostUserId,
+
+        joined: false,
+
+        startedAt: null,
+
+        endedAt:
+        session.endedAt ||
+        Date.now(),
+
+        participant: null,
+
+        participants: [],
+
+        participantIds: [],
+
+    }
     );
 
 
@@ -201,6 +407,9 @@ export default async function endTrainingSession(
         channel:
           null,
 
+        type:
+          null,
+
         state:
           "ended",
 
@@ -211,10 +420,53 @@ export default async function endTrainingSession(
           {},
 
         participants:
-          0,
+          [],
+
+        selectedParticipantIds:
+          [],
 
       }
     );
+
+
+    // =================================================
+    // NOTIFY
+    // =================================================
+
+    if (
+      cancelledCount >
+      0
+    ) {
+
+      console.log(
+        "[endTrainingSession] Pending training invitations cancelled",
+        {
+
+          sessionId:
+            endedSessionId,
+
+          cancelledCount,
+
+          participantIds:
+            cancelledParticipantIds,
+
+        }
+      );
+
+    }
+    else {
+
+      console.log(
+        "[endTrainingSession] No outstanding training invitations required cancellation",
+        {
+
+          sessionId:
+            endedSessionId,
+
+        }
+      );
+
+    }
 
 
     // =================================================
@@ -222,7 +474,7 @@ export default async function endTrainingSession(
     // =================================================
 
     console.log(
-      "=============================================="
+      "================================================="
     );
 
     console.log(
@@ -230,7 +482,7 @@ export default async function endTrainingSession(
     );
 
     console.log(
-      "=============================================="
+      "================================================="
     );
 
 
@@ -242,10 +494,11 @@ export default async function endTrainingSession(
       result: {
 
         sessionId:
-          session.id,
+          endedSessionId,
 
         channel:
-          session.channelName,
+          session.channelName ||
+          null,
 
         status:
           "ended",
@@ -253,10 +506,24 @@ export default async function endTrainingSession(
         joined:
           false,
 
+        startedAt:
+          session.startedAt ||
+          null,
+
         endedAt:
-          session.endedAt,
+          session.endedAt ||
+          null,
 
         leaveResult,
+
+        cancellationResult: {
+
+          cancelledCount,
+
+          participantIds:
+            cancelledParticipantIds,
+
+        },
 
       },
 
@@ -288,6 +555,10 @@ export default async function endTrainingSession(
         error?.response?.data?.error ||
         error?.message ||
         "END_TRAINING_SESSION_FAILED",
+
+      result:
+        error?.response?.data ||
+        null,
 
     };
 

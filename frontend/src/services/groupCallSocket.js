@@ -14,10 +14,10 @@ const SERVER_API =
 
 
 // =====================================================
-// NORMALISE CALL ID
+// NORMALISE ID
 // =====================================================
 
-function normaliseCallId(
+function normaliseId(
   value
 ) {
 
@@ -44,59 +44,78 @@ function normaliseCallId(
 
 
 // =====================================================
-// NORMALISE USER ID
+// ROOM HELPERS
 // =====================================================
 
-function normaliseUserId(
-  value
+function getUserRoom(
+  userId
 ) {
 
-  if (
-    value === null ||
-    value === undefined
-  ) {
+  return (
+    `user:${String(
+      userId
+    )}`
+  );
 
-    return null;
-
-  }
-
-
-  const result =
-    String(
-      value
-    ).trim();
+}
 
 
-  return result ||
-    null;
+function getGroupCallRoom(
+  callId
+) {
+
+  return (
+    `group-call:${String(
+      callId
+    )}`
+  );
+
+}
+
+
+function getTrainingRoom(
+  sessionId
+) {
+
+  return (
+    `training-session:${String(
+      sessionId
+    )}`
+  );
 
 }
 
 
 // =====================================================
-// GROUP CALL SOCKET SERVICE
+// GROUP CALL / TRAINING SOCKET SERVICE
 // =====================================================
 //
-// Client-side realtime signalling.
+// Pure Socket.IO transport.
 //
 // Responsibilities:
 //
-//   - authenticate Socket.IO client
-//   - connect to /group-calls namespace
-//   - join group-call rooms
-//   - leave group-call rooms
-//   - receive realtime lifecycle events
-//   - translate socket events into application events
+//   - connect / disconnect
+//   - authentication transport
+//   - user-room membership
+//   - group-call room signalling
+//   - training-session room signalling
+//   - event normalisation
 //
 // NOT responsible for:
 //
+//   - React
+//   - RuntimeState
+//   - ActionContext
 //   - Agora media
-//   - RuntimeState writes
-//   - REST/API calls
-//   - database lifecycle mutations
+//   - REST API lifecycle mutations
 //
-// The Runtime layer decides what to do with the events.
+// IMPORTANT:
 //
+// This file MUST remain independent from:
+//
+//   GroupCallSocketRuntime
+//
+// This prevents circular module initialisation.
 // =====================================================
 
 class GroupCallSocket {
@@ -120,15 +139,18 @@ class GroupCallSocket {
 
 
     // ===================================================
-    // CURRENT CALL
+    // CURRENT ROOMS
     // ===================================================
 
     this.currentCallId =
       null;
 
+    this.currentTrainingSessionId =
+      null;
+
 
     // ===================================================
-    // CONNECTION STATE
+    // CONNECTION
     // ===================================================
 
     this.connected =
@@ -144,7 +166,7 @@ class GroupCallSocket {
 
 
     // ===================================================
-    // INTERNAL SOCKET HANDLERS
+    // SOCKET HANDLERS
     // ===================================================
 
     this.handleConnect =
@@ -165,26 +187,56 @@ class GroupCallSocket {
       );
 
 
-    this.handleJoined =
-      this.handleJoined.bind(
+    this.handleGroupCallJoined =
+      this.handleGroupCallJoined.bind(
         this
       );
 
 
-    this.handleInvitation =
-      this.handleInvitation.bind(
+    this.handleGroupCallInvitation =
+      this.handleGroupCallInvitation.bind(
         this
       );
 
 
-    this.handleCallEnded =
-      this.handleCallEnded.bind(
+    this.handleGroupCallEnded =
+      this.handleGroupCallEnded.bind(
         this
       );
 
 
-    this.handleParticipantLeft =
-      this.handleParticipantLeft.bind(
+    this.handleGroupCallParticipantLeft =
+      this.handleGroupCallParticipantLeft.bind(
+        this
+      );
+
+
+    this.handleTrainingJoined =
+      this.handleTrainingJoined.bind(
+        this
+      );
+
+
+    this.handleTrainingInvitation =
+      this.handleTrainingInvitation.bind(
+        this
+      );
+
+
+    this.handleTrainingStarted =
+      this.handleTrainingStarted.bind(
+        this
+      );
+
+
+    this.handleTrainingEnded =
+      this.handleTrainingEnded.bind(
+        this
+      );
+
+
+    this.handleTrainingParticipantLeft =
+      this.handleTrainingParticipantLeft.bind(
         this
       );
 
@@ -293,11 +345,8 @@ class GroupCallSocket {
           console.error(
             "[GroupCallSocket] listener failed",
             {
-
               event,
-
               error,
-
             }
           );
 
@@ -317,10 +366,6 @@ class GroupCallSocket {
     token
   ) {
 
-    // ---------------------------------------------------
-    // TOKEN
-    // ---------------------------------------------------
-
     if (
       !token
     ) {
@@ -334,10 +379,6 @@ class GroupCallSocket {
 
     }
 
-
-    // ---------------------------------------------------
-    // SERVER API
-    // ---------------------------------------------------
 
     if (
       !SERVER_API
@@ -354,23 +395,19 @@ class GroupCallSocket {
 
 
     // ---------------------------------------------------
-    // EXISTING SOCKET
+    // Existing authenticated socket
     // ---------------------------------------------------
 
     if (
       this.socket &&
       this.token ===
-      token
+        token
     ) {
 
-      if (
-        this.socket.connected
-      ) {
-
-        this.connected =
-          true;
-
-      }
+      this.connected =
+        Boolean(
+          this.socket.connected
+        );
 
 
       return this.socket;
@@ -379,7 +416,7 @@ class GroupCallSocket {
 
 
     // ---------------------------------------------------
-    // DISPOSE OLD SOCKET
+    // Remove old socket
     // ---------------------------------------------------
 
     if (
@@ -405,30 +442,12 @@ class GroupCallSocket {
     }
 
 
-    // ---------------------------------------------------
-    // SAVE TOKEN
-    // ---------------------------------------------------
-
     this.token =
       token;
 
 
     // ---------------------------------------------------
-    // CREATE SOCKET
-    // ---------------------------------------------------
-    //
-    // REACT_APP_SERVER_API:
-    //
-    //   http://localhost:5000
-    //
-    // Namespace:
-    //
-    //   /group-calls
-    //
-    // Therefore:
-    //
-    //   http://localhost:5000/group-calls
-    //
+    // Socket.IO namespace
     // ---------------------------------------------------
 
     const endpoint =
@@ -447,11 +466,8 @@ class GroupCallSocket {
           },
 
           transports: [
-
             "websocket",
-
             "polling",
-
           ],
 
           withCredentials:
@@ -477,7 +493,7 @@ class GroupCallSocket {
 
 
     // ===================================================
-    // REGISTER SOCKET EVENTS
+    // SOCKET EVENTS
     // ===================================================
 
     this.socket.on(
@@ -498,36 +514,72 @@ class GroupCallSocket {
     );
 
 
+    // ===================================================
+    // GROUP CALL EVENTS
+    // ===================================================
+
     this.socket.on(
       "group-call:joined",
-      this.handleJoined
+      this.handleGroupCallJoined
     );
 
 
     this.socket.on(
       "group-call:invited",
-      this.handleInvitation
+      this.handleGroupCallInvitation
     );
 
 
     this.socket.on(
       "group-call:ended",
-      this.handleCallEnded
+      this.handleGroupCallEnded
     );
 
 
     this.socket.on(
       "group-call:participant-left",
-      this.handleParticipantLeft
+      this.handleGroupCallParticipantLeft
+    );
+
+
+    // ===================================================
+    // TRAINING EVENTS
+    // ===================================================
+
+    this.socket.on(
+      "training-session:joined",
+      this.handleTrainingJoined
+    );
+
+
+    this.socket.on(
+      "training-session:invited",
+      this.handleTrainingInvitation
+    );
+
+
+    this.socket.on(
+      "training-session:started",
+      this.handleTrainingStarted
+    );
+
+
+    this.socket.on(
+      "training-session:ended",
+      this.handleTrainingEnded
+    );
+
+
+    this.socket.on(
+      "training-session:participant-left",
+      this.handleTrainingParticipantLeft
     );
 
 
     console.log(
       "[GroupCallSocket] socket created",
       {
-
         endpoint,
-
       }
     );
 
@@ -572,25 +624,55 @@ class GroupCallSocket {
 
     this.socket.off(
       "group-call:joined",
-      this.handleJoined
+      this.handleGroupCallJoined
     );
 
 
     this.socket.off(
       "group-call:invited",
-      this.handleInvitation
+      this.handleGroupCallInvitation
     );
 
 
     this.socket.off(
       "group-call:ended",
-      this.handleCallEnded
+      this.handleGroupCallEnded
     );
 
 
     this.socket.off(
       "group-call:participant-left",
-      this.handleParticipantLeft
+      this.handleGroupCallParticipantLeft
+    );
+
+
+    this.socket.off(
+      "training-session:joined",
+      this.handleTrainingJoined
+    );
+
+
+    this.socket.off(
+      "training-session:invited",
+      this.handleTrainingInvitation
+    );
+
+
+    this.socket.off(
+      "training-session:started",
+      this.handleTrainingStarted
+    );
+
+
+    this.socket.off(
+      "training-session:ended",
+      this.handleTrainingEnded
+    );
+
+
+    this.socket.off(
+      "training-session:participant-left",
+      this.handleTrainingParticipantLeft
     );
 
   }
@@ -616,6 +698,9 @@ class GroupCallSocket {
         currentCallId:
           this.currentCallId,
 
+        currentTrainingSessionId:
+          this.currentTrainingSessionId,
+
       }
     );
 
@@ -632,32 +717,30 @@ class GroupCallSocket {
 
 
     // ---------------------------------------------------
-    // SOCKET.IO RECONNECT
-    // ---------------------------------------------------
-    //
-    // A reconnect creates a new socket connection on the
-    // server. Therefore the server-side room membership
-    // must be established again.
-    //
+    // Rejoin active group call
     // ---------------------------------------------------
 
     if (
       this.currentCallId
     ) {
 
-      console.log(
-        "[GroupCallSocket] rejoining current call after reconnect",
-        {
-
-          callId:
-            this.currentCallId,
-
-        }
-      );
-
-
       this.joinCall(
         this.currentCallId
+      );
+
+    }
+
+
+    // ---------------------------------------------------
+    // Rejoin active training
+    // ---------------------------------------------------
+
+    if (
+      this.currentTrainingSessionId
+    ) {
+
+      this.joinTrainingSession(
+        this.currentTrainingSessionId
       );
 
     }
@@ -686,6 +769,9 @@ class GroupCallSocket {
         callId:
           this.currentCallId,
 
+        trainingSessionId:
+          this.currentTrainingSessionId,
+
       }
     );
 
@@ -698,6 +784,9 @@ class GroupCallSocket {
 
         callId:
           this.currentCallId,
+
+        trainingSessionId:
+          this.currentTrainingSessionId,
 
       }
     );
@@ -726,9 +815,7 @@ class GroupCallSocket {
     this.emit(
       "CONNECT_ERROR",
       {
-
         error,
-
       }
     );
 
@@ -736,21 +823,21 @@ class GroupCallSocket {
 
 
   // =====================================================
-  // SERVER ROOM JOIN ACK
+  // GROUP CALL JOINED
   // =====================================================
 
-  handleJoined(
+  handleGroupCallJoined(
     payload = {}
   ) {
 
     const callId =
-      normaliseCallId(
+      normaliseId(
         payload?.callId
       );
 
 
     console.log(
-      "[GroupCallSocket] server confirmed call room",
+      "[GroupCallSocket] group call room joined",
       {
 
         callId,
@@ -779,54 +866,29 @@ class GroupCallSocket {
   // =====================================================
   // GROUP CALL INVITATION
   // =====================================================
-  //
-  // Backend event:
-  //
-  //   group-call:invited
-  //
-  // Runtime event:
-  //
-  //   GROUP_CALL_INVITED
-  //
-  // The backend currently broadcasts the event to the
-  // whole /group-calls namespace.
-  //
-  // GroupCallSocketRuntime performs the final userId
-  // filtering.
-  //
-  // =====================================================
 
-  handleInvitation(
+  handleGroupCallInvitation(
     payload = {}
   ) {
-
-    const callId =
-      normaliseCallId(
-        payload?.callId
-      );
-
-
-    const userId =
-      normaliseUserId(
-        payload?.userId
-      );
-
-
-    const invitedBy =
-      normaliseUserId(
-        payload?.invitedBy
-      );
-
 
     const normalisedPayload = {
 
       ...payload,
 
-      callId,
+      callId:
+        normaliseId(
+          payload?.callId
+        ),
 
-      userId,
+      userId:
+        normaliseId(
+          payload?.userId
+        ),
 
-      invitedBy,
+      invitedBy:
+        normaliseId(
+          payload?.invitedBy
+        ),
 
     };
 
@@ -849,24 +911,21 @@ class GroupCallSocket {
   // GROUP CALL ENDED
   // =====================================================
 
-  handleCallEnded(
+  handleGroupCallEnded(
     payload = {}
   ) {
-
-    const callId =
-      normaliseCallId(
-        payload?.callId
-      );
-
 
     const normalisedPayload = {
 
       ...payload,
 
-      callId,
+      callId:
+        normaliseId(
+          payload?.callId
+        ),
 
       endedBy:
-        normaliseUserId(
+        normaliseId(
           payload?.endedBy
         ),
 
@@ -875,17 +934,7 @@ class GroupCallSocket {
 
     console.log(
       "[GroupCallSocket] GROUP_CALL_ENDED",
-      {
-
-        callId,
-
-        reason:
-          normalisedPayload.reason,
-
-        endedBy:
-          normalisedPayload.endedBy,
-
-      }
+      normalisedPayload
     );
 
 
@@ -895,14 +944,9 @@ class GroupCallSocket {
     );
 
 
-    // ---------------------------------------------------
-    // Forget active call
-    // ---------------------------------------------------
-
     if (
-      callId &&
       this.currentCallId ===
-      callId
+      normalisedPayload.callId
     ) {
 
       this.currentCallId =
@@ -914,32 +958,26 @@ class GroupCallSocket {
 
 
   // =====================================================
-  // PARTICIPANT LEFT
+  // GROUP CALL PARTICIPANT LEFT
   // =====================================================
 
-  handleParticipantLeft(
+  handleGroupCallParticipantLeft(
     payload = {}
   ) {
-
-    const callId =
-      normaliseCallId(
-        payload?.callId
-      );
-
-
-    const userId =
-      normaliseUserId(
-        payload?.userId
-      );
-
 
     const normalisedPayload = {
 
       ...payload,
 
-      callId,
+      callId:
+        normaliseId(
+          payload?.callId
+        ),
 
-      userId,
+      userId:
+        normaliseId(
+          payload?.userId
+        ),
 
     };
 
@@ -959,6 +997,227 @@ class GroupCallSocket {
 
 
   // =====================================================
+  // TRAINING JOINED
+  // =====================================================
+
+  handleTrainingJoined(
+    payload = {}
+  ) {
+
+    const sessionId =
+      normaliseId(
+        payload?.sessionId
+      );
+
+
+    console.log(
+      "[GroupCallSocket] training room joined",
+      {
+
+        sessionId,
+
+        socketId:
+          this.socket?.id,
+
+      }
+    );
+
+
+    this.emit(
+      "TRAINING_SESSION_JOINED",
+      {
+
+        sessionId,
+
+        payload,
+
+      }
+    );
+
+  }
+
+
+  // =====================================================
+  // TRAINING INVITATION
+  // =====================================================
+
+  handleTrainingInvitation(
+    payload = {}
+  ) {
+
+    const normalisedPayload = {
+
+      ...payload,
+
+      sessionId:
+        normaliseId(
+          payload?.sessionId
+        ),
+
+      userId:
+        normaliseId(
+          payload?.userId
+        ),
+
+      invitedBy:
+        normaliseId(
+          payload?.invitedBy
+        ),
+
+    };
+
+
+    console.log(
+      "[GroupCallSocket] TRAINING_SESSION_INVITED",
+      normalisedPayload
+    );
+
+
+    this.emit(
+      "TRAINING_SESSION_INVITED",
+      normalisedPayload
+    );
+
+  }
+
+
+  // =====================================================
+  // TRAINING STARTED
+  // =====================================================
+
+  handleTrainingStarted(
+    payload = {}
+  ) {
+
+    const normalisedPayload = {
+
+      ...payload,
+
+      sessionId:
+        normaliseId(
+          payload?.sessionId
+        ),
+
+      startedBy:
+        normaliseId(
+          payload?.startedBy
+        ),
+
+    };
+
+
+    console.log(
+      "[GroupCallSocket] TRAINING_SESSION_STARTED",
+      normalisedPayload
+    );
+
+
+    this.emit(
+      "TRAINING_SESSION_STARTED",
+      normalisedPayload
+    );
+
+  }
+
+
+  // =====================================================
+  // TRAINING ENDED
+  // =====================================================
+
+  handleTrainingEnded(
+    payload = {}
+  ) {
+
+    const normalisedPayload = {
+
+      ...payload,
+
+      sessionId:
+        normaliseId(
+          payload?.sessionId
+        ),
+
+      endedBy:
+        normaliseId(
+          payload?.endedBy
+        ),
+
+      endedAt:
+        payload?.endedAt ||
+        null,
+
+    };
+
+
+    console.log(
+      "[GroupCallSocket] TRAINING_SESSION_ENDED",
+      normalisedPayload
+    );
+
+
+    this.emit(
+      "TRAINING_SESSION_ENDED",
+      normalisedPayload
+    );
+
+
+    if (
+      this.currentTrainingSessionId ===
+      normalisedPayload.sessionId
+    ) {
+
+      this.currentTrainingSessionId =
+        null;
+
+    }
+
+  }
+
+
+  // =====================================================
+  // TRAINING PARTICIPANT LEFT
+  // =====================================================
+
+  handleTrainingParticipantLeft(
+    payload = {}
+  ) {
+
+    const normalisedPayload = {
+
+      ...payload,
+
+      sessionId:
+        normaliseId(
+          payload?.sessionId
+        ),
+
+      userId:
+        normaliseId(
+          payload?.userId
+        ),
+
+      leftAt:
+        payload?.leftAt ||
+        null,
+
+    };
+
+
+    console.log(
+      "[GroupCallSocket] TRAINING_SESSION_PARTICIPANT_LEFT",
+      normalisedPayload
+    );
+
+
+    this.emit(
+      "TRAINING_SESSION_PARTICIPANT_LEFT",
+      normalisedPayload
+    );
+
+  }
+
+
+  // =====================================================
   // JOIN GROUP CALL ROOM
   // =====================================================
 
@@ -966,14 +1225,14 @@ class GroupCallSocket {
     callId
   ) {
 
-    const normalizedCallId =
-      normaliseCallId(
+    const normalisedCallId =
+      normaliseId(
         callId
       );
 
 
     if (
-      !normalizedCallId
+      !normalisedCallId
     ) {
 
       console.warn(
@@ -986,20 +1245,9 @@ class GroupCallSocket {
     }
 
 
-    // ---------------------------------------------------
-    // Always remember the call.
-    //
-    // This allows the connection handler to rejoin it
-    // after a socket reconnect.
-    // ---------------------------------------------------
-
     this.currentCallId =
-      normalizedCallId;
+      normalisedCallId;
 
-
-    // ---------------------------------------------------
-    // No socket yet.
-    // ---------------------------------------------------
 
     if (
       !this.socket
@@ -1010,7 +1258,7 @@ class GroupCallSocket {
         {
 
           callId:
-            normalizedCallId,
+            normalisedCallId,
 
         }
       );
@@ -1021,26 +1269,16 @@ class GroupCallSocket {
     }
 
 
-    // ---------------------------------------------------
-    // Socket not currently connected.
-    // ---------------------------------------------------
-    //
-    // Do not emit yet.
-    //
-    // handleConnect() will rejoin automatically.
-    //
-    // ---------------------------------------------------
-
     if (
       !this.socket.connected
     ) {
 
       console.log(
-        "[GroupCallSocket] joinCall waiting - socket reconnecting",
+        "[GroupCallSocket] joinCall waiting - socket not connected",
         {
 
           callId:
-            normalizedCallId,
+            normalisedCallId,
 
         }
       );
@@ -1056,7 +1294,12 @@ class GroupCallSocket {
       {
 
         callId:
-          normalizedCallId,
+          normalisedCallId,
+
+        room:
+          getGroupCallRoom(
+            normalisedCallId
+          ),
 
         socketId:
           this.socket.id,
@@ -1070,7 +1313,7 @@ class GroupCallSocket {
       {
 
         callId:
-          normalizedCallId,
+          normalisedCallId,
 
       }
     );
@@ -1090,14 +1333,14 @@ class GroupCallSocket {
       this.currentCallId
   ) {
 
-    const normalizedCallId =
-      normaliseCallId(
+    const normalisedCallId =
+      normaliseId(
         callId
       );
 
 
     if (
-      !normalizedCallId
+      !normalisedCallId
     ) {
 
       return false;
@@ -1110,23 +1353,12 @@ class GroupCallSocket {
       this.socket.connected
     ) {
 
-      console.log(
-        "[GroupCallSocket] leaving group call room",
-        {
-
-          callId:
-            normalizedCallId,
-
-        }
-      );
-
-
       this.socket.emit(
         "group-call:leave-room",
         {
 
           callId:
-            normalizedCallId,
+            normalisedCallId,
 
         }
       );
@@ -1136,7 +1368,7 @@ class GroupCallSocket {
 
     if (
       this.currentCallId ===
-      normalizedCallId
+      normalisedCallId
     ) {
 
       this.currentCallId =
@@ -1151,7 +1383,183 @@ class GroupCallSocket {
 
 
   // =====================================================
-  // CURRENT STATE
+  // JOIN TRAINING SESSION ROOM
+  // =====================================================
+
+  joinTrainingSession(
+    sessionId
+  ) {
+
+    const normalisedSessionId =
+      normaliseId(
+        sessionId
+      );
+
+
+    if (
+      !normalisedSessionId
+    ) {
+
+      console.warn(
+        "[GroupCallSocket] joinTrainingSession skipped - missing sessionId"
+      );
+
+
+      return false;
+
+    }
+
+
+    this.currentTrainingSessionId =
+      normalisedSessionId;
+
+
+    if (
+      !this.socket
+    ) {
+
+      console.warn(
+        "[GroupCallSocket] joinTrainingSession waiting - socket not created",
+        {
+
+          sessionId:
+            normalisedSessionId,
+
+        }
+      );
+
+
+      return false;
+
+    }
+
+
+    if (
+      !this.socket.connected
+    ) {
+
+      console.log(
+        "[GroupCallSocket] joinTrainingSession waiting - socket not connected",
+        {
+
+          sessionId:
+            normalisedSessionId,
+
+        }
+      );
+
+
+      return false;
+
+    }
+
+
+    console.log(
+      "[GroupCallSocket] joining training session room",
+      {
+
+        sessionId:
+          normalisedSessionId,
+
+        room:
+          getTrainingRoom(
+            normalisedSessionId
+          ),
+
+        socketId:
+          this.socket.id,
+
+      }
+    );
+
+
+    this.socket.emit(
+      "training-session:join",
+      {
+
+        sessionId:
+          normalisedSessionId,
+
+      }
+    );
+
+
+    return true;
+
+  }
+
+
+  // =====================================================
+  // LEAVE TRAINING SESSION ROOM
+  // =====================================================
+
+  leaveTrainingSession(
+    sessionId =
+      this.currentTrainingSessionId
+  ) {
+
+    const normalisedSessionId =
+      normaliseId(
+        sessionId
+      );
+
+
+    if (
+      !normalisedSessionId
+    ) {
+
+      return false;
+
+    }
+
+
+    if (
+      this.socket &&
+      this.socket.connected
+    ) {
+
+      console.log(
+        "[GroupCallSocket] leaving training session room",
+        {
+
+          sessionId:
+            normalisedSessionId,
+
+        }
+      );
+
+
+      this.socket.emit(
+        "training-session:leave-room",
+        {
+
+          sessionId:
+            normalisedSessionId,
+
+        }
+      );
+
+    }
+
+
+    if (
+      this.currentTrainingSessionId ===
+      normalisedSessionId
+    ) {
+
+      this.currentTrainingSessionId =
+        null;
+
+    }
+
+
+    return true;
+
+  }
+
+
+  // =====================================================
+  // STATE
   // =====================================================
 
   getState() {
@@ -1169,6 +1577,9 @@ class GroupCallSocket {
 
       currentCallId:
         this.currentCallId,
+
+      currentTrainingSessionId:
+        this.currentTrainingSessionId,
 
     };
 
@@ -1190,14 +1601,7 @@ class GroupCallSocket {
 
 
   // =====================================================
-  // DISCONNECT CLIENT
-  // =====================================================
-  //
-  // Used when the authenticated application session is
-  // ending.
-  //
-  // This is different from leaving a group-call room.
-  //
+  // DISCONNECT
   // =====================================================
 
   disconnect() {
@@ -1210,6 +1614,9 @@ class GroupCallSocket {
         false;
 
       this.currentCallId =
+        null;
+
+      this.currentTrainingSessionId =
         null;
 
       this.token =
@@ -1229,6 +1636,9 @@ class GroupCallSocket {
 
         callId:
           this.currentCallId,
+
+        trainingSessionId:
+          this.currentTrainingSessionId,
 
       }
     );
@@ -1258,6 +1668,9 @@ class GroupCallSocket {
       false;
 
     this.currentCallId =
+      null;
+
+    this.currentTrainingSessionId =
       null;
 
     this.token =

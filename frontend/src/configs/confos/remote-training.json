@@ -96,10 +96,12 @@
         "type": "ParticipantSelector",
         "role": "host",
         "props": {
-          "label": "Invite Participants",
-          "placeholder": "Search participants..."
+        "label": "Invite Participants",
+        "placeholder": "Search participants...",
+        "selectionPath": "training.selectedParticipantIds"
         }
       },
+
 
       {
         "id": "training-host-invite",

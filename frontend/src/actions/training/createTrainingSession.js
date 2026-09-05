@@ -21,15 +21,6 @@ function normaliseId(
   }
 
 
-  // ---------------------------------------------------
-  // Support:
-  //
-  // "695..."
-  // { id: "695..." }
-  // { userId: "695..." }
-  // { _id: "695..." }
-  // ---------------------------------------------------
-
   if (
     typeof value === "object"
   ) {
@@ -105,15 +96,20 @@ function normaliseIds(
 // READ FIRST NON-EMPTY ARRAY
 // =====================================================
 //
-// The current ParticipantSelector should normally use:
+// IMPORTANT:
+//
+// For Remote Training the selector state is:
 //
 //   training.selectedParticipantIds
 //
-// Older configurations may still use:
+// We deliberately DO NOT use:
 //
 //   training.participantIds
 //
-// We support both.
+// as a selection fallback.
+//
+// training.participantIds represents the participants
+// belonging to the current/past session, not the picker.
 //
 // =====================================================
 
@@ -178,23 +174,18 @@ function readFirstArray(
 //          ↓
 //   training.createSession
 //          ↓
-//   backend creates:
-//      TrainingSession
-//      TrainingParticipant[]
+//   POST /training/sessions
 //          ↓
 //   training.status = inviting
 //
 // IMPORTANT:
 //
-// This action does NOT:
-//   - start Agora
-//   - join Agora
-//   - start the training session
+// `training.selectedParticipantIds` is temporary
+// picker state.
 //
-// Those belong to:
+// `training.participantIds` is persisted session data.
 //
-//   training.startSession
-//   training.joinSession
+// They MUST NOT be used interchangeably.
 //
 // =====================================================
 
@@ -235,17 +226,7 @@ export default async function createTrainingSession(
 
 
     // =================================================
-    // RESOLVE PARTICIPANTS
-    // =================================================
-    //
-    // Priority:
-    //
-    // 1. params.participantIds
-    // 2. params.userIds
-    // 3. params.selectedParticipantIds
-    // 4. training.selectedParticipantIds
-    // 5. training.participantIds
-    //
+    // EXPLICIT PARTICIPANT SOURCES
     // =================================================
 
     const explicitParticipantIds =
@@ -266,74 +247,80 @@ export default async function createTrainingSession(
       );
 
 
+    // =================================================
+    // RUNTIME PICKER SELECTION
+    // =================================================
+    //
+    // IMPORTANT:
+    //
+    // We intentionally exclude:
+    //
+    //   training.participantIds
+    //
+    // because that is persisted session state.
+    //
+    // =================================================
+
     const runtimeSelection =
-        readFirstArray(
-            ctx,
-            [
+      readFirstArray(
+        ctx,
+        [
 
-            // New Remote Training selection path
-            "training.selectedParticipantIds",
+          "training.selectedParticipantIds",
 
-            // Generic selection path
-            "selectedParticipantIds",
+          "selectedParticipantIds",
 
-            // Existing selector compatibility
-            "call.recipientIds",
+          "call.recipientIds",
 
-            // Optional aliases
-            "training.participantSelection",
+          "training.participantSelection",
 
-            "call.selectedParticipantIds",
+          "call.selectedParticipantIds",
 
-            // Persisted training participant list
-            "training.participantIds",
-
-            ]
-        );
+        ]
+      );
 
 
     const runtimeSelectedIds =
-  normaliseIds(
-    runtimeSelection.value
-  );
+      normaliseIds(
+        runtimeSelection.value
+      );
 
 
-console.log(
-  "[createTrainingSession] PARTICIPANT RESOLUTION",
-  {
+    console.log(
+      "[createTrainingSession] PARTICIPANT RESOLUTION SOURCES",
+      {
 
-    source:
-      runtimeSelection.path,
+        explicitParticipantIds,
 
-    runtimeSelectedIds,
+        explicitUserIds,
 
-    trainingSelectedParticipantIds:
-      ctx.get?.(
-        "training.selectedParticipantIds"
-      ),
+        explicitSelectedIds,
 
-    callRecipientIds:
-      ctx.get?.(
-        "call.recipientIds"
-      ),
+        runtimeSelectionPath:
+          runtimeSelection.path,
 
-    callSelectedParticipantIds:
-      ctx.get?.(
-        "call.selectedParticipantIds"
-      ),
+        runtimeSelectedIds,
 
-    trainingParticipantIds:
-      ctx.get?.(
-        "training.participantIds"
-      ),
+        trainingSelectedParticipantIds:
+          ctx.get?.(
+            "training.selectedParticipantIds"
+          ),
 
-  }
-);
+        persistedTrainingParticipantIds:
+          ctx.get?.(
+            "training.participantIds"
+          ),
 
+      }
+    );
+
+
+    // =================================================
+    // RESOLVE FINAL PARTICIPANT IDS
+    // =================================================
 
     let participantIds =
       [];
-
 
     let participantSource =
       "none";
@@ -344,7 +331,8 @@ console.log(
     // -------------------------------------------------
 
     if (
-      explicitParticipantIds.length > 0
+      explicitParticipantIds.length >
+      0
     ) {
 
       participantIds =
@@ -360,7 +348,8 @@ console.log(
     // -------------------------------------------------
 
     else if (
-      explicitUserIds.length > 0
+      explicitUserIds.length >
+      0
     ) {
 
       participantIds =
@@ -372,11 +361,12 @@ console.log(
     }
 
     // -------------------------------------------------
-    // Explicit selected IDs
+    // Explicit selectedParticipantIds
     // -------------------------------------------------
 
     else if (
-      explicitSelectedIds.length > 0
+      explicitSelectedIds.length >
+      0
     ) {
 
       participantIds =
@@ -388,11 +378,12 @@ console.log(
     }
 
     // -------------------------------------------------
-    // Runtime selection
+    // Runtime picker selection
     // -------------------------------------------------
 
     else if (
-      runtimeSelectedIds.length > 0
+      runtimeSelectedIds.length >
+      0
     ) {
 
       participantIds =
@@ -404,10 +395,6 @@ console.log(
     }
 
 
-    // =================================================
-    // FINAL NORMALISATION
-    // =================================================
-
     participantIds =
       normaliseIds(
         participantIds
@@ -415,42 +402,23 @@ console.log(
 
 
     // =================================================
-    // DEBUG
-    // =================================================
-
-    console.log(
-      "[createTrainingSession] PARTICIPANT RESOLUTION",
-      {
-
-        participantSource,
-
-        participantIds,
-
-        explicitParticipantIds,
-
-        explicitUserIds,
-
-        explicitSelectedIds,
-
-        runtimeSelectionPath:
-          runtimeSelection.path,
-
-        runtimeSelectedIds,
-
-      }
-    );
-
-
-    // =================================================
-    // REQUIRE PARTICIPANTS
+    // REQUIRE A FRESH SELECTION
     // =================================================
 
     if (
-      participantIds.length === 0
+      participantIds.length ===
+      0
     ) {
 
       console.warn(
-        "[createTrainingSession] BLOCKED - no participants selected"
+        "[createTrainingSession] BLOCKED - no participant selected",
+        {
+
+          participantSource,
+
+          participantIds,
+
+        }
       );
 
 
@@ -483,15 +451,16 @@ console.log(
     // =================================================
     // CURRENT USER
     // =================================================
-    //
-    // The host should not be invited as a participant.
-    //
-    // =================================================
 
     const currentUserId =
       normaliseId(
         ctx.get?.(
           "auth.userId"
+        )
+      ) ||
+      normaliseId(
+        ctx.get?.(
+          "auth.user.id"
         )
       ) ||
       normaliseId(
@@ -507,24 +476,25 @@ console.log(
       null;
 
 
+    // =================================================
+    // REMOVE HOST
+    // =================================================
+
     const hostFilteredParticipantIds =
       currentUserId
 
         ? participantIds.filter(
             participantId =>
-              String(
-                participantId
-              ) !==
-              String(
-                currentUserId
-              )
+              participantId !==
+              currentUserId
           )
 
         : participantIds;
 
 
     if (
-      hostFilteredParticipantIds.length === 0
+      hostFilteredParticipantIds.length ===
+      0
     ) {
 
       console.warn(
@@ -572,11 +542,6 @@ console.log(
 
     // =================================================
     // EXISTING SESSION CHECK
-    // =================================================
-    //
-    // Do not create another training session while the
-    // runtime already owns an inviting/active session.
-    //
     // =================================================
 
     const existingSessionId =
@@ -639,7 +604,7 @@ console.log(
 
 
     // =================================================
-    // API REQUEST
+    // CREATE BACKEND SESSION
     // =================================================
 
     console.log(
@@ -693,10 +658,6 @@ console.log(
         : [];
 
 
-    // =================================================
-    // VALIDATE RESPONSE
-    // =================================================
-
     const sessionId =
       normaliseId(
         session?.id
@@ -708,6 +669,10 @@ console.log(
       null;
 
 
+    // =================================================
+    // VALIDATE SESSION
+    // =================================================
+
     if (
       !sessionId
     ) {
@@ -715,7 +680,9 @@ console.log(
       console.error(
         "[createTrainingSession] INVALID SESSION ID",
         {
+
           data,
+
         }
       );
 
@@ -744,7 +711,9 @@ console.log(
       console.error(
         "[createTrainingSession] INVALID TRAINING CHANNEL",
         {
+
           data,
+
         }
       );
 
@@ -772,7 +741,7 @@ console.log(
 
 
     // =================================================
-    // VERIFY PARTICIPANT CREATION
+    // PARTICIPANT COUNT CHECK
     // =================================================
 
     if (
@@ -799,19 +768,14 @@ console.log(
 
 
     // =================================================
-    // RESOLVE ACTUAL PARTICIPANT IDS
-    // =================================================
-    //
-    // Keep the requested IDs even if the backend's
-    // enriched participant objects do not expose every
-    // field in the same shape.
-    //
+    // RESOLVE CREATED PARTICIPANTS
     // =================================================
 
     const resolvedParticipantIds =
       normaliseIds(
 
-        participants.length > 0
+        participants.length >
+        0
 
           ? participants.map(
               participant =>
@@ -824,17 +788,7 @@ console.log(
 
 
     // =================================================
-    // STORE TRAINING SESSION
-    // =================================================
-    //
-    // Backend is authoritative.
-    //
-    // Session is now:
-    //
-    //   inviting
-    //
-    // It is NOT joined.
-    //
+    // STORE CURRENT TRAINING SESSION
     // =================================================
 
     ctx.patch?.(
@@ -853,13 +807,15 @@ console.log(
           normaliseId(
             session.hostUserId
           ) ||
-          currentTraining.hostUserId ||
           currentUserId ||
           null,
 
         participantIds:
-          resolvedParticipantIds.length > 0
+          resolvedParticipantIds.length >
+          0
+
             ? resolvedParticipantIds
+
             : participantIds,
 
         participants,
@@ -879,87 +835,93 @@ console.log(
 
 
     // =================================================
-    // CLEAR TEMPORARY SELECTION
+    // RESET TEMPORARY PICKER STATE
     // =================================================
     //
-    // This is picker state only.
+    // This is important.
     //
-    // Do NOT clear training.participantIds because that
-    // now represents persisted session participants.
+    // The next training session must require a fresh
+    // participant selection.
     //
     // =================================================
+
+    const clearedSelection =
+      [];
+
 
     ctx.set?.(
       "training.selectedParticipantIds",
-      []
+      clearedSelection
     );
 
 
-    // =================================================
-    // ALSO CLEAR OPTIONAL SELECTION ALIASES
-    // =================================================
-    //
-    // Safe cleanup for configurations that temporarily
-    // used one of these paths.
-    //
-    // =================================================
-
     ctx.set?.(
       "training.participantSelection",
-      []
+      clearedSelection
     );
 
 
     ctx.set?.(
       "selectedParticipantIds",
-      []
+      clearedSelection
     );
 
 
-    // =================================================
-    // DEBUG
-    // =================================================
-
     console.log(
-      "[createTrainingSession] TRAINING SESSION STORED",
+      "[createTrainingSession] TEMPORARY PARTICIPANT SELECTION CLEARED",
       {
 
-        sessionId,
-
-        channel,
-
-        status:
-          session.status ||
-          "inviting",
-
-        participantSource,
-
-        requestedParticipantIds:
-          participantIds,
-
-        resolvedParticipantIds,
-
-        participantCount:
-          participants.length,
+        trainingSelectedParticipantIds:
+          ctx.get?.(
+            "training.selectedParticipantIds"
+          ),
 
       }
     );
 
 
     // =================================================
-    // SUCCESS
+    // RESULT
     // =================================================
 
-    console.log(
-      "=============================================="
-    );
+    const result = {
+
+      sessionId,
+
+      channel,
+
+      status:
+        session.status ||
+        "inviting",
+
+      hostUserId:
+        normaliseId(
+          session.hostUserId
+        ) ||
+        currentUserId ||
+        null,
+
+      participantIds:
+        resolvedParticipantIds.length >
+        0
+
+          ? resolvedParticipantIds
+
+          : participantIds,
+
+      participants,
+
+      joined:
+        false,
+
+      participantSource,
+
+    };
+
 
     console.log(
-      "[createTrainingSession] SUCCESS"
-    );
-
-    console.log(
-      "=============================================="
+      "[createTrainingSession] SUCCESS",
+      result
     );
 
 
@@ -968,45 +930,12 @@ console.log(
       ok:
         true,
 
-      result: {
-
-        sessionId,
-
-        channel,
-
-        status:
-          session.status ||
-          "inviting",
-
-        hostUserId:
-          normaliseId(
-            session.hostUserId
-          ) ||
-          currentUserId ||
-          null,
-
-        participantIds:
-          resolvedParticipantIds.length > 0
-            ? resolvedParticipantIds
-            : participantIds,
-
-        participants,
-
-        joined:
-          false,
-
-        participantSource,
-
-      },
+      result,
 
     };
 
   }
   catch (error) {
-
-    // =================================================
-    // API / RUNTIME ERROR
-    // =================================================
 
     console.error(
       "[createTrainingSession] FAILED",
@@ -1028,12 +957,9 @@ console.log(
       error?.response?.data?.error;
 
 
-    // =================================================
-    // MAP COMMON SERVER ERRORS
-    // =================================================
-
     if (
-      status === 400
+      status ===
+      400
     ) {
 
       return {
@@ -1055,7 +981,8 @@ console.log(
 
 
     if (
-      status === 403
+      status ===
+      403
     ) {
 
       return {
@@ -1077,7 +1004,8 @@ console.log(
 
 
     if (
-      status === 404
+      status ===
+      404
     ) {
 
       return {
@@ -1099,7 +1027,8 @@ console.log(
 
 
     if (
-      status === 409
+      status ===
+      409
     ) {
 
       return {

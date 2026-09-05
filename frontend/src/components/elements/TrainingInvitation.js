@@ -3,6 +3,7 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -19,7 +20,7 @@ import {
 
 
 // =====================================================
-// POLLING
+// CONFIG
 // =====================================================
 
 const PENDING_POLL_INTERVAL_MS =
@@ -30,40 +31,200 @@ const SESSION_POLL_INTERVAL_MS =
 
 
 // =====================================================
-// TRAINING INVITATION
+// HELPERS
+// =====================================================
+
+function normaliseId(
+  value
+) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+  const result =
+    String(
+      value
+    ).trim();
+
+  return result ||
+    null;
+
+}
+
+
+// =====================================================
+// BUILD HOST NAME
+// =====================================================
+
+function getHostName(
+  session
+) {
+
+  const host =
+    session?.host ||
+    null;
+
+  if (
+    !host
+  ) {
+
+    return "Your trainer";
+
+  }
+
+  const fullName =
+    [
+      host.firstName,
+      host.lastName,
+    ]
+      .filter(Boolean)
+      .map(
+        value =>
+          String(
+            value
+          ).trim()
+      )
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+  return (
+    fullName ||
+    host.email ||
+    "Your trainer"
+  );
+
+}
+
+
+// =====================================================
+// NORMALISE PENDING SESSION COLLECTION
 // =====================================================
 //
-// Client-side Remote Training lifecycle:
+// Only an "invited" participant/session is actionable
+// from this component.
 //
-//   NO SESSION
-//        ↓
-//   INVITED / WAITING
-//        ↓
-//   ACTIVE / READY
-//        ↓
-//   JOINED
-//        ↓
-//   ENDED
+// This gives us an additional client-side defence
+// against stale/cancelled records entering the UI.
 //
-// Runtime namespace:
+// =====================================================
+
+function normalisePendingSessions(
+  sessions
+) {
+
+  if (
+    !Array.isArray(
+      sessions
+    )
+  ) {
+
+    return [];
+
+  }
+
+  return sessions.filter(
+    session => {
+
+      if (
+        !session
+      ) {
+
+        return false;
+
+      }
+
+      const id =
+        normaliseId(
+          session?.id
+        );
+
+      if (
+        !id
+      ) {
+
+        return false;
+
+      }
+
+      // -----------------------------------------------
+      // Session itself must be actionable.
+      // -----------------------------------------------
+
+      if (
+        session.status !==
+          "inviting" &&
+        session.status !==
+          "active"
+      ) {
+
+        return false;
+
+      }
+
+      // -----------------------------------------------
+      // If participant status is supplied, it must
+      // explicitly still be invited.
+      //
+      // This prevents a cancelled/left/joined record
+      // from being displayed accidentally.
+      // -----------------------------------------------
+
+      if (
+        session?.participant?.status &&
+        session.participant.status !==
+          "invited"
+      ) {
+
+        return false;
+
+      }
+
+      return true;
+
+    }
+  );
+
+}
+
+
+// =====================================================
+// COMPONENT
+// =====================================================
+//
+// AUTHORITATIVE STATE MODEL
+//
+// Pending invitations:
 //
 //   training.pendingSessions
-//   training.pendingSession
-//   training.hasPendingSession
+//
+// Current training:
+//
 //   training.sessionId
 //   training.status
 //   training.channel
 //   training.joined
 //
-// Runtime actions:
+// IMPORTANT:
 //
-//   training.fetchPendingSessions
-//   training.joinSession
+// training.pendingSession is deliberately NOT consumed.
 //
-// Temporary Agora bridge:
+// The backend's /training/sessions/pending endpoint is
+// the authoritative source for actionable invitations.
 //
-//   call.joinCall
-//   call.leaveCall
+// Cancelled invitations:
+//
+//   invited -> cancelled
+//
+// are therefore automatically excluded by the backend
+// query and additionally rejected by the client-side
+// normalisation above.
 //
 // =====================================================
 
@@ -77,45 +238,43 @@ export default function TrainingInvitation({
 
 }) {
 
+  // ===================================================
+  // CONTEXT
+  // ===================================================
+
   const runtime =
     useRuntimeState();
-
 
   const {
     runAction,
   } =
-    useActionContext();
+  useActionContext();
 
 
   // ===================================================
   // INITIAL RUNTIME STATE
   // ===================================================
 
-  const initialPendingSession =
-    runtime.get?.(
-      "training.pendingSession"
-    ) || null;
-
-
-  const initialHasPendingSession =
-    !!runtime.get?.(
-      "training.hasPendingSession"
+  const initialPendingSessions =
+    normalisePendingSessions(
+      runtime.get?.(
+        "training.pendingSessions"
+      )
     );
-
 
   const initialJoined =
-    !!runtime.get?.(
+    runtime.get?.(
       "training.joined"
+    ) === true;
+
+  const initialCurrentSessionId =
+    normaliseId(
+      runtime.get?.(
+        "training.sessionId"
+      )
     );
 
-
-  const initialSessionId =
-    runtime.get?.(
-      "training.sessionId"
-    ) || null;
-
-
-  const initialStatus =
+  const initialCurrentStatus =
     runtime.get?.(
       "training.status"
     ) || null;
@@ -126,96 +285,178 @@ export default function TrainingInvitation({
   // ===================================================
 
   const [
-    invitation,
-    setInvitation,
+    pendingSessions,
+    setPendingSessions,
   ] =
-    useState(
-      initialPendingSession
-    );
-
+  useState(
+    initialPendingSessions
+  );
 
   const [
-    hasInvitation,
-    setHasInvitation,
+    currentSessionId,
+    setCurrentSessionId,
   ] =
-    useState(
-      initialHasPendingSession ||
-      !!initialPendingSession
-    );
-
+  useState(
+    initialCurrentSessionId
+  );
 
   const [
     joined,
     setJoined,
   ] =
-    useState(
-      initialJoined
-    );
-
-
-  const [
-    sessionId,
-    setSessionId,
-  ] =
-    useState(
-      initialSessionId
-    );
-
+  useState(
+    initialJoined
+  );
 
   const [
     sessionStatus,
     setSessionStatus,
   ] =
-    useState(
-      initialStatus
-    );
-
+  useState(
+    initialCurrentStatus
+  );
 
   const [
     ended,
     setEnded,
   ] =
-    useState(
-      initialStatus ===
-      "ended"
-    );
-
+  useState(
+    initialCurrentStatus ===
+    "ended"
+  );
 
   const [
     checking,
     setChecking,
   ] =
-    useState(false);
-
+  useState(
+    false
+  );
 
   const [
     joining,
     setJoining,
   ] =
-    useState(false);
-
-
-  const [
-    ending,
-    setEnding,
-  ] =
-    useState(false);
+  useState(
+    false
+  );
 
 
   // ===================================================
-  // REQUEST LOCKS
+  // REFS
   // ===================================================
+
+  const mountedRef =
+    useRef(false);
 
   const checkingRef =
     useRef(false);
 
-
   const joiningRef =
     useRef(false);
 
-
   const sessionCheckingRef =
     useRef(false);
+
+  const currentSessionIdRef =
+    useRef(
+      initialCurrentSessionId
+    );
+
+  const joinedRef =
+    useRef(
+      initialJoined
+    );
+
+  const endedRef =
+    useRef(
+      initialCurrentStatus ===
+      "ended"
+    );
+
+
+  // ===================================================
+  // KEEP REFS SYNCHRONISED
+  // ===================================================
+
+  currentSessionIdRef.current =
+    currentSessionId;
+
+  joinedRef.current =
+    joined;
+
+  endedRef.current =
+    ended;
+
+
+  // ===================================================
+  // DERIVE CURRENT INVITATION
+  // ===================================================
+  //
+  // SINGLE SOURCE OF TRUTH:
+  //
+  // training.pendingSessions
+  //
+  // ===================================================
+
+  const invitation =
+    useMemo(
+      () => {
+
+        if (
+          pendingSessions.length ===
+          0
+        ) {
+
+          return null;
+
+        }
+
+        return (
+          pendingSessions[0] ||
+          null
+        );
+
+      },
+      [
+        pendingSessions,
+      ]
+    );
+
+
+  // ===================================================
+  // CLEAR PENDING INVITATIONS
+  // ===================================================
+
+  const clearPendingInvitations =
+    useCallback(
+      () => {
+
+        setPendingSessions(
+          []
+        );
+
+        runtime.patch?.(
+          "training",
+          {
+
+            pendingSessions:
+              [],
+
+            pendingSession:
+              null,
+
+            hasPendingSession:
+              false,
+
+          }
+        );
+
+      },
+      [
+        runtime,
+      ]
+    );
 
 
   // ===================================================
@@ -224,102 +465,88 @@ export default function TrainingInvitation({
 
   useEffect(() => {
 
+    mountedRef.current =
+      true;
+
+
+    // -------------------------------------------------
+    // AUTHORITATIVE PENDING SESSION COLLECTION
+    // -------------------------------------------------
+
     const unsubscribePendingSessions =
-      runtime.subscribe(
+      runtime.subscribe?.(
         "training.pendingSessions",
         value => {
 
           const sessions =
-            Array.isArray(
+            normalisePendingSessions(
               value
-            )
-              ? value
-              : [];
-
-
-          setHasInvitation(
-            sessions.length >
-            0
-          );
-
-        }
-      );
-
-
-    const unsubscribePendingSession =
-      runtime.subscribe(
-        "training.pendingSession",
-        value => {
-
-          const nextSession =
-            value ||
-            null;
-
-
-          setInvitation(
-            nextSession
-          );
-
-
-          setHasInvitation(
-            !!nextSession
-          );
-
-
-          if (
-            nextSession?.id
-          ) {
-
-            setSessionId(
-              nextSession.id
             );
 
-          }
+          setPendingSessions(
+            sessions
+          );
 
+          console.log(
+            "[TrainingInvitation] pendingSessions updated",
+            {
 
-          if (
-            nextSession?.status
-          ) {
+              count:
+                sessions.length,
 
-            setSessionStatus(
-              nextSession.status
-            );
+              sessionIds:
+                sessions.map(
+                  session =>
+                    normaliseId(
+                      session.id
+                    )
+                ),
 
-          }
+              statuses:
+                sessions.map(
+                  session =>
+                    session.status
+                ),
 
-        }
-      );
-
-
-    const unsubscribeHasPending =
-      runtime.subscribe(
-        "training.hasPendingSession",
-        value => {
-
-          setHasInvitation(
-            !!value
+            }
           );
 
         }
       );
 
+
+
+    // -------------------------------------------------
+    // CURRENT SESSION ID
+    // -------------------------------------------------
 
     const unsubscribeSessionId =
-      runtime.subscribe(
+      runtime.subscribe?.(
         "training.sessionId",
         value => {
 
-          setSessionId(
-            value ||
-            null
+          const nextId =
+            normaliseId(
+              value
+            );
+
+          currentSessionIdRef.current =
+            nextId;
+
+          setCurrentSessionId(
+            nextId
           );
 
         }
       );
 
 
+    // -------------------------------------------------
+    // CURRENT SESSION STATUS
+    // -------------------------------------------------
+
     const unsubscribeStatus =
-      runtime.subscribe(
+      runtime.subscribe?.(
         "training.status",
         value => {
 
@@ -327,16 +554,25 @@ export default function TrainingInvitation({
             value ||
             null;
 
-
           setSessionStatus(
             nextStatus
           );
 
 
+          // -------------------------------------------
+          // SESSION ENDED
+          // -------------------------------------------
+
           if (
             nextStatus ===
             "ended"
           ) {
+
+            endedRef.current =
+              true;
+
+            joinedRef.current =
+              false;
 
             setEnded(
               true
@@ -348,6 +584,11 @@ export default function TrainingInvitation({
 
           }
 
+
+          // -------------------------------------------
+          // SESSION ACTIVE / INVITING
+          // -------------------------------------------
+
           if (
             nextStatus ===
               "inviting" ||
@@ -355,6 +596,9 @@ export default function TrainingInvitation({
               "active"
           ) {
 
+            endedRef.current =
+              false;
+
             setEnded(
               false
             );
@@ -365,23 +609,31 @@ export default function TrainingInvitation({
       );
 
 
+    // -------------------------------------------------
+    // CURRENT SESSION JOINED
+    // -------------------------------------------------
+
     const unsubscribeJoined =
-      runtime.subscribe(
+      runtime.subscribe?.(
         "training.joined",
         value => {
 
-          const isJoined =
-            !!value;
+          const nextJoined =
+            value === true;
 
+          joinedRef.current =
+            nextJoined;
 
           setJoined(
-            isJoined
+            nextJoined
           );
 
-
           if (
-            isJoined
+            nextJoined
           ) {
+
+            endedRef.current =
+              false;
 
             setEnded(
               false
@@ -393,13 +645,16 @@ export default function TrainingInvitation({
       );
 
 
+    // -------------------------------------------------
+    // CLEANUP
+    // -------------------------------------------------
+
     return () => {
 
+      mountedRef.current =
+        false;
+
       unsubscribePendingSessions?.();
-
-      unsubscribePendingSession?.();
-
-      unsubscribeHasPending?.();
 
       unsubscribeSessionId?.();
 
@@ -417,17 +672,39 @@ export default function TrainingInvitation({
   // ===================================================
   // FETCH PENDING SESSIONS
   // ===================================================
+  //
+  // The backend endpoint is authoritative.
+  //
+  // Only returned actionable invitations are accepted.
+  //
+  // ===================================================
 
   const checkForTraining =
     useCallback(
-      async () => {
+      async ({
+        reason =
+          "poll",
+      } = {}) => {
 
         if (
-          joined ||
-          ended
+          !mountedRef.current
         ) {
 
-          return;
+          return null;
+
+        }
+
+
+        // ---------------------------------------------
+        // Do not fetch invitations while already inside
+        // a training session.
+        // ---------------------------------------------
+
+        if (
+          joinedRef.current
+        ) {
+
+          return null;
 
         }
 
@@ -436,14 +713,13 @@ export default function TrainingInvitation({
           checkingRef.current
         ) {
 
-          return;
+          return null;
 
         }
 
 
         checkingRef.current =
           true;
-
 
         setChecking(
           true
@@ -452,82 +728,105 @@ export default function TrainingInvitation({
 
         try {
 
+          console.log(
+            "[TrainingInvitation] Checking pending sessions",
+            {
+              reason,
+            }
+          );
+
+
           const result =
             await runAction(
               "training.fetchPendingSessions"
             );
 
 
-          console.log(
-            "[TrainingInvitation] Pending session check",
-            result
-          );
+          if (
+            result?.ok ===
+            false
+          ) {
 
+            console.warn(
+              "[TrainingInvitation] Pending session fetch failed",
+              {
 
-          // ---------------------------------------------
-          // Keep local state immediately synchronised
-          // even if runtime notifications are delayed.
-          // ---------------------------------------------
+                reason,
 
-          const pendingSession =
-            result?.result?.pendingSession ||
-            null;
+                result,
+
+              }
+            );
+
+            return result;
+
+          }
 
 
           const sessions =
-            Array.isArray(
+            normalisePendingSessions(
               result?.result?.sessions
-            )
-              ? result.result.sessions
-              : [];
-
-
-          if (
-            pendingSession
-          ) {
-
-            setInvitation(
-              pendingSession
             );
 
 
-            setHasInvitation(
-              true
-            );
+          // -------------------------------------------
+          // AUTHORITATIVE LOCAL REPLACEMENT
+          //
+          // This is intentionally a REPLACEMENT rather
+          // than an append/merge.
+          //
+          // Therefore a cancelled invitation disappears
+          // immediately when the backend no longer
+          // reports it.
+          // -------------------------------------------
+
+          setPendingSessions(
+            sessions
+          );
 
 
-            setSessionId(
-              pendingSession.id
-            );
+          console.log(
+            "[TrainingInvitation] Pending sessions synchronised",
+            {
+
+              reason,
+
+              count:
+                sessions.length,
+
+              sessionIds:
+                sessions.map(
+                  session =>
+                    normaliseId(
+                      session.id
+                    )
+                ),
+
+            }
+          );
 
 
-            setSessionStatus(
-              pendingSession.status
-            );
-
-          }
-          else {
-
-            setInvitation(
-              null
-            );
-
-
-            setHasInvitation(
-              false
-            );
-
-          }
+          return result;
 
         }
-        catch (
-          error
-        ) {
+        catch (error) {
 
           console.error(
             "[TrainingInvitation] Pending session check failed",
             error
           );
+
+
+          return {
+
+            ok:
+              false,
+
+            error:
+              error?.message ||
+              "TRAINING_PENDING_SESSION_FETCH_FAILED",
+
+          };
 
         }
         finally {
@@ -543,33 +842,19 @@ export default function TrainingInvitation({
 
       },
       [
-        joined,
-        ended,
         runAction,
       ]
     );
 
 
   // ===================================================
-  // PENDING SESSION POLLING
-  // ===================================================
-  //
-  // Runs while:
-  //
-  //   - not joined
-  //   - session has not ended
-  //
-  // This allows Bob to detect when Anish changes:
-  //
-  //   inviting → active
-  //
+  // PENDING INVITATION POLLING
   // ===================================================
 
   useEffect(() => {
 
     if (
-      joined ||
-      ended
+      joined
     ) {
 
       return;
@@ -592,8 +877,10 @@ export default function TrainingInvitation({
 
         }
 
-
-        await checkForTraining();
+        await checkForTraining({
+          reason:
+            "initial",
+        });
 
       };
 
@@ -613,8 +900,10 @@ export default function TrainingInvitation({
 
           }
 
-
-          checkForTraining();
+          checkForTraining({
+            reason:
+              "poll",
+          });
 
         },
         PENDING_POLL_INTERVAL_MS
@@ -634,47 +923,31 @@ export default function TrainingInvitation({
 
   }, [
     joined,
-    ended,
     checkForTraining,
   ]);
 
 
   // ===================================================
-  // SESSION STATUS POLLING
+  // CURRENT SESSION STATUS POLLING
   // ===================================================
   //
-  // GET /api/training/sessions/:sessionId
-  //
-  // Used once we have a known training session.
-  //
-  // This detects:
-  //
-  //   active → ended
+  // Only monitors the session actually joined by the
+  // current user.
   //
   // ===================================================
 
   useEffect(() => {
 
+    const activeSessionId =
+      normaliseId(
+        currentSessionId
+      );
+
+
     if (
-      !sessionId ||
+      !activeSessionId ||
+      !joined ||
       ended
-    ) {
-
-      return;
-
-    }
-
-
-    // -------------------------------------------------
-    // The pending-session polling already handles the
-    // inviting → active transition.
-    //
-    // Once joined, this polling becomes responsible
-    // for active → ended.
-    // -------------------------------------------------
-
-    if (
-      !joined
     ) {
 
       return;
@@ -686,7 +959,7 @@ export default function TrainingInvitation({
       false;
 
 
-    const checkSession =
+    const checkCurrentSession =
       async () => {
 
         if (
@@ -706,10 +979,11 @@ export default function TrainingInvitation({
         try {
 
           console.log(
-            "[TrainingInvitation] Checking training session",
+            "[TrainingInvitation] Checking current training session",
             {
 
-              sessionId,
+              sessionId:
+                activeSessionId,
 
             }
           );
@@ -717,20 +991,27 @@ export default function TrainingInvitation({
 
           const response =
             await api.get(
-              `/training/sessions/${sessionId}`
+              `/training/sessions/${activeSessionId}`
             );
 
 
           const session =
             response?.data?.session;
 
-
           const participant =
             response?.data?.participant;
 
 
           if (
-            cancelled ||
+            cancelled
+          ) {
+
+            return;
+
+          }
+
+
+          if (
             !session
           ) {
 
@@ -739,12 +1020,45 @@ export default function TrainingInvitation({
           }
 
 
+          const serverSessionId =
+            normaliseId(
+              session.id
+            );
+
+
+          // -------------------------------------------
+          // Ignore another session's response.
+          // -------------------------------------------
+
+          if (
+            serverSessionId !==
+            currentSessionIdRef.current
+          ) {
+
+            console.warn(
+              "[TrainingInvitation] Ignoring mismatched session response",
+              {
+
+                expected:
+                  currentSessionIdRef.current,
+
+                received:
+                  serverSessionId,
+
+              }
+            );
+
+            return;
+
+          }
+
+
           console.log(
-            "[TrainingInvitation] Session status",
+            "[TrainingInvitation] Current training session status",
             {
 
               sessionId:
-                session.id,
+                serverSessionId,
 
               status:
                 session.status,
@@ -757,7 +1071,8 @@ export default function TrainingInvitation({
 
 
           setSessionStatus(
-            session.status
+            session.status ||
+            null
           );
 
 
@@ -770,71 +1085,14 @@ export default function TrainingInvitation({
             "ended"
           ) {
 
-            console.log(
-              "[TrainingInvitation] Training session ended"
-            );
-
-
-            setEnded(
-              true
-            );
-
-
-            setJoined(
-              false
-            );
-
-
-            runtime.patch?.(
-              "training",
-              {
-
-                sessionId:
-                  session.id,
-
-                channel:
-                  session.channelName,
-
-                status:
-                  "ended",
-
-                joined:
-                  false,
-
-                hostUserId:
-                  session.hostUserId,
-
-                startedAt:
-                  session.startedAt ||
-                  null,
-
-                endedAt:
-                  session.endedAt ||
-                  Date.now(),
-
-              }
-            );
-
-
-            runtime.patch?.(
-              "call",
-              {
-
-                state:
-                  "ended",
-
-                joined:
-                  false,
-
-              }
-            );
+            await handleCurrentSessionEnded({
+              session,
+            });
 
           }
 
         }
-        catch (
-          error
-        ) {
+        catch (error) {
 
           if (
             cancelled
@@ -845,10 +1103,40 @@ export default function TrainingInvitation({
           }
 
 
-          console.error(
-            "[TrainingInvitation] Session status check failed",
-            error
-          );
+          // -------------------------------------------
+          // A missing session is no longer usable.
+          // -------------------------------------------
+
+          if (
+            error?.response?.status ===
+            404
+          ) {
+
+            console.warn(
+              "[TrainingInvitation] Current training session no longer exists",
+              {
+
+                sessionId:
+                  activeSessionId,
+
+              }
+            );
+
+
+            await handleCurrentSessionEnded({
+              session:
+                null,
+            });
+
+          }
+          else {
+
+            console.error(
+              "[TrainingInvitation] Current session check failed",
+              error
+            );
+
+          }
 
         }
         finally {
@@ -861,16 +1149,12 @@ export default function TrainingInvitation({
       };
 
 
-    // -----------------------------------------------
-    // Check immediately
-    // -----------------------------------------------
-
-    checkSession();
+    checkCurrentSession();
 
 
     const interval =
       window.setInterval(
-        checkSession,
+        checkCurrentSession,
         SESSION_POLL_INTERVAL_MS
       );
 
@@ -887,11 +1171,132 @@ export default function TrainingInvitation({
     };
 
   }, [
+    currentSessionId,
     joined,
-    sessionId,
     ended,
-    runtime,
   ]);
+
+
+  // ===================================================
+  // HANDLE CURRENT SESSION ENDED
+  // ===================================================
+
+  const handleCurrentSessionEnded =
+    useCallback(
+      async ({
+        session =
+          null,
+      } = {}) => {
+
+        const endedSessionId =
+          normaliseId(
+            session?.id
+          ) ||
+          currentSessionIdRef.current;
+
+
+        console.log(
+          "[TrainingInvitation] Current training session ended",
+          {
+
+            sessionId:
+              endedSessionId,
+
+          }
+        );
+
+
+        // ---------------------------------------------
+        // CURRENT SESSION STATE
+        // ---------------------------------------------
+
+        joinedRef.current =
+          false;
+
+        endedRef.current =
+          true;
+
+        setJoined(
+          false
+        );
+
+        setEnded(
+          true
+        );
+
+        setSessionStatus(
+          "ended"
+        );
+
+
+        currentSessionIdRef.current =
+          null;
+
+        setCurrentSessionId(
+          null
+        );
+
+
+        // ---------------------------------------------
+        // Remove the ended session from any accidental
+        // pending representation.
+        // ---------------------------------------------
+
+        setPendingSessions(
+          previous => {
+
+            const filtered =
+              previous.filter(
+                pending =>
+                  normaliseId(
+                    pending?.id
+                  ) !==
+                  endedSessionId
+              );
+
+            return filtered;
+
+          }
+        );
+
+
+        // ---------------------------------------------
+        // Runtime reconciliation
+        // ---------------------------------------------
+
+        const remainingPending =
+          pendingSessions.filter(
+            pending =>
+              normaliseId(
+                pending?.id
+              ) !==
+              endedSessionId
+          );
+
+
+        runtime.patch?.(
+          "training",
+          {
+
+            pendingSession:
+              null,
+
+            pendingSessions:
+              remainingPending,
+
+            hasPendingSession:
+              remainingPending.length >
+              0,
+
+          }
+        );
+
+      },
+      [
+        pendingSessions,
+        runtime,
+      ]
+    );
 
 
   // ===================================================
@@ -904,11 +1309,88 @@ export default function TrainingInvitation({
 
         if (
           joiningRef.current ||
-          joined ||
-          !invitation ||
-          sessionStatus !==
-            "active"
+          joinedRef.current ||
+          !invitation
         ) {
+
+          return;
+
+        }
+
+
+        const invitationSessionId =
+          normaliseId(
+            invitation?.id
+          );
+
+
+        if (
+          !invitationSessionId
+        ) {
+
+          console.warn(
+            "[TrainingInvitation] Invitation has no session ID"
+          );
+
+          clearPendingInvitations();
+
+          return;
+
+        }
+
+
+        // ---------------------------------------------
+        // Only an active invitation can be joined.
+        // ---------------------------------------------
+
+        if (
+          invitation?.status !==
+          "active"
+        ) {
+
+          console.warn(
+            "[TrainingInvitation] Training session is not active",
+            {
+
+              sessionId:
+                invitationSessionId,
+
+              status:
+                invitation?.status,
+
+            }
+          );
+
+          return;
+
+        }
+
+
+        // ---------------------------------------------
+        // Defensive participant-state check.
+        // ---------------------------------------------
+
+        if (
+          invitation?.participant?.status &&
+          invitation.participant.status !==
+            "invited"
+        ) {
+
+          console.warn(
+            "[TrainingInvitation] Invitation is no longer actionable",
+            {
+
+              sessionId:
+                invitationSessionId,
+
+              participantStatus:
+                invitation.participant.status,
+
+            }
+          );
+
+
+          clearPendingInvitations();
 
           return;
 
@@ -918,26 +1400,17 @@ export default function TrainingInvitation({
         joiningRef.current =
           true;
 
-
         setJoining(
           true
         );
 
 
-        const invitationSessionId =
-          invitation?.id ||
-          sessionId ||
-          null;
-
-
         console.log(
-          "[TrainingInvitation] Joining training session",
+          "[TrainingInvitation] Joining training",
           {
 
             sessionId:
               invitationSessionId,
-
-            invitation,
 
           }
         );
@@ -957,52 +1430,133 @@ export default function TrainingInvitation({
             );
 
 
-          console.log(
-            "[TrainingInvitation] Join result",
-            result
-          );
-
-
           if (
-            result?.ok
+            result?.ok ===
+            false
           ) {
 
-            const joinedSessionId =
-              result?.result?.sessionId ||
-              invitationSessionId ||
+            console.warn(
+              "[TrainingInvitation] Join action failed",
+              result
+            );
+
+
+            // -----------------------------------------
+            // Expired/cancelled/non-actionable
+            // invitation: immediately remove it from
+            // local UI and allow the next invitation
+            // poll to reconcile the backend.
+            // -----------------------------------------
+
+            const errorCode =
+              result?.error ||
+              result?.result?.error ||
               null;
 
 
-            setSessionId(
-              joinedSessionId
-            );
+            if (
+              errorCode ===
+                "TRAINING_INVITATION_EXPIRED" ||
+              errorCode ===
+                "TRAINING_PARTICIPANT_NOT_JOINABLE" ||
+              errorCode ===
+                "TRAINING_SESSION_NOT_ACTIVE"
+            ) {
+
+              clearPendingInvitations();
+
+            }
 
 
-            setSessionStatus(
-              "active"
-            );
-
-
-            setInvitation(
-              null
-            );
-
-
-            setHasInvitation(
-              false
-            );
+            return result;
 
           }
 
+
+          const joinedId =
+            normaliseId(
+              result?.result?.sessionId
+            ) ||
+            invitationSessionId;
+
+
+          // -------------------------------------------
+          // CURRENT SESSION
+          // -------------------------------------------
+
+          currentSessionIdRef.current =
+            joinedId;
+
+          setCurrentSessionId(
+            joinedId
+          );
+
+
+          joinedRef.current =
+            true;
+
+          setJoined(
+            true
+          );
+
+
+          endedRef.current =
+            false;
+
+          setEnded(
+            false
+          );
+
+
+          setSessionStatus(
+            "active"
+          );
+
+
+          // -------------------------------------------
+          // CONSUME INVITATION
+          // -------------------------------------------
+
+          clearPendingInvitations();
+
+
+          console.log(
+            "[TrainingInvitation] Training joined successfully",
+            {
+
+              sessionId:
+                joinedId,
+
+            }
+          );
+
+
+          return result;
+
         }
-        catch (
-          error
-        ) {
+        catch (error) {
 
           console.error(
             "[TrainingInvitation] Join failed",
             error
           );
+
+
+          return {
+
+            ok:
+              false,
+
+            error:
+              error?.response?.data?.error ||
+              error?.message ||
+              "TRAINING_JOIN_FAILED",
+
+            result:
+              error?.response?.data ||
+              null,
+
+          };
 
         }
         finally {
@@ -1018,48 +1572,41 @@ export default function TrainingInvitation({
 
       },
       [
+        clearPendingInvitations,
         invitation,
-        joined,
         runAction,
-        sessionId,
-        sessionStatus,
       ]
     );
 
 
   // ===================================================
-  // DERIVED STATES
+  // DERIVED UI STATE
   // ===================================================
 
-  const isConnected =
-    joined &&
-    !ended;
-
-
-  const isWaitingForHost =
-    !joined &&
-    !ended &&
-    hasInvitation &&
+  const hasInvitation =
     !!invitation &&
-    (
-      sessionStatus ===
-        "inviting" ||
-      invitation.status ===
-        "inviting"
+    !!normaliseId(
+      invitation?.id
     );
 
 
-  const isReady =
-    !joined &&
-    !ended &&
+  const invitationStatus =
+    invitation?.status ||
+    null;
+
+
+  const waitingForHost =
     hasInvitation &&
-    !!invitation &&
-    (
-      sessionStatus ===
-        "active" ||
-      invitation.status ===
-        "active"
-    );
+    !joined &&
+    invitationStatus ===
+      "inviting";
+
+
+  const readyToJoin =
+    hasInvitation &&
+    !joined &&
+    invitationStatus ===
+      "active";
 
 
   // ===================================================
@@ -1067,7 +1614,7 @@ export default function TrainingInvitation({
   // ===================================================
 
   if (
-    isConnected
+    joined
   ) {
 
     return (
@@ -1114,75 +1661,12 @@ export default function TrainingInvitation({
 
 
   // ===================================================
-  // ENDED
+  // WAITING FOR HOST
   // ===================================================
 
   if (
-    ended
+    waitingForHost
   ) {
-
-    return (
-
-      <div
-        style={{
-          width:
-            "100%",
-
-          boxSizing:
-            "border-box",
-
-          padding:
-            12,
-
-          border:
-            "1px solid #444",
-
-          borderRadius:
-            10,
-
-          background:
-            "#151515",
-
-          color:
-            "#aaa",
-
-          fontSize:
-            12,
-
-          fontWeight:
-            600,
-
-        }}
-      >
-
-        Training session ended
-
-      </div>
-
-    );
-
-  }
-
-
-  // ===================================================
-  // INVITED / WAITING FOR TRAINER
-  // ===================================================
-
-  if (
-    isWaitingForHost
-  ) {
-
-    const host =
-      invitation?.host ||
-      null;
-
-
-    const hostName =
-      host
-        ? `${host.firstName || ""} ${host.lastName || ""}`
-            .trim()
-        : "Your trainer";
-
 
     return (
 
@@ -1245,8 +1729,11 @@ export default function TrainingInvitation({
           }}
         >
 
-          {hostName} has invited you
-          to a training session.
+          {getHostName(
+            invitation
+          )}{" "}
+          has invited you to a training
+          session.
 
         </div>
 
@@ -1275,11 +1762,11 @@ export default function TrainingInvitation({
 
 
   // ===================================================
-  // WAITING / NO INVITATION
+  // READY TO JOIN
   // ===================================================
 
   if (
-    !isReady
+    readyToJoin
   ) {
 
     return (
@@ -1293,29 +1780,131 @@ export default function TrainingInvitation({
             "border-box",
 
           padding:
-            "10px 12px",
+            14,
 
           border:
-            "1px solid #2a2a2a",
+            "1px solid #2563eb",
 
           borderRadius:
-            8,
+            10,
 
           background:
-            "#111",
+            "#101a33",
 
           color:
-            "#aaa",
-
-          fontSize:
-            12,
+            "#fff",
 
         }}
       >
 
-        {checking
-          ? "Checking for your training session..."
-          : waitingText}
+        <div
+          style={{
+            fontSize:
+              14,
+
+            fontWeight:
+              700,
+
+            marginBottom:
+              5,
+
+          }}
+        >
+
+          {title}
+
+        </div>
+
+
+        <div
+          style={{
+            color:
+              "#cbd5e1",
+
+            fontSize:
+              12,
+
+            marginBottom:
+              5,
+
+          }}
+        >
+
+          {getHostName(
+            invitation
+          )}{" "}
+          has started your training session.
+
+        </div>
+
+
+        <div
+          style={{
+            color:
+              "#94a3b8",
+
+            fontSize:
+              11,
+
+            marginBottom:
+              12,
+
+          }}
+        >
+
+          Your training session is ready.
+
+        </div>
+
+
+        <button
+          type="button"
+
+          onClick={
+            handleJoin
+          }
+
+          disabled={
+            joining
+          }
+
+          style={{
+            width:
+              "100%",
+
+            padding:
+              "9px 12px",
+
+            border:
+              "none",
+
+            borderRadius:
+              7,
+
+            background:
+              joining
+                ? "#334155"
+                : "#2563eb",
+
+            color:
+              "#fff",
+
+            fontWeight:
+              600,
+
+            cursor:
+              joining
+                ? "default"
+                : "pointer",
+
+          }}
+        >
+
+          {joining
+            ? "Joining Training..."
+            : "Join Training"}
+
+        </button>
 
       </div>
 
@@ -1325,23 +1914,59 @@ export default function TrainingInvitation({
 
 
   // ===================================================
-  // TRAINER INFORMATION
+  // ENDED
   // ===================================================
 
-  const host =
-    invitation?.host ||
-    null;
+  if (
+    ended &&
+    !hasInvitation
+  ) {
 
+    return (
 
-  const hostName =
-    host
-      ? `${host.firstName || ""} ${host.lastName || ""}`
-          .trim()
-      : "Your trainer";
+      <div
+        style={{
+          width:
+            "100%",
+
+          boxSizing:
+            "border-box",
+
+          padding:
+            12,
+
+          border:
+            "1px solid #444",
+
+          borderRadius:
+            10,
+
+          background:
+            "#151515",
+
+          color:
+            "#aaa",
+
+          fontSize:
+            12,
+
+          fontWeight:
+            600,
+
+        }}
+      >
+
+        Training session ended
+
+      </div>
+
+    );
+
+  }
 
 
   // ===================================================
-  // READY
+  // WAITING / NO INVITATION
   // ===================================================
 
   return (
@@ -1355,129 +1980,29 @@ export default function TrainingInvitation({
           "border-box",
 
         padding:
-          14,
+          "10px 12px",
 
         border:
-          "1px solid #2563eb",
+          "1px solid #2a2a2a",
 
         borderRadius:
-          10,
+          8,
 
         background:
-          "#101a33",
+          "#111",
 
         color:
-          "#fff",
+          "#aaa",
+
+        fontSize:
+          12,
 
       }}
     >
 
-      <div
-        style={{
-          fontSize:
-            14,
-
-          fontWeight:
-            700,
-
-          marginBottom:
-            5,
-
-        }}
-      >
-
-        {title}
-
-      </div>
-
-
-      <div
-        style={{
-          color:
-            "#cbd5e1",
-
-          fontSize:
-            12,
-
-          marginBottom:
-            5,
-
-        }}
-      >
-
-        {hostName} has started
-        your training session.
-
-      </div>
-
-
-      <div
-        style={{
-          color:
-            "#94a3b8",
-
-          fontSize:
-            11,
-
-          marginBottom:
-            12,
-
-        }}
-      >
-
-        Your training session is ready.
-
-      </div>
-
-
-      <button
-        type="button"
-
-        onClick={
-          handleJoin
-        }
-
-        disabled={
-          joining
-        }
-
-        style={{
-          width:
-            "100%",
-
-          padding:
-            "9px 12px",
-
-          border:
-            "none",
-
-          borderRadius:
-            7,
-
-          background:
-            joining
-              ? "#334155"
-              : "#2563eb",
-
-          color:
-            "#fff",
-
-          fontWeight:
-            600,
-
-          cursor:
-            joining
-              ? "default"
-              : "pointer",
-
-        }}
-      >
-
-        {joining
-          ? "Joining Training..."
-          : "Join Training"}
-
-      </button>
+      {checking
+        ? "Checking for your training session..."
+        : waitingText}
 
     </div>
 

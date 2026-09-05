@@ -1,29 +1,40 @@
-// src/actions/training/fetchPendingSessions.js
-
 import api from "../../services/api";
 
+
+// =====================================================
+// FETCH PENDING TRAINING SESSIONS
+// =====================================================
+//
+// Authoritative invitation synchronisation.
+//
+// IMPORTANT:
+//
+//   training.pendingSessions
+//   training.pendingSession
+//   training.hasPendingSession
+//
+// represent ONLY actionable invitations.
+//
+// training.sessionId is NOT modified here.
+//
+// That value represents the current session the user
+// is actually participating in.
+//
+// =====================================================
 
 export default async function fetchPendingSessions(
   ctx
 ) {
 
   console.log(
-    "=============================================="
-  );
-
-  console.log(
     "[fetchPendingSessions] START"
-  );
-
-  console.log(
-    "=============================================="
   );
 
 
   try {
 
     // =================================================
-    // FETCH PENDING TRAINING SESSIONS
+    // FETCH FROM BACKEND
     // =================================================
 
     const {
@@ -34,22 +45,31 @@ export default async function fetchPendingSessions(
       );
 
 
+    // =================================================
+    // NORMALISE RESPONSE
+    // =================================================
+
     const sessions =
       Array.isArray(
         data?.sessions
       )
-        ? data.sessions
+        ? data.sessions.filter(
+            session =>
+              session &&
+              session.id
+          )
         : [];
 
 
     // =================================================
-    // FIND FIRST PENDING SESSION
+    // FIRST ACTIONABLE INVITATION
     // =================================================
     //
-    // For V1 the invitation component displays the
-    // first available session.
+    // V1 invitation UI uses the first actionable
+    // invitation.
     //
-    // The complete list is still stored in runtime.
+    // The complete collection remains available in
+    // training.pendingSessions.
     //
     // =================================================
 
@@ -59,7 +79,7 @@ export default async function fetchPendingSessions(
 
 
     // =================================================
-    // STORE IN RUNTIME
+    // STORE AUTHORITATIVE INVITATION STATE
     // =================================================
 
     ctx.patch?.(
@@ -72,23 +92,60 @@ export default async function fetchPendingSessions(
         pendingSession,
 
         hasPendingSession:
-          !!pendingSession,
+          sessions.length > 0,
 
       }
     );
 
 
-    console.log(
-      "[fetchPendingSessions] RESULT",
-      {
+    // =================================================
+    // EXPLICITLY CLEAR STALE INVITATION STATE
+    // =================================================
+    //
+    // Do NOT clear:
+    //
+    //   training.sessionId
+    //
+    // because the user may currently be in another
+    // active training session.
+    //
+    // =================================================
 
-        count:
-          sessions.length,
+    if (
+      sessions.length ===
+      0
+    ) {
 
-        pendingSession,
+      console.log(
+        "[fetchPendingSessions] No actionable training invitations",
+        {
 
-      }
-    );
+          pendingSessions:
+            [],
+
+        }
+      );
+
+    }
+    else {
+
+      console.log(
+        "[fetchPendingSessions] Actionable invitations found",
+        {
+
+          count:
+            sessions.length,
+
+          pendingSessionId:
+            pendingSession?.id,
+
+          pendingStatus:
+            pendingSession?.status,
+
+        }
+      );
+
+    }
 
 
     // =================================================
@@ -140,8 +197,12 @@ export default async function fetchPendingSessions(
         error?.message ||
         "FETCH_PENDING_TRAINING_SESSIONS_FAILED",
 
+      result:
+        error?.response?.data ||
+        null,
+
     };
 
   }
 
-};
+}

@@ -43,26 +43,20 @@ function normaliseId(
   }
 
 
-  const text =
+  const result =
     String(
       value
     ).trim();
 
 
-  return text ||
+  return result ||
     null;
 
 }
 
 
 // =====================================================
-// RESOLVE CURRENT USER ID
-// =====================================================
-//
-// We deliberately support several possible runtime/session
-// locations because the authentication context and runtime
-// authentication state can evolve independently.
-//
+// CURRENT USER ID
 // =====================================================
 
 function resolveCurrentUserId(
@@ -71,10 +65,6 @@ function resolveCurrentUserId(
 ) {
 
   const candidates = [
-
-    // -----------------------------------------------
-    // Runtime auth
-    // -----------------------------------------------
 
     runtime.get?.(
       "auth.userId"
@@ -91,10 +81,6 @@ function resolveCurrentUserId(
     runtime.get?.(
       "user.userId"
     ),
-
-    // -----------------------------------------------
-    // Session
-    // -----------------------------------------------
 
     session?.userId,
 
@@ -140,36 +126,24 @@ function resolveCurrentUserId(
 // COMPONENT
 // =====================================================
 //
-// Runtime-level Socket.IO bridge for group calls.
+// Runtime bridge for:
+//
+//   Group Calls
+//   Remote Training
 //
 // Responsibilities:
 //
-//   authenticated user
-//       ↓
-//   Socket.IO connection
-//       ↓
-//   group-call room membership
-//       ↓
-//   realtime lifecycle events
-//       ↓
-//   Runtime / Agora cleanup
+//   - connect authenticated socket
+//   - join appropriate realtime rooms
+//   - reconcile realtime events with runtime state
+//   - clean up Agora when server ends a session
 //
-// Realtime events:
+// NOT responsible for:
 //
-//   GROUP_CALL_INVITED
-//   GROUP_CALL_PARTICIPANT_LEFT
-//   GROUP_CALL_ENDED
-//
-// HTTP polling remains the fallback/reconciliation path.
-//
-// IMPORTANT:
-//
-// This component renders nothing.
-//
-// It must live below:
-//
-//   RuntimeStateProvider
-//   ActionProvider
+//   - database lifecycle
+//   - socket implementation
+//   - REST route implementation
+//   - Agora implementation
 //
 // =====================================================
 
@@ -181,9 +155,10 @@ export default function GroupCallSocketRuntime() {
 
   const {
     session,
-    loading: authLoading,
+    loading:
+      authLoading,
   } =
-    useAuth();
+  useAuth();
 
 
   // ===================================================
@@ -197,11 +172,11 @@ export default function GroupCallSocketRuntime() {
   const {
     runAction,
   } =
-    useActionContext();
+  useActionContext();
 
 
   // ===================================================
-  // SOCKET TOKEN
+  // AUTH TOKEN
   // ===================================================
 
   const accessToken =
@@ -210,7 +185,7 @@ export default function GroupCallSocketRuntime() {
 
 
   // ===================================================
-  // CURRENT USER ID
+  // USER
   // ===================================================
 
   const currentUserId =
@@ -221,7 +196,7 @@ export default function GroupCallSocketRuntime() {
 
 
   // ===================================================
-  // REACTIVE CALL STATE
+  // GROUP CALL STATE
   // ===================================================
 
   const [
@@ -230,9 +205,11 @@ export default function GroupCallSocketRuntime() {
   ] =
   useState(
     () =>
-      runtime.get?.(
-        "call.id"
-      ) || null
+      normaliseId(
+        runtime.get?.(
+          "call.id"
+        )
+      )
   );
 
 
@@ -249,8 +226,8 @@ export default function GroupCallSocketRuntime() {
 
 
   const [
-    joined,
-    setJoined,
+    callJoined,
+    setCallJoined,
   ] =
   useState(
     () =>
@@ -261,51 +238,120 @@ export default function GroupCallSocketRuntime() {
 
 
   // ===================================================
-  // REFS
+  // TRAINING STATE
   // ===================================================
 
-  const mountedRef =
-    useRef(false);
+  const [
+    trainingSessionId,
+    setTrainingSessionId,
+  ] =
+  useState(
+    () =>
+      normaliseId(
+        runtime.get?.(
+          "training.sessionId"
+        )
+      )
+  );
 
 
-  const activeCallIdRef =
-    useRef(null);
+  const [
+    trainingJoined,
+    setTrainingJoined,
+  ] =
+  useState(
+    () =>
+      runtime.get?.(
+        "training.joined"
+      ) === true
+  );
 
 
-  const joinedRef =
-    useRef(false);
+// ===================================================
+// REFS
+// ===================================================
+
+const mountedRef =
+  useRef(false);
 
 
-  const callTypeRef =
-    useRef(null);
+// ---------------------------------------------------
+// Group Call
+// ---------------------------------------------------
+
+const callIdRef =
+  useRef(callId);
+
+const callTypeRef =
+  useRef(callType);
+
+const callJoinedRef =
+  useRef(callJoined);
 
 
-  const cleanupRunningRef =
-    useRef(false);
+// ---------------------------------------------------
+// Training
+// ---------------------------------------------------
+
+const trainingSessionIdRef =
+  useRef(trainingSessionId);
+
+const trainingJoinedRef =
+  useRef(trainingJoined);
 
 
-  const invitationRefreshRunningRef =
-    useRef(false);
+// ---------------------------------------------------
+// Connection
+// ---------------------------------------------------
+
+const connectedRef =
+  useRef(false);
 
 
-  const connectedRef =
-    useRef(false);
+// ---------------------------------------------------
+// Cleanup locks
+// ---------------------------------------------------
+
+const groupCallCleanupRunningRef =
+  useRef(false);
+
+const trainingCleanupRunningRef =
+  useRef(false);
+
+
+// ---------------------------------------------------
+// Invitation refresh locks
+// ---------------------------------------------------
+
+const groupInvitationRefreshRef =
+  useRef(false);
+
+const trainingInvitationRefreshRef =
+  useRef(false);
 
 
   // ===================================================
-  // KEEP REFS IN SYNC
+  // REF SYNCHRONISATION
   // ===================================================
 
-  activeCallIdRef.current =
+  callIdRef.current =
     callId;
-
-
-  joinedRef.current =
-    joined;
 
 
   callTypeRef.current =
     callType;
+
+
+  callJoinedRef.current =
+    callJoined;
+
+
+  trainingSessionIdRef.current =
+    trainingSessionId;
+
+
+  trainingJoinedRef.current =
+    trainingJoined;
 
 
   // ===================================================
@@ -318,14 +364,12 @@ export default function GroupCallSocketRuntime() {
       true;
 
 
-    // -------------------------------------------------
-    // INITIAL VALUES
-    // -------------------------------------------------
-
     setCallId(
-      runtime.get?.(
-        "call.id"
-      ) || null
+      normaliseId(
+        runtime.get?.(
+          "call.id"
+        )
+      )
     );
 
 
@@ -336,15 +380,31 @@ export default function GroupCallSocketRuntime() {
     );
 
 
-    setJoined(
+    setCallJoined(
       runtime.get?.(
         "call.joined"
       ) === true
     );
 
 
+    setTrainingSessionId(
+      normaliseId(
+        runtime.get?.(
+          "training.sessionId"
+        )
+      )
+    );
+
+
+    setTrainingJoined(
+      runtime.get?.(
+        "training.joined"
+      ) === true
+    );
+
+
     // -------------------------------------------------
-    // CALL ID
+    // Group Call ID
     // -------------------------------------------------
 
     const unsubscribeCallId =
@@ -352,27 +412,18 @@ export default function GroupCallSocketRuntime() {
         "call.id",
         value => {
 
-          const nextCallId =
+          const next =
             normaliseId(
               value
             );
 
 
-          console.log(
-            "[GroupCallSocketRuntime] call.id changed",
-            {
-              callId:
-                nextCallId,
-            }
-          );
-
-
-          activeCallIdRef.current =
-            nextCallId;
+          callIdRef.current =
+            next;
 
 
           setCallId(
-            nextCallId
+            next
           );
 
         }
@@ -380,7 +431,7 @@ export default function GroupCallSocketRuntime() {
 
 
     // -------------------------------------------------
-    // CALL TYPE
+    // Call Type
     // -------------------------------------------------
 
     const unsubscribeCallType =
@@ -388,7 +439,7 @@ export default function GroupCallSocketRuntime() {
         "call.type",
         value => {
 
-          const nextCallType =
+          const next =
             value
               ? String(
                   value
@@ -396,21 +447,12 @@ export default function GroupCallSocketRuntime() {
               : null;
 
 
-          console.log(
-            "[GroupCallSocketRuntime] call.type changed",
-            {
-              callType:
-                nextCallType,
-            }
-          );
-
-
           callTypeRef.current =
-            nextCallType;
+            next;
 
 
           setCallType(
-            nextCallType
+            next
           );
 
         }
@@ -418,33 +460,24 @@ export default function GroupCallSocketRuntime() {
 
 
     // -------------------------------------------------
-    // JOINED
+    // Call Joined
     // -------------------------------------------------
 
-    const unsubscribeJoined =
+    const unsubscribeCallJoined =
       runtime.subscribe?.(
         "call.joined",
         value => {
 
-          const nextJoined =
+          const next =
             value === true;
 
 
-          console.log(
-            "[GroupCallSocketRuntime] call.joined changed",
-            {
-              joined:
-                nextJoined,
-            }
-          );
+          callJoinedRef.current =
+            next;
 
 
-          joinedRef.current =
-            nextJoined;
-
-
-          setJoined(
-            nextJoined
+          setCallJoined(
+            next
           );
 
         }
@@ -452,8 +485,56 @@ export default function GroupCallSocketRuntime() {
 
 
     // -------------------------------------------------
-    // CLEANUP
+    // Training Session
     // -------------------------------------------------
+
+    const unsubscribeTrainingSessionId =
+      runtime.subscribe?.(
+        "training.sessionId",
+        value => {
+
+          const next =
+            normaliseId(
+              value
+            );
+
+
+          trainingSessionIdRef.current =
+            next;
+
+
+          setTrainingSessionId(
+            next
+          );
+
+        }
+      );
+
+
+    // -------------------------------------------------
+    // Training Joined
+    // -------------------------------------------------
+
+    const unsubscribeTrainingJoined =
+      runtime.subscribe?.(
+        "training.joined",
+        value => {
+
+          const next =
+            value === true;
+
+
+          trainingJoinedRef.current =
+            next;
+
+
+          setTrainingJoined(
+            next
+          );
+
+        }
+      );
+
 
     return () => {
 
@@ -465,7 +546,11 @@ export default function GroupCallSocketRuntime() {
 
       unsubscribeCallType?.();
 
-      unsubscribeJoined?.();
+      unsubscribeCallJoined?.();
+
+      unsubscribeTrainingSessionId?.();
+
+      unsubscribeTrainingJoined?.();
 
     };
 
@@ -509,9 +594,6 @@ export default function GroupCallSocketRuntime() {
         "[GroupCallSocketRuntime] socket connection unavailable"
       );
 
-
-      return undefined;
-
     }
 
 
@@ -539,45 +621,60 @@ export default function GroupCallSocketRuntime() {
 
 
           console.log(
-            "[GroupCallSocketRuntime] socket connected",
+            "[GroupCallSocketRuntime] SOCKET CONNECTED",
             payload
           );
 
 
-          // -------------------------------------------
-          // Re-establish current group-call room.
-          // -------------------------------------------
+          // ---------------------------------------------
+          // GROUP CALL
+          // ---------------------------------------------
 
           const activeCallId =
-            activeCallIdRef.current;
-
-
-          const activeJoined =
-            joinedRef.current;
+            callIdRef.current;
 
 
           const activeCallType =
             callTypeRef.current;
 
 
+          const activeCallJoined =
+            callJoinedRef.current;
+
+
           if (
             activeCallType ===
               "group" &&
-            activeJoined &&
+            activeCallJoined &&
             activeCallId
           ) {
 
-            console.log(
-              "[GroupCallSocketRuntime] joining active call after socket connect",
-              {
-                callId:
-                  activeCallId,
-              }
-            );
-
-
             groupCallSocket.joinCall(
               activeCallId
+            );
+
+          }
+
+
+          // ---------------------------------------------
+          // TRAINING
+          // ---------------------------------------------
+
+          const activeTrainingSessionId =
+            trainingSessionIdRef.current;
+
+
+          const activeTrainingJoined =
+            trainingJoinedRef.current;
+
+
+          if (
+            activeTrainingSessionId &&
+            activeTrainingJoined
+          ) {
+
+            groupCallSocket.joinTrainingSession(
+              activeTrainingSessionId
             );
 
           }
@@ -611,7 +708,7 @@ export default function GroupCallSocketRuntime() {
 
 
           console.log(
-            "[GroupCallSocketRuntime] socket disconnected",
+            "[GroupCallSocketRuntime] SOCKET DISCONNECTED",
             payload
           );
 
@@ -629,7 +726,7 @@ export default function GroupCallSocketRuntime() {
 
 
   // ===================================================
-  // SOCKET CONNECTION ERROR
+  // SOCKET ERROR
   // ===================================================
 
   useEffect(() => {
@@ -644,7 +741,7 @@ export default function GroupCallSocketRuntime() {
 
 
           console.error(
-            "[GroupCallSocketRuntime] socket connection error",
+            "[GroupCallSocketRuntime] SOCKET ERROR",
             payload
           );
 
@@ -662,24 +759,7 @@ export default function GroupCallSocketRuntime() {
 
 
   // ===================================================
-  // NEW GROUP CALL INVITATION
-  // ===================================================
-  //
-  // Backend emits:
-  //
-  //   group-call:invited
-  //
-  // The backend currently broadcasts this event to the
-  // namespace, so EVERY connected user receives it.
-  //
-  // We therefore filter locally by userId.
-  //
-  // Only the intended recipient triggers a pending
-  // invitation refresh.
-  //
-  // This gives us immediate invitation delivery while
-  // keeping the existing HTTP polling as fallback.
-  //
+  // GROUP CALL INVITATION
   // ===================================================
 
   useEffect(() => {
@@ -710,16 +790,12 @@ export default function GroupCallSocketRuntime() {
             );
 
 
-          // ------------------------------------------------
-          // Cannot safely target the current user.
-          // ------------------------------------------------
-
           if (
             !currentUserId
           ) {
 
             console.warn(
-              "[GroupCallSocketRuntime] invitation received but current user ID unavailable",
+              "[GroupCallSocketRuntime] group invitation received without current user",
               {
                 payload,
               }
@@ -731,56 +807,26 @@ export default function GroupCallSocketRuntime() {
           }
 
 
-          // ------------------------------------------------
-          // Ignore invitations belonging to another user.
-          // ------------------------------------------------
-
           if (
-            !invitationUserId ||
             invitationUserId !==
-              currentUserId
+            currentUserId
           ) {
-
-            console.log(
-              "[GroupCallSocketRuntime] ignoring invitation for another user",
-              {
-
-                invitationUserId,
-
-                currentUserId,
-
-                callId:
-                  invitationCallId,
-
-              }
-            );
-
 
             return;
 
           }
 
-
-          // ------------------------------------------------
-          // Prevent duplicate refreshes if several
-          // invitation events arrive together.
-          // ------------------------------------------------
 
           if (
-            invitationRefreshRunningRef.current
+            groupInvitationRefreshRef.current
           ) {
-
-            console.log(
-              "[GroupCallSocketRuntime] invitation refresh already running"
-            );
-
 
             return;
 
           }
 
 
-          invitationRefreshRunningRef.current =
+          groupInvitationRefreshRef.current =
             true;
 
 
@@ -799,47 +845,26 @@ export default function GroupCallSocketRuntime() {
                 invitedBy:
                   payload?.invitedBy,
 
-                reason:
-                  payload?.reason,
-
               }
             );
 
 
-            // =========================================
-            // REFRESH AUTHORITATIVE INVITATIONS
-            // =========================================
-
-            const result =
-              await runAction(
-                "call.fetchPendingInvitations"
-              );
-
-
-            console.log(
-              "[GroupCallSocketRuntime] pending invitations refreshed after realtime invitation",
-              {
-
-                callId:
-                  invitationCallId,
-
-                result,
-
-              }
+            await runAction(
+              "call.fetchPendingInvitations"
             );
 
           }
           catch (error) {
 
             console.error(
-              "[GroupCallSocketRuntime] realtime invitation refresh failed",
+              "[GroupCallSocketRuntime] group invitation refresh failed",
               error
             );
 
           }
           finally {
 
-            invitationRefreshRunningRef.current =
+            groupInvitationRefreshRef.current =
               false;
 
           }
@@ -861,25 +886,169 @@ export default function GroupCallSocketRuntime() {
 
 
   // ===================================================
-  // JOIN ACTIVE GROUP CALL
+  // TRAINING INVITATION
   // ===================================================
-  //
-  // When:
-  //
-  //   call.type = group
-  //   call.joined = true
-  //   call.id exists
-  //
-  // join the corresponding Socket.IO room.
-  //
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "TRAINING_SESSION_INVITED",
+        async payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const invitationUserId =
+            normaliseId(
+              payload?.userId
+            );
+
+
+          const invitationSessionId =
+            normaliseId(
+              payload?.sessionId
+            );
+
+
+          console.log(
+            "[GroupCallSocketRuntime] TRAINING EVENT RECEIVED",
+            {
+
+              event:
+                "TRAINING_SESSION_INVITED",
+
+              sessionId:
+                invitationSessionId,
+
+              userId:
+                invitationUserId,
+
+              currentUserId,
+
+            }
+          );
+
+
+          if (
+            !currentUserId
+          ) {
+
+            console.warn(
+              "[GroupCallSocketRuntime] training invitation received without current user"
+            );
+
+
+            return;
+
+          }
+
+
+          if (
+            invitationUserId &&
+            invitationUserId !==
+              currentUserId
+          ) {
+
+            return;
+
+          }
+
+
+          if (
+            trainingInvitationRefreshRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          trainingInvitationRefreshRef.current =
+            true;
+
+
+          try {
+
+            console.log(
+              "[GroupCallSocketRuntime] refreshing training invitations"
+            );
+
+
+            const result =
+              await runAction(
+                "training.fetchPendingSessions"
+              );
+
+
+            console.log(
+              "[GroupCallSocketRuntime] training invitations refreshed",
+              {
+
+                sessionId:
+                  invitationSessionId,
+
+                result,
+
+              }
+            );
+
+          }
+          catch (error) {
+
+            console.error(
+              "[GroupCallSocketRuntime] training invitation refresh failed",
+              error
+            );
+
+          }
+          finally {
+
+            trainingInvitationRefreshRef.current =
+              false;
+
+          }
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    currentUserId,
+    runAction,
+  ]);
+
+
+  // ===================================================
+  // GROUP CALL ROOM SYNC
   // ===================================================
 
   useEffect(() => {
 
     if (
       callType !==
-        "group" ||
-      !joined ||
+        "group"
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      !callJoined ||
       !callId
     ) {
 
@@ -888,50 +1057,74 @@ export default function GroupCallSocketRuntime() {
     }
 
 
-    console.log(
-      "[GroupCallSocketRuntime] joining active group call",
-      {
-
-        callId,
-
-        callType,
-
-        joined,
-
-        socketConnected:
-          groupCallSocket.isConnected(),
-
-      }
-    );
-
-
     if (
-      groupCallSocket.isConnected()
+      !groupCallSocket.isConnected()
     ) {
 
-      groupCallSocket.joinCall(
-        callId
-      );
+      return;
 
     }
 
+
+    groupCallSocket.joinCall(
+      callId
+    );
+
   }, [
     callType,
-    joined,
+    callJoined,
     callId,
   ]);
 
 
   // ===================================================
-  // GROUP CALL ENDED
+  // TRAINING ROOM SYNC
   // ===================================================
-  //
-  // The server is authoritative.
-  //
-  // DO NOT call call.endGroupCall here.
-  //
-  // The server has already ended the call.
-  //
+
+  useEffect(() => {
+
+    if (
+      !trainingSessionId ||
+      !trainingJoined
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      !groupCallSocket.isConnected()
+    ) {
+
+      return;
+
+    }
+
+
+    console.log(
+      "[GroupCallSocketRuntime] joining training session",
+      {
+
+        sessionId:
+          trainingSessionId,
+
+      }
+    );
+
+
+    groupCallSocket.joinTrainingSession(
+      trainingSessionId
+    );
+
+  }, [
+    trainingSessionId,
+    trainingJoined,
+  ]);
+
+
+  // ===================================================
+  // GROUP CALL ENDED
   // ===================================================
 
   useEffect(() => {
@@ -957,12 +1150,8 @@ export default function GroupCallSocketRuntime() {
 
 
           const activeCallId =
-            activeCallIdRef.current;
+            callIdRef.current;
 
-
-          // ------------------------------------------------
-          // Ignore unrelated call.
-          // ------------------------------------------------
 
           if (
             endedCallId &&
@@ -971,13 +1160,250 @@ export default function GroupCallSocketRuntime() {
               activeCallId
           ) {
 
+            return;
+
+          }
+
+
+          if (
+            groupCallCleanupRunningRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          groupCallCleanupRunningRef.current =
+            true;
+
+
+          try {
+
             console.log(
-              "[GroupCallSocketRuntime] ignoring unrelated ended call",
+              "[GroupCallSocketRuntime] GROUP_CALL_ENDED received",
+              payload
+            );
+
+
+            groupCallSocket.leaveCall(
+              endedCallId ||
+              activeCallId
+            );
+
+
+            await agoraEngine.leaveCall();
+
+
+            runtime.patch?.(
+              "call",
               {
 
-                endedCallId,
+                id:
+                  null,
 
-                activeCallId,
+                channel:
+                  null,
+
+                type:
+                  null,
+
+                state:
+                  "ended",
+
+                joined:
+                  false,
+
+                remoteUsers:
+                  {},
+
+                participants:
+                  [],
+
+                selectedParticipantIds:
+                  [],
+
+              }
+            );
+
+
+            callIdRef.current =
+              null;
+
+
+            callJoinedRef.current =
+              false;
+
+
+            setCallId(
+              null
+            );
+
+
+            setCallJoined(
+              false
+            );
+
+          }
+          catch (error) {
+
+            console.error(
+              "[GroupCallSocketRuntime] group call cleanup failed",
+              error
+            );
+
+          }
+          finally {
+
+            groupCallCleanupRunningRef.current =
+              false;
+
+          }
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    runtime,
+  ]);
+
+
+  // ===================================================
+  // TRAINING STARTED
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "TRAINING_SESSION_STARTED",
+        async payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const startedSessionId =
+            normaliseId(
+              payload?.sessionId
+            );
+
+
+          console.log(
+            "[GroupCallSocketRuntime] TRAINING_SESSION_STARTED received",
+            {
+
+              sessionId:
+                startedSessionId,
+
+            }
+          );
+
+
+          // ------------------------------------------------
+          // We don't automatically join.
+          //
+          // fetchPendingSessions will replace the invitation
+          // state with the now-active session.
+          // ------------------------------------------------
+
+          try {
+
+            await runAction(
+              "training.fetchPendingSessions"
+            );
+
+          }
+          catch (error) {
+
+            console.error(
+              "[GroupCallSocketRuntime] training start refresh failed",
+              error
+            );
+
+          }
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    runAction,
+  ]);
+
+
+  // ===================================================
+  // TRAINING ENDED
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "TRAINING_SESSION_ENDED",
+        async payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const endedSessionId =
+            normaliseId(
+              payload?.sessionId
+            );
+
+
+          const activeSessionId =
+            trainingSessionIdRef.current;
+
+
+          // ------------------------------------------------
+          // Strict session matching.
+          //
+          // If we don't have a current session, ignore the
+          // event rather than accidentally tearing down
+          // unrelated Agora media.
+          // ------------------------------------------------
+
+          if (
+            !activeSessionId ||
+            (
+              endedSessionId &&
+              endedSessionId !==
+                activeSessionId
+            )
+          ) {
+
+            console.log(
+              "[GroupCallSocketRuntime] ignoring unrelated training end",
+              {
+
+                endedSessionId,
+
+                activeSessionId,
 
               }
             );
@@ -988,36 +1414,28 @@ export default function GroupCallSocketRuntime() {
           }
 
 
-          // ------------------------------------------------
-          // Prevent duplicate cleanup.
-          // ------------------------------------------------
-
           if (
-            cleanupRunningRef.current
+            trainingCleanupRunningRef.current
           ) {
-
-            console.log(
-              "[GroupCallSocketRuntime] cleanup already running"
-            );
-
 
             return;
 
           }
 
 
-          cleanupRunningRef.current =
+          trainingCleanupRunningRef.current =
             true;
 
 
           try {
 
             console.log(
-              "[GroupCallSocketRuntime] GROUP_CALL_ENDED received",
+              "[GroupCallSocketRuntime] TRAINING_SESSION_ENDED received",
               {
 
-                callId:
-                  endedCallId,
+                sessionId:
+                  endedSessionId ||
+                  activeSessionId,
 
                 reason:
                   payload?.reason,
@@ -1030,18 +1448,13 @@ export default function GroupCallSocketRuntime() {
 
 
             // =========================================
-            // LEAVE SOCKET ROOM
+            // LEAVE TRAINING SOCKET ROOM
             // =========================================
 
-            if (
-              endedCallId
-            ) {
-
-              groupCallSocket.leaveCall(
-                endedCallId
-              );
-
-            }
+            groupCallSocket.leaveTrainingSession(
+              endedSessionId ||
+              activeSessionId
+            );
 
 
             // =========================================
@@ -1064,7 +1477,53 @@ export default function GroupCallSocketRuntime() {
 
 
             // =========================================
-            // CLEAR RUNTIME CALL STATE
+            // CLEAR TRAINING STATE
+            // =========================================
+
+            runtime.patch?.(
+              "training",
+              {
+
+                sessionId:
+                  null,
+
+                channel:
+                  null,
+
+                status:
+                  "ended",
+
+                joined:
+                  false,
+
+                participant:
+                  null,
+
+                participantIds:
+                  [],
+
+                participants:
+                  [],
+
+                pendingSession:
+                  null,
+
+                pendingSessions:
+                  [],
+
+                hasPendingSession:
+                  false,
+
+                endedAt:
+                  payload?.endedAt ||
+                  Date.now(),
+
+              }
+            );
+
+
+            // =========================================
+            // CLEAR LEGACY CALL STATE
             // =========================================
 
             runtime.patch?.(
@@ -1099,12 +1558,35 @@ export default function GroupCallSocketRuntime() {
             );
 
 
+            // =========================================
+            // UPDATE LOCAL REFS
+            // =========================================
+
+            trainingSessionIdRef.current =
+              null;
+
+
+            trainingJoinedRef.current =
+              false;
+
+
+            setTrainingSessionId(
+              null
+            );
+
+
+            setTrainingJoined(
+              false
+            );
+
+
             console.log(
-              "[GroupCallSocketRuntime] group call cleanup complete",
+              "[GroupCallSocketRuntime] training cleanup complete",
               {
 
-                callId:
-                  endedCallId,
+                sessionId:
+                  endedSessionId ||
+                  activeSessionId,
 
               }
             );
@@ -1113,14 +1595,14 @@ export default function GroupCallSocketRuntime() {
           catch (error) {
 
             console.error(
-              "[GroupCallSocketRuntime] GROUP_CALL_ENDED handling failed",
+              "[GroupCallSocketRuntime] training cleanup failed",
               error
             );
 
           }
           finally {
 
-            cleanupRunningRef.current =
+            trainingCleanupRunningRef.current =
               false;
 
           }
@@ -1141,22 +1623,15 @@ export default function GroupCallSocketRuntime() {
 
 
   // ===================================================
-  // PARTICIPANT LEFT
-  // ===================================================
-  //
-  // AgoraEngine owns the actual remote media removal.
-  //
-  // We refresh application-level participant state so
-  // the runtime sees the authoritative server state.
-  //
+  // TRAINING PARTICIPANT LEFT
   // ===================================================
 
   useEffect(() => {
 
     const unsubscribe =
       groupCallSocket.on(
-        "GROUP_CALL_PARTICIPANT_LEFT",
-        async payload => {
+        "TRAINING_SESSION_PARTICIPANT_LEFT",
+        payload => {
 
           if (
             !mountedRef.current
@@ -1167,30 +1642,23 @@ export default function GroupCallSocketRuntime() {
           }
 
 
-          const eventCallId =
+          const eventSessionId =
             normaliseId(
-              payload?.callId
+              payload?.sessionId
             );
 
 
-          const activeCallId =
-            activeCallIdRef.current;
+          const activeSessionId =
+            trainingSessionIdRef.current;
 
 
           if (
-            eventCallId &&
-            activeCallId &&
-            eventCallId !==
-              activeCallId
-          ) {
-
-            return;
-
-          }
-
-
-          if (
-            !activeCallId
+            !activeSessionId ||
+            (
+              eventSessionId &&
+              eventSessionId !==
+                activeSessionId
+            )
           ) {
 
             return;
@@ -1199,11 +1667,11 @@ export default function GroupCallSocketRuntime() {
 
 
           console.log(
-            "[GroupCallSocketRuntime] participant left",
+            "[GroupCallSocketRuntime] TRAINING participant left",
             {
 
-              callId:
-                activeCallId,
+              sessionId:
+                activeSessionId,
 
               userId:
                 payload?.userId,
@@ -1212,41 +1680,14 @@ export default function GroupCallSocketRuntime() {
           );
 
 
-          try {
-
-            const result =
-              await runAction(
-                "call.refreshGroupCall",
-                {
-
-                  callId:
-                    activeCallId,
-
-                }
-              );
-
-
-            console.log(
-              "[GroupCallSocketRuntime] participant state refreshed",
-              {
-
-                callId:
-                  activeCallId,
-
-                result,
-
-              }
-            );
-
-          }
-          catch (error) {
-
-            console.error(
-              "[GroupCallSocketRuntime] participant refresh failed",
-              error
-            );
-
-          }
+          // ------------------------------------------------
+          // We deliberately do not manipulate Agora here.
+          //
+          // AgoraEngine owns media lifecycle.
+          //
+          // The event is available for future participant
+          // state reconciliation.
+          // ------------------------------------------------
 
         }
       );
@@ -1258,9 +1699,7 @@ export default function GroupCallSocketRuntime() {
 
     };
 
-  }, [
-    runAction,
-  ]);
+  }, []);
 
 
   // ===================================================
@@ -1298,7 +1737,11 @@ export default function GroupCallSocketRuntime() {
 
       callType,
 
-      joined,
+      callJoined,
+
+      trainingSessionId,
+
+      trainingJoined,
 
       connected:
         groupCallSocket.isConnected(),
