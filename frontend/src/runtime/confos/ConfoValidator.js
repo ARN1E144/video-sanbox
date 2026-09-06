@@ -5,6 +5,9 @@ import {
   getActionByValue,
 } from "../../actions/getActionByValue";
 
+import domainRegistry
+  from "../contracts/domains/domainRegistry";
+
 
 // =====================================================
 // CONFO VALIDATOR
@@ -181,6 +184,10 @@ function validateCapabilities(
   warnings
 ) {
 
+  // ---------------------------------------------------
+  // Missing
+  // ---------------------------------------------------
+
   if (
     capabilities ===
     undefined
@@ -195,15 +202,68 @@ function validateCapabilities(
   }
 
 
+  // ---------------------------------------------------
+  // Current format
+  //
+  // capabilities: [
+  //   "compliance",
+  //   "video"
+  // ]
+  // ---------------------------------------------------
+
   if (
-    capabilities ===
-    null ||
-    typeof capabilities !==
-    "object"
+    Array.isArray(
+      capabilities
+    )
   ) {
 
-    errors.push(
-      "capabilities must be an object."
+    capabilities.forEach(
+      capability => {
+
+        if (
+          typeof capability !==
+          "string"
+        ) {
+
+          errors.push(
+            "Each capability must be a string."
+          );
+
+          return;
+
+        }
+
+
+        const normalizedCapability =
+          capability.trim().toLowerCase();
+
+
+        if (
+          !normalizedCapability
+        ) {
+
+          errors.push(
+            "Capability cannot be empty."
+          );
+
+          return;
+
+        }
+
+
+        if (
+          !domainRegistry[
+            normalizedCapability
+          ]
+        ) {
+
+          warnings.push(
+            `Unknown capability '${capability}'.`
+          );
+
+        }
+
+      }
     );
 
     return;
@@ -211,32 +271,58 @@ function validateCapabilities(
   }
 
 
+  // ---------------------------------------------------
+  // Legacy capability object
+  //
+  // Keep this temporarily so existing Confos
+  // don't break.
+  // ---------------------------------------------------
+
   if (
-    capabilities.maxParticipants !==
-    undefined &&
-    typeof capabilities.maxParticipants !==
-    "number"
+    typeof capabilities ===
+    "object" &&
+    capabilities !== null
   ) {
 
-    warnings.push(
-      "capabilities.maxParticipants should be a number."
-    );
+    if (
+      capabilities.maxParticipants !==
+      undefined &&
+      typeof capabilities.maxParticipants !==
+      "number"
+    ) {
+
+      warnings.push(
+        "capabilities.maxParticipants should be a number."
+      );
+
+    }
+
+
+    if (
+      capabilities.roles &&
+      !Array.isArray(
+        capabilities.roles
+      )
+    ) {
+
+      errors.push(
+        "capabilities.roles must be an array."
+      );
+
+    }
+
+    return;
 
   }
 
 
-  if (
-    capabilities.roles &&
-    !Array.isArray(
-      capabilities.roles
-    )
-  ) {
+  // ---------------------------------------------------
+  // Invalid
+  // ---------------------------------------------------
 
-    errors.push(
-      "capabilities.roles must be an array."
-    );
-
-  }
+  errors.push(
+    "capabilities must be an array."
+  );
 
 }
 
@@ -631,109 +717,40 @@ function validateContract(
   }
 
 
-  // ===================================================
-  // CONTRACT ACTIONS
-  // ===================================================
-  //
-  // Example:
-  //
-  // actions: [
-  //   "interview.start",
-  //   "interview.complete"
-  // ]
-  //
-  // Every action declared by the component contract
-  // must exist in the runtime action registry.
-  //
-  // ===================================================
+  // =====================================================
+// CONTRACT ACTIONS
+// =====================================================
 
   const contractActions =
-    Array.isArray(
-      contract.actions
-    )
+    Array.isArray(contract.actions)
       ? contract.actions
-      : [];
+      : Array.isArray(contract.actions?.inputs)
+        ? contract.actions.inputs
+        : [];
 
+  contractActions.forEach(actionName => {
 
-  const actionSet =
-    new Set();
+    const normalizedActionName =
+      typeof actionName === "string"
+        ? actionName.trim()
+        : "";
 
+    if (!normalizedActionName) {
+      return;
+    }
 
-  contractActions.forEach(
-    (
-      actionName,
-      index
-    ) => {
+    const registered =
+      getActionByValue(normalizedActionName);
 
-      // ------------------------------------------------
-      // Validate action name
-      // ------------------------------------------------
+    if (!registered) {
 
-      if (
-        typeof actionName !==
-        "string" ||
-        !actionName.trim()
-      ) {
-
-        errors.push(
-          `${node.id}: Contract action ${index} is invalid.`
-        );
-
-        return;
-
-      }
-
-
-      const normalizedActionName =
-        actionName.trim();
-
-
-      // ------------------------------------------------
-      // Duplicate action
-      // ------------------------------------------------
-
-      if (
-        actionSet.has(
-          normalizedActionName
-        )
-      ) {
-
-        warnings.push(
-          `${node.id}: Contract contains duplicate action '${normalizedActionName}'.`
-        );
-
-        return;
-
-      }
-
-
-      actionSet.add(
-        normalizedActionName
+      errors.push(
+        `Contract action "${normalizedActionName}" is not registered`
       );
 
-
-      // ------------------------------------------------
-      // Runtime registration
-      // ------------------------------------------------
-
-      const registered =
-        getActionByValue(
-          normalizedActionName
-        );
-
-
-      if (
-        !registered
-      ) {
-
-        errors.push(
-          `${node.id}: Contract action '${normalizedActionName}' is not registered in the runtime action registry.`
-        );
-
-      }
-
     }
-  );
+
+  });
 
 
   // ===================================================

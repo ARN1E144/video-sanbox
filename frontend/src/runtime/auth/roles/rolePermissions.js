@@ -177,6 +177,18 @@ export const ROLE_PERMISSIONS = {
 
       "training.endSession",
 
+      // =================================================
+      // Compliance
+      // =================================================
+      
+      "compliance.load",
+
+      "compliance.requestEvidence",
+
+      "compliance.uploadEvidence",
+      
+      "compliance.analyseEvidence",
+
     ],
 
   },

@@ -87,6 +87,14 @@ const AVAILABLE_CONFOS = [
       "AI Video Interviewer",
   },
 
+    {
+    id:
+      "confo.compliance",
+
+    name:
+      "AI Compliance / ISO Management",
+  },
+
 ];
 
 

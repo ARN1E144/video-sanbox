@@ -40,12 +40,18 @@ console.log(
 const router =
   express.Router();
 
+
 router.use(
-  (req, res, next) => {
+  (
+    req,
+    res,
+    next
+  ) => {
 
     console.log(
       "[GroupCalls] ROUTE REQUEST",
       {
+
         method:
           req.method,
 
@@ -58,10 +64,12 @@ router.use(
       }
     );
 
+
     next();
 
   }
 );
+
 
 // =====================================================
 // CONFIG
@@ -81,6 +89,7 @@ const MAX_PENDING_INVITATIONS =
 // HELPERS
 // =====================================================
 
+
 // =====================================================
 // VALID OBJECT ID
 // =====================================================
@@ -92,6 +101,36 @@ function isValidObjectId(
   return mongoose.isValidObjectId(
     value
   );
+
+}
+
+
+// =====================================================
+// NORMALISE SINGLE ID
+// =====================================================
+
+function normaliseId(
+  value
+) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  const result =
+    String(
+      value
+    ).trim();
+
+
+  return result ||
+    null;
 
 }
 
@@ -122,9 +161,9 @@ function normaliseIds(
 
         .map(
           id =>
-            String(
+            normaliseId(
               id
-            ).trim()
+            )
         )
 
         .filter(
@@ -461,19 +500,9 @@ async function findGroupCall({
 // RECONCILE INVITATION EXPIRY
 // =====================================================
 //
-// IMPORTANT:
+// This reconciles invitation expiry only.
 //
-// This only reconciles invitation expiry.
-//
-// It NEVER kills an active group call.
-//
-// Group calls have:
-//
-//   expiresAt = null
-//
-// and:
-//
-//   invitationExpiresAt = +15 minutes
+// It does NOT end an active group call.
 //
 // =====================================================
 
@@ -675,10 +704,6 @@ async function enrichParticipants(
 
             : null,
 
-        // -------------------------------------------------
-        // Preserve any additional participant metadata.
-        // -------------------------------------------------
-
         ...(
           raw &&
           typeof raw ===
@@ -769,6 +794,144 @@ async function enrichCall(
 
 
 // =====================================================
+// EMIT GROUP CALL INVITATIONS
+// =====================================================
+//
+// Shared realtime helper used by:
+//
+//   - initial call creation
+//   - later invite / re-invite
+//
+// MongoDB remains authoritative for invitation state.
+//
+// =====================================================
+
+function emitGroupCallInvitations({
+  namespace,
+  callId,
+  userIds,
+  invitedBy,
+  reason = "invited",
+  createdAt = null,
+}) {
+
+  if (
+    !namespace
+  ) {
+
+    console.warn(
+      "[GroupCalls] Cannot emit invitations - namespace unavailable",
+      {
+
+        callId,
+
+        userIds,
+
+        reason,
+
+      }
+    );
+
+
+    return {
+
+      emitted:
+        false,
+
+      count:
+        0,
+
+    };
+
+  }
+
+
+  const invitationUserIds =
+    normaliseIds(
+      userIds
+    );
+
+
+  if (
+    invitationUserIds.length ===
+      0
+  ) {
+
+    return {
+
+      emitted:
+        false,
+
+      count:
+        0,
+
+    };
+
+  }
+
+
+  const timestamp =
+    createdAt ||
+    now();
+
+
+  invitationUserIds.forEach(
+    userId => {
+
+      const payload = {
+
+        callId:
+          String(
+            callId
+          ),
+
+        userId:
+          String(
+            userId
+          ),
+
+        invitedBy:
+          normaliseId(
+            invitedBy
+          ),
+
+        reason,
+
+        createdAt:
+          timestamp,
+
+      };
+
+
+      namespace.emit(
+        "group-call:invited",
+        payload
+      );
+
+
+      console.log(
+        "[GroupCalls] GROUP_CALL_INVITED",
+        payload
+      );
+
+    }
+  );
+
+
+  return {
+
+    emitted:
+      true,
+
+    count:
+      invitationUserIds.length,
+
+  };
+
+}
+
+
+// =====================================================
 // 1. CREATE GROUP CALL
 // =====================================================
 //
@@ -832,7 +995,7 @@ router.post(
 
       if (
         participantIds.length ===
-        0
+          0
       ) {
 
         return res
@@ -849,7 +1012,7 @@ router.post(
 
       if (
         participantIds.length >
-        MAX_INVITEES
+          MAX_INVITEES
       ) {
 
         return res
@@ -882,7 +1045,7 @@ router.post(
 
       if (
         inviteeIds.length ===
-        0
+          0
       ) {
 
         return res
@@ -980,16 +1143,7 @@ router.post(
 
 
       // =================================================
-      // INVITATION EXPIRY ONLY
-      // =================================================
-      //
-      // IMPORTANT:
-      //
-      // This is NOT the call expiry.
-      //
-      // The call itself remains alive until explicitly
-      // ended by lifecycle rules.
-      //
+      // INVITATION EXPIRY
       // =================================================
 
       const invitationExpiresAt =
@@ -1013,16 +1167,6 @@ router.post(
         // -----------------------------------------------
         // HOST
         // -----------------------------------------------
-        //
-        // The host has accepted the call but has not yet
-        // completed the Agora join.
-        //
-        // joinGroupCall() will transition:
-        //
-        // accepted → joined
-        //
-        // and assign the real Agora UID.
-        //
 
         buildParticipant({
 
@@ -1097,27 +1241,106 @@ router.post(
 
           participants,
 
-          // ---------------------------------------------
-          // NO HARD GROUP CALL EXPIRY.
-          // ---------------------------------------------
-
           expiresAt:
             null,
-
-          // ---------------------------------------------
-          // ONLY INVITATION EXPIRY.
-          // ---------------------------------------------
 
           invitationExpiresAt,
 
         });
 
 
+      // =================================================
+      // ENRICH
+      // =================================================
+
       const enriched =
         await enrichCall(
           call
         );
 
+
+      // =================================================
+      // SOCKET.IO — INITIAL INVITATIONS
+      // =================================================
+      //
+      // IMPORTANT:
+      //
+      // The helper result is captured before it is used
+      // for diagnostic logging.
+      //
+      // This prevents invitationResult from being
+      // undefined and causing the entire request to
+      // return HTTP 500 after the call was already
+      // created.
+      //
+      // =================================================
+
+      const io =
+        req.app?.get?.(
+          "io"
+        ) ||
+        null;
+
+
+      const namespace =
+        io
+          ? io.of(
+              "/group-calls"
+            )
+          : null;
+
+
+      let invitationResult = {
+
+        emitted:
+          false,
+
+        count:
+          0,
+
+      };
+
+
+      try {
+
+        invitationResult =
+          emitGroupCallInvitations({
+
+            namespace,
+
+            callId:
+              String(
+                call._id
+              ),
+
+            userIds:
+              inviteeIds,
+
+            invitedBy:
+              creatorId,
+
+            reason:
+              "invited",
+
+            createdAt:
+              timestamp,
+
+          });
+
+      }
+      catch (socketError) {
+
+        console.error(
+          "[GroupCalls] Initial invitation socket emission failed",
+          socketError
+        );
+
+      }
+
+
+      // =================================================
+      // DEBUG
+      // =================================================
 
       console.log(
         "[GroupCalls] Group call created",
@@ -1145,9 +1368,19 @@ router.post(
           inviteeCount:
             inviteeIds.length,
 
+          socketInvitationsEmitted:
+            invitationResult.emitted,
+
+          socketInvitationCount:
+            invitationResult.count,
+
         }
       );
 
+
+      // =================================================
+      // RESPONSE
+      // =================================================
 
       return res
         .status(201)
@@ -1235,7 +1468,7 @@ router.post(
 
 
       // =================================================
-      // RECONCILE INVITATIONS
+      // RECONCILE
       // =================================================
 
       await reconcileInvitationExpiry(
@@ -1318,7 +1551,7 @@ router.post(
 
 
       // =================================================
-      // NORMALISE REQUEST
+      // REQUEST
       // =================================================
 
       const userIds =
@@ -1329,7 +1562,7 @@ router.post(
 
       if (
         userIds.length ===
-        0
+          0
       ) {
 
         return res
@@ -1346,7 +1579,7 @@ router.post(
 
       if (
         userIds.length >
-        MAX_INVITEES
+          MAX_INVITEES
       ) {
 
         return res
@@ -1383,7 +1616,7 @@ router.post(
 
       if (
         inviteeIds.length ===
-        0
+          0
       ) {
 
         return res
@@ -1496,7 +1729,7 @@ router.post(
 
 
       // =================================================
-      // PROCESS INVITEES
+      // PROCESS
       // =================================================
 
       for (
@@ -1516,9 +1749,9 @@ router.post(
           );
 
 
-        // =============================================
-        // NEW PARTICIPANT
-        // =============================================
+        // ---------------------------------------------
+        // NEW
+        // ---------------------------------------------
 
         if (
           !existingParticipant
@@ -1527,9 +1760,7 @@ router.post(
           const participant =
             buildParticipant({
 
-              userId:
-
-                userId,
+              userId,
 
               status:
                 "invited",
@@ -1565,9 +1796,9 @@ router.post(
           existingParticipant.status;
 
 
-        // =============================================
+        // ---------------------------------------------
         // CURRENTLY ACTIVE / INVITED
-        // =============================================
+        // ---------------------------------------------
 
         if (
           [
@@ -1594,9 +1825,9 @@ router.post(
         }
 
 
-        // =============================================
+        // ---------------------------------------------
         // RE-INVITE DECLINED
-        // =============================================
+        // ---------------------------------------------
 
         if (
           status ===
@@ -1635,9 +1866,9 @@ router.post(
         }
 
 
-        // =============================================
+        // ---------------------------------------------
         // RE-INVITE LEFT
-        // =============================================
+        // ---------------------------------------------
 
         if (
           status ===
@@ -1676,9 +1907,9 @@ router.post(
         }
 
 
-        // =============================================
+        // ---------------------------------------------
         // UNKNOWN
-        // =============================================
+        // ---------------------------------------------
 
         skipped.push({
 
@@ -1705,7 +1936,7 @@ router.post(
 
       if (
         changedCount ===
-        0
+          0
       ) {
 
         const enriched =
@@ -1742,14 +1973,6 @@ router.post(
       // =================================================
       // FRESH INVITATION EXPIRY
       // =================================================
-      //
-      // IMPORTANT:
-      //
-      // Re-invite does NOT restart the call lifetime.
-      //
-      // It only creates a new 15-minute invitation window.
-      //
-      // =================================================
 
       const freshInvitationExpiresAt =
         new Date(
@@ -1767,14 +1990,9 @@ router.post(
         freshInvitationExpiresAt;
 
 
-      // Explicitly preserve no hard group-call expiry.
-
       call.expiresAt =
         null;
 
-
-      // A ringing call becomes active once the host is
-      // already participating / re-inviting.
 
       if (
         call.status ===
@@ -1822,67 +2040,29 @@ router.post(
         ];
 
 
-      if (
-        namespace &&
-        invitationUserIds.length
-      ) {
+      const invitationResult =
+        emitGroupCallInvitations({
 
-        for (
-          const userId of
-            invitationUserIds
-        ) {
+          namespace,
 
-          namespace.emit(
-            "group-call:invited",
-            {
+          callId:
+            String(
+              call._id
+            ),
 
-              callId:
-                String(
-                  call._id
-                ),
+          userIds:
+            invitationUserIds,
 
-              userId:
-                String(
-                  userId
-                ),
+          invitedBy:
+            inviterId,
 
-              invitedBy:
-                inviterId,
+          reason:
+            "invited",
 
-              reason:
-                added.includes(
-                  String(
-                    userId
-                  )
-                )
-                  ? "invited"
-                  : "reinvited",
+          createdAt:
+            timestamp,
 
-              createdAt:
-                timestamp,
-
-            }
-          );
-
-        }
-
-
-        console.log(
-          "[GroupCalls] GROUP_CALL_INVITED emitted",
-          {
-
-            callId:
-              String(
-                call._id
-              ),
-
-            invitedUsers:
-              invitationUserIds,
-
-          }
-        );
-
-      }
+        });
 
 
       // =================================================
@@ -1912,12 +2092,24 @@ router.post(
 
           changedCount,
 
+          invitationUserIds,
+
+          socketInvitationsEmitted:
+            invitationResult.emitted,
+
+          socketInvitationCount:
+            invitationResult.count,
+
           invitationExpiresAt:
             freshInvitationExpiresAt,
 
         }
       );
 
+
+      // =================================================
+      // RESPONSE
+      // =================================================
 
       return res.json({
 
@@ -1994,7 +2186,7 @@ router.get(
 
 
       // =================================================
-      // FIND CURRENTLY INVITED PARTICIPANTS
+      // FIND INVITED PARTICIPANTS
       // =================================================
 
       const calls =
@@ -2078,7 +2270,8 @@ router.get(
 
         if (
           lifecycle?.invitationExpired &&
-          lifecycle.closedCount > 0
+          lifecycle.closedCount >
+            0
         ) {
 
           continue;
@@ -2206,10 +2399,6 @@ router.get(
 
                 createdAt:
                   call.createdAt,
-
-                // -----------------------------------------
-                // No hard group-call expiry.
-                // -----------------------------------------
 
                 expiresAt:
                   null,
@@ -2368,7 +2557,7 @@ router.post(
 
 
       // =================================================
-      // EXPLICIT INVITATION EXPIRY CHECK
+      // EXPLICIT EXPIRY
       // =================================================
 
       const timestamp =
@@ -3295,12 +3484,11 @@ router.post(
             }
           );
 
-
       }
 
 
       // =================================================
-      // NORMAL PARTICIPANT LEFT
+      // PARTICIPANT LEFT
       // =================================================
 
       if (
@@ -3523,7 +3711,7 @@ router.post(
 
 
       // =================================================
-      // SHARED END LIFECYCLE
+      // END LIFECYCLE
       // =================================================
 
       const lifecycle =
@@ -3646,6 +3834,10 @@ router.post(
 
       }
 
+
+      // =================================================
+      // RESULT
+      // =================================================
 
       console.log(
         "[GroupCalls] Group call ended",

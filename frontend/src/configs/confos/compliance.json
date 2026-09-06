@@ -1,0 +1,17 @@
+{
+  "id": "test.compliance",
+  "name": "Compliance Test",
+  "version": 1,
+  "type": "confo",
+
+  "capabilities": [
+    "compliance"
+  ],
+
+  "tree": {
+    "id": "root",
+    "type": "Container",
+    "props": {},
+    "children": []
+  }
+}

@@ -46,6 +46,40 @@ function isValidObjectId(
 }
 
 
+// =====================================================
+// NORMALISE ID
+// =====================================================
+
+function normaliseId(
+  value
+) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  const result =
+    String(
+      value
+    ).trim();
+
+
+  return result ||
+    null;
+
+}
+
+
+// =====================================================
+// TRAINING CHANNEL
+// =====================================================
+
 function makeTrainingChannelName({
   tenantId,
   hostUserId,
@@ -70,6 +104,87 @@ function makeTrainingChannelName({
 }
 
 
+// =====================================================
+// TRAINING SOCKET NAMESPACE
+// =====================================================
+//
+// Group calls and training share the same Socket.IO
+// namespace, but use separate rooms/events.
+//
+// =====================================================
+
+function getTrainingNamespace(
+  req
+) {
+
+  const io =
+    req.app?.get?.(
+      "io"
+    );
+
+
+  if (
+    !io
+  ) {
+
+    return null;
+
+  }
+
+
+  return io.of(
+    "/group-calls"
+  );
+
+}
+
+
+// =====================================================
+// TRAINING ROOM
+// =====================================================
+
+function getTrainingRoom(
+  sessionId
+) {
+
+  return (
+    `training-session:${String(
+      sessionId
+    )}`
+  );
+
+}
+
+
+// =====================================================
+// USER ROOM
+// =====================================================
+//
+// Used for invitations.
+//
+// Every authenticated socket joins:
+//
+//   user:<userId>
+//
+// =====================================================
+
+function getUserRoom(
+  userId
+) {
+
+  return (
+    `user:${String(
+      userId
+    )}`
+  );
+
+}
+
+
+// =====================================================
+// LOAD MEMBERSHIP
+// =====================================================
+
 async function loadMembership(
   req
 ) {
@@ -87,6 +202,10 @@ async function loadMembership(
 }
 
 
+// =====================================================
+// SERIALISE SESSION
+// =====================================================
+
 function serialiseSession(
   session
 ) {
@@ -94,39 +213,245 @@ function serialiseSession(
   return {
 
     id:
-      String(
-        session._id
+      normaliseId(
+        session?._id ||
+        session?.id
       ),
 
     tenantId:
-      String(
-        session.tenantId
+      normaliseId(
+        session?.tenantId
       ),
 
     hostUserId:
-      String(
-        session.hostUserId
+      normaliseId(
+        session?.hostUserId
       ),
 
     channelName:
-      session.channelName,
+      session?.channelName ||
+      null,
 
     status:
-      session.status,
+      session?.status ||
+      null,
 
     createdAt:
-      session.createdAt ||
+      session?.createdAt ||
       null,
 
     startedAt:
-      session.startedAt ||
+      session?.startedAt ||
       null,
 
     endedAt:
-      session.endedAt ||
+      session?.endedAt ||
+      null,
+
+    invitationExpiresAt:
+      session?.invitationExpiresAt ||
+      null,
+
+    expiredAt:
+      session?.expiredAt ||
       null,
 
   };
+
+}
+
+
+// =====================================================
+// SERIALISE PARTICIPANT
+// =====================================================
+
+function serialiseParticipant(
+  participant,
+  user = null
+) {
+
+  if (
+    !participant
+  ) {
+
+    return null;
+
+  }
+
+
+  return {
+
+    id:
+      normaliseId(
+        participant?._id ||
+        participant?.id
+      ),
+
+    userId:
+      normaliseId(
+        participant?.userId
+      ),
+
+    sessionId:
+      normaliseId(
+        participant?.sessionId
+      ),
+
+    status:
+      participant?.status ||
+      null,
+
+    invitedAt:
+      participant?.invitedAt ||
+      null,
+
+    acceptedAt:
+      participant?.acceptedAt ||
+      null,
+
+    declinedAt:
+      participant?.declinedAt ||
+      null,
+
+    joinedAt:
+      participant?.joinedAt ||
+      null,
+
+    leftAt:
+      participant?.leftAt ||
+      null,
+
+    user:
+      user
+        ? {
+
+            id:
+              normaliseId(
+                user?._id ||
+                user?.id
+              ),
+
+            firstName:
+              user?.firstName ||
+              "",
+
+            lastName:
+              user?.lastName ||
+              "",
+
+            email:
+              user?.email ||
+              "",
+
+          }
+        : undefined,
+
+  };
+
+}
+
+
+// =====================================================
+// EMIT TRAINING INVITATION
+// =====================================================
+//
+// Sends the invitation directly to the intended user.
+//
+// The TrainingInvitation component then performs an
+// authoritative REST refresh.
+//
+// Polling remains as fallback.
+//
+// =====================================================
+
+function emitTrainingInvitation(
+  namespace,
+  {
+    session,
+    participant,
+    hostUserId,
+  }
+) {
+
+  if (
+    !namespace ||
+    !session ||
+    !participant
+  ) {
+
+    return false;
+
+  }
+
+
+  const sessionId =
+    normaliseId(
+      session?._id ||
+      session?.id
+    );
+
+
+  const userId =
+    normaliseId(
+      participant?.userId
+    );
+
+
+  if (
+    !sessionId ||
+    !userId
+  ) {
+
+    return false;
+
+  }
+
+
+  const payload = {
+
+    sessionId,
+
+    userId,
+
+    invitedBy:
+      normaliseId(
+        hostUserId
+      ),
+
+    reason:
+      "session-created",
+
+  };
+
+
+  namespace
+    .to(
+      getUserRoom(
+        userId
+      )
+    )
+    .emit(
+      "training-session:invited",
+      payload
+    );
+
+
+  console.log(
+    "[Training] TRAINING_SESSION_INVITED emitted",
+    {
+
+      ...payload,
+
+      room:
+        getUserRoom(
+          userId
+        ),
+
+    }
+  );
+
+
+  return true;
 
 }
 
@@ -137,25 +462,16 @@ function serialiseSession(
 //
 // POST /api/training/sessions
 //
-// Body:
-//
-// {
-//   participantIds: [
-//     "userId1",
-//     "userId2"
-//   ]
-// }
-//
 // Creates:
 //
 //   TrainingSession
 //   TrainingParticipant[]
 //
-// Initial state:
+// Initial session state:
 //
 //   inviting
 //
-// No Agora join happens here.
+// No Agora work occurs here.
 //
 // =====================================================
 
@@ -171,10 +487,15 @@ router.post(
     try {
 
       const hostUserId =
-        req.user.userId;
+        normaliseId(
+          req.user.userId
+        );
+
 
       const tenantId =
-        req.user.tenantId;
+        normaliseId(
+          req.user.tenantId
+        );
 
 
       // =================================================
@@ -195,8 +516,14 @@ router.post(
           .status(403)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Host is not a member of this tenant",
+              "HOST_NOT_TENANT_MEMBER",
+
+            message:
+              "Host is not a member of this tenant.",
 
           });
 
@@ -216,19 +543,18 @@ router.post(
 
 
       // =================================================
-      // NORMALISE + DEDUPLICATE
+      // NORMALISE
       // =================================================
 
       const participantIds = [
         ...new Set(
 
           rawParticipantIds
+
             .map(
-              id =>
-                String(
-                  id
-                ).trim()
+              normaliseId
             )
+
             .filter(Boolean)
 
         ),
@@ -236,7 +562,7 @@ router.post(
 
 
       // =================================================
-      // VALIDATE SIZE
+      // REQUIRE PARTICIPANTS
       // =================================================
 
       if (
@@ -248,13 +574,23 @@ router.post(
           .status(400)
           .json({
 
+            ok:
+              false,
+
             error:
-              "At least one participant is required",
+              "TRAINING_PARTICIPANTS_REQUIRED",
+
+            message:
+              "At least one participant is required.",
 
           });
 
       }
 
+
+      // =================================================
+      // SIZE
+      // =================================================
 
       if (
         participantIds.length >
@@ -265,8 +601,14 @@ router.post(
           .status(400)
           .json({
 
+            ok:
+              false,
+
             error:
-              `A maximum of ${MAX_SESSION_PARTICIPANTS} participants is allowed`,
+              "TRAINING_PARTICIPANT_LIMIT_EXCEEDED",
+
+            message:
+              `A maximum of ${MAX_SESSION_PARTICIPANTS} participants is allowed.`,
 
           });
 
@@ -274,7 +616,7 @@ router.post(
 
 
       // =================================================
-      // VALIDATE IDS
+      // OBJECT IDS
       // =================================================
 
       const invalidParticipantIds =
@@ -295,8 +637,11 @@ router.post(
           .status(400)
           .json({
 
+            ok:
+              false,
+
             error:
-              "One or more participant IDs are invalid",
+              "INVALID_TRAINING_PARTICIPANT_IDS",
 
             invalidParticipantIds,
 
@@ -309,37 +654,31 @@ router.post(
       // HOST CANNOT BE PARTICIPANT
       // =================================================
 
-      const hostIsSelected =
+      if (
         participantIds.some(
           id =>
-            String(
-              id
-            ) ===
-            String(
-              hostUserId
-            )
-        );
-
-
-      if (
-        hostIsSelected
+            id ===
+            hostUserId
+        )
       ) {
 
         return res
           .status(400)
           .json({
 
+            ok:
+              false,
+
             error:
-              "The host cannot be selected as a participant",
+              "TRAINING_HOST_SELECTED",
+
+            message:
+              "The host cannot be selected as a training participant.",
 
           });
 
       }
 
-
-      // =================================================
-      // PARTICIPANT OBJECT IDS
-      // =================================================
 
       const participantObjectIds =
         participantIds.map(
@@ -377,7 +716,7 @@ router.post(
           memberships.map(
             membership => [
 
-              String(
+              normaliseId(
                 membership.userId
               ),
 
@@ -391,11 +730,9 @@ router.post(
 
       const missingMembershipIds =
         participantIds.filter(
-          id =>
+          participantId =>
             !membershipMap.has(
-              String(
-                id
-              )
+              participantId
             )
         );
 
@@ -409,8 +746,11 @@ router.post(
           .status(403)
           .json({
 
+            ok:
+              false,
+
             error:
-              "One or more participants are not members of this tenant",
+              "TRAINING_PARTICIPANT_NOT_TENANT_MEMBER",
 
             participantIds:
               missingMembershipIds,
@@ -445,7 +785,7 @@ router.post(
           users.map(
             user => [
 
-              String(
+              normaliseId(
                 user._id
               ),
 
@@ -459,11 +799,9 @@ router.post(
 
       const missingUserIds =
         participantIds.filter(
-          id =>
+          participantId =>
             !userMap.has(
-              String(
-                id
-              )
+              participantId
             )
         );
 
@@ -477,8 +815,11 @@ router.post(
           .status(404)
           .json({
 
+            ok:
+              false,
+
             error:
-              "One or more participant users could not be found",
+              "TRAINING_USERS_NOT_FOUND",
 
             participantIds:
               missingUserIds,
@@ -522,7 +863,7 @@ router.post(
 
 
       // =================================================
-      // CREATE PARTICIPANTS
+      // PARTICIPANTS
       // =================================================
 
       const invitedAt =
@@ -585,22 +926,83 @@ router.post(
 
 
       // =================================================
+      // REALTIME INVITATIONS
+      // =================================================
+
+      const namespace =
+        getTrainingNamespace(
+          req
+        );
+
+
+      if (
+        namespace
+      ) {
+
+        participants.forEach(
+          participant => {
+
+            emitTrainingInvitation(
+              namespace,
+              {
+
+                session,
+
+                participant,
+
+                hostUserId,
+
+              }
+            );
+
+          }
+        );
+
+      }
+      else {
+
+        console.warn(
+          "[Training] Socket.IO namespace unavailable while creating invitations"
+        );
+
+      }
+
+
+      // =================================================
       // RESPONSE
       // =================================================
+
+      const serialisedParticipants =
+        participants.map(
+          participant => {
+
+            const user =
+              userMap.get(
+                normaliseId(
+                  participant.userId
+                )
+              );
+
+
+            return serialiseParticipant(
+              participant,
+              user
+            );
+
+          }
+        );
+
 
       console.log(
         "[Training] Session created",
         {
 
           sessionId:
-            String(
+            normaliseId(
               session._id
             ),
 
-          hostUserId:
-            String(
-              hostUserId
-            ),
+          hostUserId,
 
           channelName,
 
@@ -627,74 +1029,7 @@ router.post(
             ),
 
           participants:
-            participants.map(
-              participant => {
-
-                const user =
-                  userMap.get(
-                    String(
-                      participant.userId
-                    )
-                  );
-
-
-                return {
-
-                  id:
-                    String(
-                      participant._id
-                    ),
-
-                  userId:
-                    String(
-                      participant.userId
-                    ),
-
-                  sessionId:
-                    String(
-                      participant.sessionId
-                    ),
-
-                  status:
-                    participant.status,
-
-                  invitedAt:
-                    participant.invitedAt ||
-                    null,
-
-                  joinedAt:
-                    participant.joinedAt ||
-                    null,
-
-                  leftAt:
-                    participant.leftAt ||
-                    null,
-
-                  user: {
-
-                    id:
-                      String(
-                        user._id
-                      ),
-
-                    firstName:
-                      user.firstName ||
-                      "",
-
-                    lastName:
-                      user.lastName ||
-                      "",
-
-                    email:
-                      user.email ||
-                      "",
-
-                  },
-
-                };
-
-              }
-            ),
+            serialisedParticipants,
 
         });
 
@@ -713,8 +1048,14 @@ router.post(
         .status(500)
         .json({
 
+          ok:
+            false,
+
           error:
-            "Failed to create training session",
+            "TRAINING_SESSION_CREATE_FAILED",
+
+          message:
+            "Failed to create training session.",
 
         });
 
@@ -730,13 +1071,19 @@ router.post(
 //
 // GET /api/training/sessions/pending
 //
-// Returns sessions where the authenticated user has
-// an invited participant record.
+// IMPORTANT:
 //
-// Session states:
+// This returns ONLY actionable invitations.
 //
-//   inviting
-//   active
+// It does not modify:
+//
+//   training.sessionId
+//
+// It does not return:
+//
+//   joined
+//   left
+//   ended
 //
 // =====================================================
 
@@ -752,14 +1099,19 @@ router.get(
     try {
 
       const userId =
-        req.user.userId;
+        normaliseId(
+          req.user.userId
+        );
+
 
       const tenantId =
-        req.user.tenantId;
+        normaliseId(
+          req.user.tenantId
+        );
 
 
       // =================================================
-      // FIND INVITATIONS
+      // INVITED PARTICIPANT RECORDS
       // =================================================
 
       const participantRecords =
@@ -802,7 +1154,7 @@ router.get(
 
 
       // =================================================
-      // FIND SESSIONS
+      // SESSION IDS
       // =================================================
 
       const sessionIds =
@@ -811,6 +1163,10 @@ router.get(
             participant.sessionId
         );
 
+
+      // =================================================
+      // ACTIVE/PENDING SESSIONS ONLY
+      // =================================================
 
       const sessions =
         await TrainingSession.find({
@@ -856,18 +1212,20 @@ router.get(
 
 
       // =================================================
-      // LOAD HOSTS
+      // HOSTS
       // =================================================
 
       const hostIds = [
         ...new Set(
 
-          sessions.map(
-            session =>
-              String(
-                session.hostUserId
-              )
-          )
+          sessions
+            .map(
+              session =>
+                normaliseId(
+                  session.hostUserId
+                )
+            )
+            .filter(Boolean)
 
         ),
       ];
@@ -894,7 +1252,7 @@ router.get(
           hosts.map(
             host => [
 
-              String(
+              normaliseId(
                 host._id
               ),
 
@@ -907,7 +1265,7 @@ router.get(
 
 
       // =================================================
-      // PARTICIPANTS MAP
+      // PARTICIPANT MAP
       // =================================================
 
       const participantMap =
@@ -916,7 +1274,7 @@ router.get(
           participantRecords.map(
             participant => [
 
-              String(
+              normaliseId(
                 participant.sessionId
               ),
 
@@ -936,17 +1294,21 @@ router.get(
         sessions.map(
           session => {
 
+            const sessionId =
+              normaliseId(
+                session._id
+              );
+
+
             const participant =
               participantMap.get(
-                String(
-                  session._id
-                )
+                sessionId
               );
 
 
             const host =
               hostMap.get(
-                String(
+                normaliseId(
                   session.hostUserId
                 )
               ) ||
@@ -959,48 +1321,17 @@ router.get(
                 session
               ),
 
-              participant: {
-
-                id:
+              participant:
+                serialiseParticipant(
                   participant
-                    ? String(
-                        participant._id
-                      )
-                    : null,
-
-                userId:
-                  participant
-                    ? String(
-                        participant.userId
-                      )
-                    : String(
-                        userId
-                      ),
-
-                status:
-                  participant?.status ||
-                  "invited",
-
-                invitedAt:
-                  participant?.invitedAt ||
-                  null,
-
-                joinedAt:
-                  participant?.joinedAt ||
-                  null,
-
-                leftAt:
-                  participant?.leftAt ||
-                  null,
-
-              },
+                ),
 
               host:
                 host
                   ? {
 
                       id:
-                        String(
+                        normaliseId(
                           host._id
                         ),
 
@@ -1025,18 +1356,11 @@ router.get(
         );
 
 
-      // =================================================
-      // RESPONSE
-      // =================================================
-
       console.log(
         "[Training] Pending sessions loaded",
         {
 
-          userId:
-            String(
-              userId
-            ),
+          userId,
 
           count:
             enrichedSessions.length,
@@ -1070,8 +1394,14 @@ router.get(
         .status(500)
         .json({
 
+          ok:
+            false,
+
           error:
-            "Failed to load pending training sessions",
+            "TRAINING_PENDING_SESSIONS_FAILED",
+
+          message:
+            "Failed to load pending training sessions.",
 
         });
 
@@ -1087,15 +1417,12 @@ router.get(
 //
 // GET /api/training/sessions/:sessionId
 //
-// Returns a session to:
+// Authorised for:
 //
 //   host
 //   invited participant
 //   joined participant
-//
-// Used by clients to detect:
-//
-//   active → ended
+//   left participant
 //
 // =====================================================
 
@@ -1110,22 +1437,23 @@ router.get(
 
     try {
 
-      const {
-        sessionId,
-      } =
-        req.params;
+      const sessionId =
+        normaliseId(
+          req.params?.sessionId
+        );
 
 
       const userId =
-        req.user.userId;
+        normaliseId(
+          req.user.userId
+        );
+
 
       const tenantId =
-        req.user.tenantId;
+        normaliseId(
+          req.user.tenantId
+        );
 
-
-      // =================================================
-      // VALIDATE ID
-      // =================================================
 
       if (
         !isValidObjectId(
@@ -1137,8 +1465,11 @@ router.get(
           .status(400)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Invalid training session ID",
+              "INVALID_TRAINING_SESSION_ID",
 
           });
 
@@ -1146,7 +1477,7 @@ router.get(
 
 
       // =================================================
-      // LOAD SESSION
+      // SESSION
       // =================================================
 
       const session =
@@ -1168,8 +1499,11 @@ router.get(
           .status(404)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Training session not found",
+              "TRAINING_SESSION_NOT_FOUND",
 
           });
 
@@ -1177,7 +1511,7 @@ router.get(
 
 
       // =================================================
-      // LOAD MEMBERSHIP
+      // MEMBERSHIP
       // =================================================
 
       const membership =
@@ -1194,8 +1528,11 @@ router.get(
           .status(403)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Not a member of this tenant",
+              "TRAINING_NOT_TENANT_MEMBER",
 
           });
 
@@ -1207,12 +1544,10 @@ router.get(
       // =================================================
 
       const isHost =
-        String(
+        normaliseId(
           session.hostUserId
         ) ===
-        String(
-          userId
-        );
+        userId;
 
 
       const participant =
@@ -1229,21 +1564,20 @@ router.get(
           .lean();
 
 
-      const isParticipant =
-        !!participant;
-
-
       if (
         !isHost &&
-        !isParticipant
+        !participant
       ) {
 
         return res
           .status(403)
           .json({
 
+            ok:
+              false,
+
             error:
-              "You are not authorised to view this training session",
+              "TRAINING_SESSION_ACCESS_DENIED",
 
           });
 
@@ -1265,41 +1599,9 @@ router.get(
           ),
 
         participant:
-          participant
-            ? {
-
-                id:
-                  String(
-                    participant._id
-                  ),
-
-                userId:
-                  String(
-                    participant.userId
-                  ),
-
-                sessionId:
-                  String(
-                    participant.sessionId
-                  ),
-
-                status:
-                  participant.status,
-
-                invitedAt:
-                  participant.invitedAt ||
-                  null,
-
-                joinedAt:
-                  participant.joinedAt ||
-                  null,
-
-                leftAt:
-                  participant.leftAt ||
-                  null,
-
-              }
-            : null,
+          serialiseParticipant(
+            participant
+          ),
 
       });
 
@@ -1318,8 +1620,14 @@ router.get(
         .status(500)
         .json({
 
+          ok:
+            false,
+
           error:
-            "Failed to load training session",
+            "TRAINING_SESSION_FETCH_FAILED",
+
+          message:
+            "Failed to load training session.",
 
         });
 
@@ -1339,7 +1647,10 @@ router.get(
 //
 // inviting → active
 //
-// This endpoint does NOT join Agora.
+// This route DOES NOT join Agora.
+//
+// It notifies invited participants that the session
+// is now ready.
 //
 // =====================================================
 
@@ -1354,21 +1665,30 @@ router.post(
 
     try {
 
-      const {
-        sessionId,
-      } =
-        req.params;
+      // =================================================
+      // RESOLVE REQUEST CONTEXT
+      // =================================================
+
+      const sessionId =
+        normaliseId(
+          req.params?.sessionId
+        );
 
 
       const userId =
-        req.user.userId;
+        normaliseId(
+          req.user.userId
+        );
+
 
       const tenantId =
-        req.user.tenantId;
+        normaliseId(
+          req.user.tenantId
+        );
 
 
       // =================================================
-      // VALIDATE ID
+      // VALIDATE SESSION ID
       // =================================================
 
       if (
@@ -1381,8 +1701,11 @@ router.post(
           .status(400)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Invalid training session ID",
+              "INVALID_TRAINING_SESSION_ID",
 
           });
 
@@ -1412,8 +1735,11 @@ router.post(
           .status(404)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Training session not found",
+              "TRAINING_SESSION_NOT_FOUND",
 
           });
 
@@ -1425,20 +1751,21 @@ router.post(
       // =================================================
 
       if (
-        String(
+        normaliseId(
           session.hostUserId
         ) !==
-        String(
-          userId
-        )
+        userId
       ) {
 
         return res
           .status(403)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Only the training session host can start this session",
+              "TRAINING_HOST_ONLY",
 
           });
 
@@ -1448,11 +1775,31 @@ router.post(
       // =================================================
       // ALREADY ACTIVE
       // =================================================
+      //
+      // Do not change participant records here.
+      //
+      // They must remain "invited" until each participant
+      // actually joins.
+      //
+      // =================================================
 
       if (
         session.status ===
         "active"
       ) {
+
+        console.log(
+          "[Training] Session already active",
+          {
+
+            sessionId,
+
+            hostUserId:
+              userId,
+
+          }
+        );
+
 
         return res.json({
 
@@ -1473,7 +1820,7 @@ router.post(
 
 
       // =================================================
-      // INVALID STATE
+      // SESSION MUST BE INVITING
       // =================================================
 
       if (
@@ -1492,7 +1839,7 @@ router.post(
               "TRAINING_SESSION_NOT_STARTABLE",
 
             message:
-              `Training session cannot be started from status "${session.status}"`,
+              `Training session cannot be started from status "${session.status}".`,
 
           });
 
@@ -1500,20 +1847,247 @@ router.post(
 
 
       // =================================================
-      // START
+      // OPTIONAL EXPIRATION CHECK
+      // =================================================
+      //
+      // An invitation which has already expired cannot
+      // subsequently be started.
+      //
+      // =================================================
+
+      const now =
+        new Date();
+
+
+      if (
+        session.invitationExpiresAt &&
+        session.invitationExpiresAt <=
+        now
+      ) {
+
+        session.status =
+          "expired";
+
+
+        session.expiredAt =
+          now;
+
+
+        await session.save();
+
+
+        console.warn(
+          "[Training] Cannot start expired training session",
+          {
+
+            sessionId,
+
+            hostUserId:
+              userId,
+
+            invitationExpiresAt:
+              session.invitationExpiresAt,
+
+          }
+        );
+
+
+        return res
+          .status(409)
+          .json({
+
+            ok:
+              false,
+
+            error:
+              "TRAINING_INVITATION_EXPIRED",
+
+            message:
+              "This training session invitation has expired.",
+
+          });
+
+      }
+
+
+      // =================================================
+      // START SESSION
+      // =================================================
+      //
+      // CRITICAL:
+      //
+      // Do NOT modify TrainingParticipant.status here.
+      //
+      // "invited" remains actionable and allows
+      // /sessions/pending to return the invitation.
+      //
       // =================================================
 
       session.status =
         "active";
 
+
       session.startedAt =
-        new Date();
+        now;
+
 
       session.endedAt =
         null;
 
 
       await session.save();
+
+
+      // =================================================
+      // VERIFY INVITED PARTICIPANTS
+      // =================================================
+      //
+      // These are the users who should receive the
+      // "training-session:started" realtime event.
+      //
+      // =================================================
+
+      const invitedParticipants =
+        await TrainingParticipant.find({
+
+          sessionId:
+            session._id,
+
+          tenantId,
+
+          status:
+            "invited",
+
+        })
+          .select(
+            "userId status"
+          )
+          .lean();
+
+
+      // =================================================
+      // REALTIME NAMESPACE
+      // =================================================
+
+      const namespace =
+        getTrainingNamespace(
+          req
+        );
+
+
+      if (
+        namespace
+      ) {
+
+        const payload = {
+
+          sessionId,
+
+          startedBy:
+            userId,
+
+          startedAt:
+            session.startedAt,
+
+        };
+
+
+        // ===============================================
+        // 1. TRAINING ROOM
+        // ===============================================
+        //
+        // Users already in the room receive the event.
+        //
+        // ===============================================
+
+        namespace
+          .to(
+            getTrainingRoom(
+              sessionId
+            )
+          )
+          .emit(
+            "training-session:started",
+            payload
+          );
+
+
+        // ===============================================
+        // 2. USER ROOMS
+        // ===============================================
+        //
+        // This is the important path for invited users.
+        //
+        // They may NOT yet have joined the training room,
+        // so notify their dedicated user room.
+        //
+        // ===============================================
+
+        invitedParticipants.forEach(
+          participant => {
+
+            const participantUserId =
+              normaliseId(
+                participant.userId
+              );
+
+
+            if (
+              !participantUserId
+            ) {
+
+              return;
+
+            }
+
+
+            namespace
+              .to(
+                getUserRoom(
+                  participantUserId
+                )
+              )
+              .emit(
+                "training-session:started",
+                payload
+              );
+
+          }
+        );
+
+
+        console.log(
+          "[Training] TRAINING_SESSION_STARTED emitted",
+          {
+
+            ...payload,
+
+            invitedParticipantCount:
+              invitedParticipants.length,
+
+            invitedParticipantIds:
+              invitedParticipants.map(
+                participant =>
+                  normaliseId(
+                    participant.userId
+                  )
+              ),
+
+          }
+        );
+
+      }
+      else {
+
+        console.warn(
+          "[Training] Socket.IO namespace unavailable while starting session",
+          {
+
+            sessionId,
+
+          });
+
+      }
 
 
       // =================================================
@@ -1524,18 +2098,19 @@ router.post(
         "[Training] Session started",
         {
 
-          sessionId:
-            String(
-              session._id
-            ),
+          sessionId,
 
           hostUserId:
-            String(
-              userId
-            ),
+            userId,
 
           channelName:
             session.channelName,
+
+          status:
+            session.status,
+
+          invitedParticipantCount:
+            invitedParticipants.length,
 
         }
       );
@@ -1563,7 +2138,14 @@ router.post(
 
       console.error(
         "[Training] Start training session failed",
-        error
+        {
+
+          sessionId:
+            req.params?.sessionId,
+
+          error,
+
+        }
       );
 
 
@@ -1571,8 +2153,14 @@ router.post(
         .status(500)
         .json({
 
+          ok:
+            false,
+
           error:
-            "Failed to start training session",
+            "TRAINING_SESSION_START_FAILED",
+
+          message:
+            "Failed to start training session.",
 
         });
 
@@ -1580,6 +2168,7 @@ router.post(
 
   }
 );
+
 
 // =====================================================
 // END TRAINING SESSION
@@ -1589,17 +2178,48 @@ router.post(
 //
 // Host only.
 //
-// Changes:
+// active/inviting → ended
 //
-//   active → ended
+// Realtime event tells connected participants to:
 //
-// Sets:
+//   leave Agora
+//   clear runtime
+//   clear stale invitation state
 //
-//   endedAt
+// =====================================================
+
+// =====================================================
+// END TRAINING SESSION
+// =====================================================
 //
-// The endpoint does NOT leave Agora.
-// The frontend action handles the media disconnect.
+// POST /api/training/sessions/:sessionId/end
 //
+// Host only.
+//
+// Valid transitions:
+//
+//   active   -> ended
+//   inviting -> ended
+//
+// Also:
+//
+//   invited participants -> cancelled
+//
+// Responsibilities:
+//
+//   - end the TrainingSession
+//   - cancel outstanding invitations
+//   - notify training room
+//   - notify participant user rooms
+//   - return cancellationResult to frontend
+//
+// This route does NOT:
+//
+//   - leave Agora
+//   - manipulate frontend runtime state
+//
+// Frontend media cleanup remains the responsibility of
+// the training end action / Agora lifecycle.
 // =====================================================
 
 router.post(
@@ -1613,18 +2233,40 @@ router.post(
 
     try {
 
-      const {
-        sessionId,
-      } =
-        req.params;
+      // =================================================
+      // RESOLVE REQUEST CONTEXT
+      // =================================================
+
+      const sessionId =
+        normaliseId(
+          req.params?.sessionId
+        );
 
 
       const userId =
-        req.user.userId;
+        normaliseId(
+          req.user.userId
+        );
 
 
       const tenantId =
-        req.user.tenantId;
+        normaliseId(
+          req.user.tenantId
+        );
+
+
+      console.log(
+        "[Training] END SESSION REQUEST",
+        {
+
+          sessionId,
+
+          userId,
+
+          tenantId,
+
+        }
+      );
 
 
       // =================================================
@@ -1641,8 +2283,11 @@ router.post(
           .status(400)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Invalid training session ID",
+              "INVALID_TRAINING_SESSION_ID",
 
           });
 
@@ -1672,8 +2317,11 @@ router.post(
           .status(404)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Training session not found",
+              "TRAINING_SESSION_NOT_FOUND",
 
           });
 
@@ -1681,24 +2329,28 @@ router.post(
 
 
       // =================================================
-      // HOST AUTHORISATION
+      // HOST ONLY
       // =================================================
 
       if (
-        String(
+        normaliseId(
           session.hostUserId
         ) !==
-        String(
-          userId
-        )
+        userId
       ) {
 
         return res
           .status(403)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Only the training session host can end this session",
+              "TRAINING_HOST_ONLY",
+
+            message:
+              "Only the training session host can end this session.",
 
           });
 
@@ -1708,11 +2360,31 @@ router.post(
       // =================================================
       // ALREADY ENDED
       // =================================================
+      //
+      // Do not perform another cancellation pass.
+      //
+      // The original response remains useful to callers
+      // retrying an already completed end operation.
+      //
+      // =================================================
 
       if (
         session.status ===
         "ended"
       ) {
+
+        console.log(
+          "[Training] END SESSION - already ended",
+          {
+
+            sessionId,
+
+            endedAt:
+              session.endedAt,
+
+          }
+        );
+
 
         return res.json({
 
@@ -1727,20 +2399,23 @@ router.post(
               session
             ),
 
+          cancellationResult: {
+
+            cancelledCount:
+              0,
+
+            participantIds:
+              [],
+
+          },
+
         });
 
       }
 
 
       // =================================================
-      // VALIDATE STATE
-      // =================================================
-      //
-      // For V1 we allow ending an active session.
-      //
-      // We also allow an inviting session to be ended
-      // so the host can cancel a pending invitation set.
-      //
+      // VALIDATE ENDABLE STATE
       // =================================================
 
       if (
@@ -1761,11 +2436,65 @@ router.post(
               "TRAINING_SESSION_NOT_ENDABLE",
 
             message:
-              `Training session cannot be ended from status "${session.status}"`,
+              `Training session cannot be ended from status "${session.status}".`,
 
           });
 
       }
+
+
+      // =================================================
+      // CAPTURE OUTSTANDING INVITATIONS
+      // =================================================
+      //
+      // Capture these BEFORE changing their status so we
+      // know exactly which participants were cancelled.
+      //
+      // =================================================
+
+      const outstandingParticipants =
+        await TrainingParticipant.find({
+
+          sessionId:
+            session._id,
+
+          tenantId,
+
+          status:
+            "invited",
+
+        })
+          .select(
+            "_id userId"
+          )
+          .lean();
+
+
+      const cancelledParticipantIds =
+        outstandingParticipants
+          .map(
+            participant =>
+              normaliseId(
+                participant.userId
+              )
+          )
+          .filter(Boolean);
+
+
+      console.log(
+        "[Training] Outstanding invitations found",
+        {
+
+          sessionId,
+
+          count:
+            outstandingParticipants.length,
+
+          participantIds:
+            cancelledParticipantIds,
+
+        }
+      );
 
 
       // =================================================
@@ -1784,6 +2513,221 @@ router.post(
 
 
       // =================================================
+      // CANCEL OUTSTANDING INVITATIONS
+      // =================================================
+
+      const cancellationTime =
+        new Date();
+
+
+      const cancellationWriteResult =
+        await TrainingParticipant.updateMany(
+          {
+
+            sessionId:
+              session._id,
+
+            tenantId,
+
+            status:
+              "invited",
+
+          },
+          {
+
+            $set: {
+
+              status:
+                "cancelled",
+
+              cancelledAt:
+                cancellationTime,
+
+            },
+
+          }
+        );
+
+
+     const cancellationResult =
+        await TrainingParticipant.updateMany(
+            {
+            sessionId:
+                session._id,
+
+            tenantId,
+
+            status:
+                "invited",
+            },
+    {
+      $set: {
+        status:
+          "cancelled",
+
+        cancelledAt:
+          session.endedAt,
+      },
+    }
+  );
+
+
+      console.log(
+        "[Training] Outstanding invitations cancelled",
+        {
+
+          sessionId,
+
+          cancelledCount:
+            cancellationResult.cancelledCount,
+
+          participantIds:
+            cancellationResult.participantIds,
+
+        }
+      );
+
+
+      // =================================================
+      // REALTIME SOCKET NAMESPACE
+      // =================================================
+
+      const namespace =
+        getTrainingNamespace(
+          req
+        );
+
+
+      // =================================================
+      // REALTIME END EVENT
+      // =================================================
+
+      if (
+        namespace
+      ) {
+
+        const payload = {
+
+          sessionId,
+
+          reason:
+            "host-ended",
+
+          endedBy:
+            userId,
+
+          endedAt:
+            session.endedAt,
+
+          cancellationResult,
+
+        };
+
+
+        // -----------------------------------------------
+        // TRAINING ROOM
+        // -----------------------------------------------
+
+        namespace
+          .to(
+            getTrainingRoom(
+              sessionId
+            )
+          )
+          .emit(
+            "training-session:ended",
+            payload
+          );
+
+
+        // -----------------------------------------------
+        // PARTICIPANT USER ROOMS
+        // -----------------------------------------------
+        //
+        // This is important because an invited user may
+        // not yet have joined the training room.
+        //
+        // They should still be told that the invitation
+        // has been cancelled.
+        //
+        // -----------------------------------------------
+
+        const participants =
+          await TrainingParticipant.find({
+
+            sessionId:
+              session._id,
+
+            tenantId,
+
+          })
+            .select(
+              "userId"
+            )
+            .lean();
+
+
+        participants.forEach(
+          participant => {
+
+            const participantUserId =
+              normaliseId(
+                participant.userId
+              );
+
+
+            if (
+              !participantUserId
+            ) {
+
+              return;
+
+            }
+
+
+            namespace
+              .to(
+                getUserRoom(
+                  participantUserId
+                )
+              )
+              .emit(
+                "training-session:ended",
+                payload
+              );
+
+          }
+        );
+
+
+        console.log(
+          "[Training] TRAINING_SESSION_ENDED emitted",
+          {
+
+            ...payload,
+
+            participantCount:
+              participants.length,
+
+          }
+        );
+
+      }
+      else {
+
+        console.warn(
+          "[Training] Socket.IO namespace unavailable while ending session",
+          {
+
+            sessionId,
+
+          }
+        );
+
+      }
+
+
+      // =================================================
       // RESPONSE
       // =================================================
 
@@ -1791,21 +2735,18 @@ router.post(
         "[Training] Session ended",
         {
 
-          sessionId:
-            String(
-              session._id
-            ),
+          sessionId,
 
           hostUserId:
-            String(
-              userId
-            ),
+            userId,
 
           channelName:
             session.channelName,
 
           endedAt:
             session.endedAt,
+
+          cancellationResult,
 
         }
       );
@@ -1824,6 +2765,8 @@ router.post(
             session
           ),
 
+        cancellationResult,
+
       });
 
     }
@@ -1837,12 +2780,32 @@ router.post(
       );
 
 
+      console.error(
+        "[Training] End training backend error details",
+        {
+
+          message:
+            error?.message,
+
+          stack:
+            error?.stack,
+
+        }
+      );
+
+
       return res
         .status(500)
         .json({
 
+          ok:
+            false,
+
           error:
-            "Failed to end training session",
+            "TRAINING_SESSION_END_FAILED",
+
+          message:
+            "Failed to end training session.",
 
         });
 
@@ -1858,11 +2821,11 @@ router.post(
 //
 // POST /api/training/sessions/:sessionId/join
 //
-// Invited participant only.
+// Client-side action then joins Agora.
 //
-// invited → joined
+// Backend:
 //
-// This endpoint does NOT join Agora.
+//   invited → joined
 //
 // =====================================================
 
@@ -1877,22 +2840,23 @@ router.post(
 
     try {
 
-      const {
-        sessionId,
-      } =
-        req.params;
+      const sessionId =
+        normaliseId(
+          req.params?.sessionId
+        );
 
 
       const userId =
-        req.user.userId;
+        normaliseId(
+          req.user.userId
+        );
+
 
       const tenantId =
-        req.user.tenantId;
+        normaliseId(
+          req.user.tenantId
+        );
 
-
-      // =================================================
-      // VALIDATE ID
-      // =================================================
 
       if (
         !isValidObjectId(
@@ -1904,8 +2868,11 @@ router.post(
           .status(400)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Invalid training session ID",
+              "INVALID_TRAINING_SESSION_ID",
 
           });
 
@@ -1913,7 +2880,7 @@ router.post(
 
 
       // =================================================
-      // LOAD SESSION
+      // SESSION
       // =================================================
 
       const session =
@@ -1935,54 +2902,89 @@ router.post(
           .status(404)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Training session not found",
+              "TRAINING_SESSION_NOT_FOUND",
 
           });
 
       }
 
-      // =================================================
-    // EXPIRED INVITATION SAFETY CHECK
-    // =================================================
-
-    const now =
-    new Date();
-
-    if (
-    session.status === "inviting" &&
-    session.invitationExpiresAt &&
-    session.invitationExpiresAt <= now
-    ) {
-
-    session.status =
-        "expired";
-
-    session.expiredAt =
-        now;
-
-    await session.save();
-
-    return res
-        .status(409)
-        .json({
-
-        ok:
-            false,
-
-        error:
-            "TRAINING_INVITATION_EXPIRED",
-
-        message:
-            "This training invitation has expired.",
-
-        });
-
-    }
-
 
       // =================================================
-      // SESSION MUST BE ACTIVE
+      // EXPIRATION
+      // =================================================
+
+      const now =
+        new Date();
+
+
+      if (
+        session.status ===
+          "inviting" &&
+        session.invitationExpiresAt &&
+        session.invitationExpiresAt <=
+          now
+      ) {
+
+        session.status =
+          "expired";
+
+
+        session.expiredAt =
+          now;
+
+
+        await session.save();
+
+        const expirationResult =
+        await TrainingParticipant.updateMany(
+            
+            {
+            sessionId: session._id,
+            tenantId,
+            status: "invited",
+            },
+            {
+            $set: {
+                status: "expired",
+                expiredAt: expirationTime,
+            },
+            }
+        );
+
+        console.log(
+        "[Training] Outstanding invitations expired",
+        {
+            sessionId,
+            expiredCount:
+            expirationResult.modifiedCount,
+        }
+        );
+
+
+        return res
+          .status(409)
+          .json({
+
+            ok:
+              false,
+
+            error:
+              "TRAINING_INVITATION_EXPIRED",
+
+            message:
+              "This training invitation has expired.",
+
+          });
+
+      }
+
+
+      // =================================================
+      // MUST BE ACTIVE
       // =================================================
 
       if (
@@ -2009,7 +3011,7 @@ router.post(
 
 
       // =================================================
-      // FIND PARTICIPANT
+      // PARTICIPANT
       // =================================================
 
       const participant =
@@ -2033,8 +3035,14 @@ router.post(
           .status(403)
           .json({
 
+            ok:
+              false,
+
             error:
-              "You are not invited to this training session",
+              "TRAINING_PARTICIPANT_NOT_FOUND",
+
+            message:
+              "You are not invited to this training session.",
 
           });
 
@@ -2063,39 +3071,10 @@ router.post(
               session
             ),
 
-          participant: {
-
-            id:
-              String(
-                participant._id
-              ),
-
-            userId:
-              String(
-                participant.userId
-              ),
-
-            sessionId:
-              String(
-                participant.sessionId
-              ),
-
-            status:
-              participant.status,
-
-            invitedAt:
-              participant.invitedAt ||
-              null,
-
-            joinedAt:
-              participant.joinedAt ||
-              null,
-
-            leftAt:
-              participant.leftAt ||
-              null,
-
-          },
+          participant:
+            serialiseParticipant(
+              participant
+            ),
 
         });
 
@@ -2103,7 +3082,7 @@ router.post(
 
 
       // =================================================
-      // REQUIRE INVITED STATE
+      // MUST BE INVITED
       // =================================================
 
       if (
@@ -2122,7 +3101,7 @@ router.post(
               "TRAINING_PARTICIPANT_NOT_JOINABLE",
 
             message:
-              `Participant cannot join from status "${participant.status}"`,
+              `Participant cannot join from status "${participant.status}".`,
 
           });
 
@@ -2136,14 +3115,30 @@ router.post(
       participant.status =
         "joined";
 
+
       participant.joinedAt =
         new Date();
+
 
       participant.leftAt =
         null;
 
 
       await participant.save();
+
+
+      // =================================================
+      // TRAINING SOCKET ROOM
+      // =================================================
+      //
+      // The frontend will also ask the realtime service
+      // to join the training room once training.joined
+      // becomes true.
+      //
+      // We don't modify socket state here because the
+      // HTTP request and Socket.IO connection are separate.
+      //
+      // =================================================
 
 
       // =================================================
@@ -2154,15 +3149,9 @@ router.post(
         "[Training] Participant joined session",
         {
 
-          sessionId:
-            String(
-              session._id
-            ),
+          sessionId,
 
-          userId:
-            String(
-              userId
-            ),
+          userId,
 
           channelName:
             session.channelName,
@@ -2184,39 +3173,10 @@ router.post(
             session
           ),
 
-        participant: {
-
-          id:
-            String(
-              participant._id
-            ),
-
-          userId:
-            String(
-              participant.userId
-            ),
-
-          sessionId:
-            String(
-              participant.sessionId
-            ),
-
-          status:
-            participant.status,
-
-          invitedAt:
-            participant.invitedAt ||
-            null,
-
-          joinedAt:
-            participant.joinedAt ||
-            null,
-
-          leftAt:
-            participant.leftAt ||
-            null,
-
-        },
+        participant:
+          serialiseParticipant(
+            participant
+          ),
 
       });
 
@@ -2235,8 +3195,14 @@ router.post(
         .status(500)
         .json({
 
+          ok:
+            false,
+
           error:
-            "Failed to join training session",
+            "TRAINING_SESSION_JOIN_FAILED",
+
+          message:
+            "Failed to join training session.",
 
         });
 
@@ -2245,26 +3211,20 @@ router.post(
   }
 );
 
+
 // =====================================================
 // LEAVE TRAINING SESSION
 // =====================================================
 //
 // POST /api/training/sessions/:sessionId/leave
 //
-// Participant leaves their current training session.
+// Participant only.
+//
+// joined → left
 //
 // This does NOT end the training session.
 //
-// Participant:
-//
-//   joined -> left
-//
-// Host:
-//
-//   must use /end instead
-//
-// The frontend action is responsible for leaving Agora.
-//
+// Client action is responsible for Agora cleanup.
 // =====================================================
 
 router.post(
@@ -2278,22 +3238,23 @@ router.post(
 
     try {
 
-      const {
-        sessionId,
-      } =
-        req.params;
+      const sessionId =
+        normaliseId(
+          req.params?.sessionId
+        );
 
 
       const userId =
-        req.user.userId;
+        normaliseId(
+          req.user.userId
+        );
+
 
       const tenantId =
-        req.user.tenantId;
+        normaliseId(
+          req.user.tenantId
+        );
 
-
-      // =================================================
-      // VALIDATE SESSION ID
-      // =================================================
 
       if (
         !isValidObjectId(
@@ -2305,8 +3266,11 @@ router.post(
           .status(400)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Invalid training session ID",
+              "INVALID_TRAINING_SESSION_ID",
 
           });
 
@@ -2314,7 +3278,7 @@ router.post(
 
 
       // =================================================
-      // FIND SESSION
+      // SESSION
       // =================================================
 
       const session =
@@ -2336,8 +3300,11 @@ router.post(
           .status(404)
           .json({
 
+            ok:
+              false,
+
             error:
-              "Training session not found",
+              "TRAINING_SESSION_NOT_FOUND",
 
           });
 
@@ -2345,31 +3312,28 @@ router.post(
 
 
       // =================================================
-      // HOST CANNOT "LEAVE"
-      // =================================================
-      //
-      // The host ends the entire training session.
-      //
+      // HOST MUST END
       // =================================================
 
       if (
-        String(
+        normaliseId(
           session.hostUserId
         ) ===
-        String(
-          userId
-        )
+        userId
       ) {
 
         return res
           .status(409)
           .json({
 
+            ok:
+              false,
+
             error:
               "TRAINING_HOST_MUST_END_SESSION",
 
             message:
-              "The training host must end the training session instead of leaving it.",
+              "The training host must end the session rather than leave it.",
 
           });
 
@@ -2377,7 +3341,7 @@ router.post(
 
 
       // =================================================
-      // FIND PARTICIPANT
+      // PARTICIPANT
       // =================================================
 
       const participant =
@@ -2400,6 +3364,9 @@ router.post(
         return res
           .status(403)
           .json({
+
+            ok:
+              false,
 
             error:
               "TRAINING_PARTICIPANT_NOT_FOUND",
@@ -2426,72 +3393,15 @@ router.post(
           alreadyLeft:
             true,
 
-          session: {
+          session:
+            serialiseSession(
+              session
+            ),
 
-            id:
-              String(
-                session._id
-              ),
-
-            tenantId:
-              String(
-                session.tenantId
-              ),
-
-            hostUserId:
-              String(
-                session.hostUserId
-              ),
-
-            channelName:
-              session.channelName,
-
-            status:
-              session.status,
-
-            startedAt:
-              session.startedAt ||
-              null,
-
-            endedAt:
-              session.endedAt ||
-              null,
-
-          },
-
-          participant: {
-
-            id:
-              String(
-                participant._id
-              ),
-
-            userId:
-              String(
-                participant.userId
-              ),
-
-            sessionId:
-              String(
-                participant.sessionId
-              ),
-
-            status:
-              participant.status,
-
-            invitedAt:
-              participant.invitedAt ||
-              null,
-
-            joinedAt:
-              participant.joinedAt ||
-              null,
-
-            leftAt:
-              participant.leftAt ||
-              null,
-
-          },
+          participant:
+            serialiseParticipant(
+              participant
+            ),
 
         });
 
@@ -2499,7 +3409,7 @@ router.post(
 
 
       // =================================================
-      // ONLY A JOINED PARTICIPANT CAN LEAVE
+      // ONLY JOINED CAN LEAVE
       // =================================================
 
       if (
@@ -2511,11 +3421,14 @@ router.post(
           .status(409)
           .json({
 
+            ok:
+              false,
+
             error:
               "TRAINING_PARTICIPANT_NOT_LEAVABLE",
 
             message:
-              `Participant cannot leave from status "${participant.status}"`,
+              `Participant cannot leave from status "${participant.status}".`,
 
           });
 
@@ -2533,11 +3446,57 @@ router.post(
       participant.status =
         "left";
 
+
       participant.leftAt =
         leftAt;
 
 
       await participant.save();
+
+
+      // =================================================
+      // REALTIME PARTICIPANT LEFT
+      // =================================================
+
+      const namespace =
+        getTrainingNamespace(
+          req
+        );
+
+
+      if (
+        namespace
+      ) {
+
+        const payload = {
+
+          sessionId,
+
+          userId,
+
+          leftAt,
+
+        };
+
+
+        namespace
+          .to(
+            getTrainingRoom(
+              sessionId
+            )
+          )
+          .emit(
+            "training-session:participant-left",
+            payload
+          );
+
+
+        console.log(
+          "[Training] TRAINING_SESSION_PARTICIPANT_LEFT emitted",
+          payload
+        );
+
+      }
 
 
       // =================================================
@@ -2548,15 +3507,9 @@ router.post(
         "[Training] Participant left training session",
         {
 
-          sessionId:
-            String(
-              session._id
-            ),
+          sessionId,
 
-          userId:
-            String(
-              userId
-            ),
+          userId,
 
           leftAt,
 
@@ -2572,72 +3525,15 @@ router.post(
         alreadyLeft:
           false,
 
-        session: {
+        session:
+          serialiseSession(
+            session
+          ),
 
-          id:
-            String(
-              session._id
-            ),
-
-          tenantId:
-            String(
-              session.tenantId
-            ),
-
-          hostUserId:
-            String(
-              session.hostUserId
-            ),
-
-          channelName:
-            session.channelName,
-
-          status:
-            session.status,
-
-          startedAt:
-            session.startedAt ||
-            null,
-
-          endedAt:
-            session.endedAt ||
-            null,
-
-        },
-
-        participant: {
-
-          id:
-            String(
-              participant._id
-            ),
-
-          userId:
-            String(
-              participant.userId
-            ),
-
-          sessionId:
-            String(
-              participant.sessionId
-            ),
-
-          status:
-            participant.status,
-
-          invitedAt:
-            participant.invitedAt ||
-            null,
-
-          joinedAt:
-            participant.joinedAt ||
-            null,
-
-          leftAt:
-            participant.leftAt ||
-            null,
-
-        },
+        participant:
+          serialiseParticipant(
+            participant
+          ),
 
       });
 
@@ -2656,8 +3552,14 @@ router.post(
         .status(500)
         .json({
 
+          ok:
+            false,
+
           error:
-            "Failed to leave training session",
+            "TRAINING_SESSION_LEAVE_FAILED",
+
+          message:
+            "Failed to leave training session.",
 
         });
 

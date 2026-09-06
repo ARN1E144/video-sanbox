@@ -1,9 +1,14 @@
 {
 "id": "confo.ai_video_interviewer",
+
 "name": "AI Video Interviewer",
+
 "version": 1,
+
 "type": "confo",
+
 "description": "AI-led video interview with structured questions and candidate responses.",
+
 "capabilities": [
 "video",
 "audio",
@@ -11,111 +16,149 @@
 "interview",
 "transcription"
 ],
+
 "tree": {
+
 "id": "interview-root",
+
 "type": "Container",
+
 "props": {
-"layout": "vertical",
-"backgroundColor": "#0f172a"
+  "layout": "vertical",
+  "backgroundColor": "#0f172a"
 },
+
 "children": [
-{
-"id": "interview-header",
-"type": "TextLabel",
-"props": {
-"label": "AI Video Interview"
-}
-},
-{
-"id": "interview-question",
-"type": "TextLabel",
-"props": {
-"label": "{{interview.currentQuestion}}"
-}
-},
-{
-"id": "interview-video",
-"type": "VideoFeed",
-"width": 800,
-"height": 450,
-"props": {
-"autoplay": true,
-"muted": true,
-"controls": false,
-"mirror": true,
-"objectFit": "cover",
-"autoUploadRecording": true
-}
-},
-{
-"id": "interview-answer",
-"type": "TextBox",
-"width": 620,
-"height": 100,
-"props": {
-"value": "{{interview.answer.text}}",
-"bindTo": "interview.answer.text",
-"placeholder": "Type your answer here..."
-}
-},
-{
-"id": "interview-workflow-controls",
-"type": "ControlPanel",
-"width": 620,
-"height": 64,
-"props": {
-"layout": "horizontal"
-},
-"children": [
-{
-"id": "interview-start",
-"type": "ControlButton",
-"props": {
-"label": "Start Interview",
-"action": "interview.start"
-}
-},
-{
-"id": "interview-submit",
-"type": "ControlButton",
-"props": {
-"label": "Submit Answer",
-"action": "interview.submitAnswer",
-"params": {
-"text": "{{interview.answer.text}}"
-}
-}
-},
-{
-"id": "interview-next",
-"type": "ControlButton",
-"props": {
-"label": "Next Question",
-"action": "interview.nextQuestion"
-}
-},
-{
-"id": "interview-complete",
-"type": "ControlButton",
-"props": {
-"label": "Complete Interview",
-"action": "interview.complete",
-"params": {
-"videoTargetId": "interview-video",
-"stopRecording": true
-}
-}
-},
-{
-"id": "interview-evaluate",
-"type": "ControlButton",
-"props": {
-"label": "Evaluate Interview",
-"action": "interview.evaluate"
-}
-}
+
+  {
+    "id": "interview-header",
+
+    "type": "TextLabel",
+
+    "props": {
+      "label": "AI Video Interview"
+    }
+  },
+
+  {
+    "id": "interview-question",
+
+    "type": "TextLabel",
+
+    "props": {
+      "label": "{{interview.currentQuestion}}"
+    }
+  },
+
+  {
+    "id": "interview-video",
+
+    "type": "VideoFeed",
+
+    "width": 800,
+
+    "height": 450,
+
+    "props": {
+      "autoplay": true,
+      "muted": true,
+      "controls": false,
+      "mirror": true,
+      "objectFit": "cover",
+      "autoUploadRecording": true
+    }
+  },
+
+  {
+    "id": "interview-answer",
+
+    "type": "TextBox",
+
+    "width": 620,
+
+    "height": 100,
+
+    "props": {
+      "value": "{{interview.answer.text}}",
+      "bindTo": "interview.answer.text",
+      "placeholder": "Type your answer here..."
+    }
+  },
+
+  {
+    "id": "interview-workflow-controls",
+
+    "type": "ControlPanel",
+
+    "width": 620,
+
+    "height": 64,
+
+    "props": {
+      "layout": "horizontal"
+    },
+
+    "children": [
+
+      {
+        "id": "interview-start",
+
+        "type": "ControlButton",
+
+        "props": {
+          "label": "Start Interview",
+          "action": "interview.start"
+        }
+      },
+
+      {
+        "id": "interview-submit",
+
+        "type": "ControlButton",
+
+        "props": {
+          "label": "Submit Answer",
+
+          "action": "interview.submitAnswer",
+
+          "params": {
+            "text": "{{interview.answer.text}}"
+          }
+        }
+      },
+
+      {
+        "id": "interview-next",
+
+        "type": "ControlButton",
+
+        "props": {
+          "label": "Next Question",
+          "action": "interview.nextQuestion"
+        }
+      },
+
+      {
+        "id": "interview-complete",
+
+        "type": "ControlButton",
+
+        "props": {
+          "label": "Complete Interview",
+
+          "action": "interview.complete",
+
+          "params": {
+            "videoTargetId": "interview-video",
+            "stopRecording": true
+          }
+        }
+      }
+
+    ]
+  }
+
 ]
-}
-]
+
 }
 }

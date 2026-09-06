@@ -2,39 +2,8 @@
 
 import api from "../../services/api";
 
-
-// =====================================================
-// COMPLETE INTERVIEW
-// =====================================================
-//
-// Responsibility:
-//
-// 1. Resolve current active interview.
-// 2. Register recording completion waiter.
-// 3. Request VideoFeed to stop recording.
-// 4. Wait for recording upload to complete.
-// 5. Complete interview on backend.
-// 6. Update runtime interview.
-//
-// IMPORTANT:
-//
-// The interview remains ACTIVE until the recording has:
-//
-//    MediaRecorder.stop()
-//          ↓
-//       Blob created
-//          ↓
-//    video.uploadRecording
-//          ↓
-//       S3 upload
-//          ↓
-// recording backend complete
-//
-// Only then do we call:
-//
-// /projects/:projectId/interviews/:interviewId/complete
-//
-// =====================================================
+import evaluateInterview
+  from "./evaluateInterview";
 
 
 // =====================================================
@@ -173,6 +142,31 @@ async function stopInterviewRecording(
 // =====================================================
 // COMPLETE INTERVIEW
 // =====================================================
+//
+// V1 USER WORKFLOW:
+//
+//   Complete Interview
+//        ↓
+//   Stop recording
+//        ↓
+//   Upload recording
+//        ↓
+//   Complete backend interview
+//        ↓
+//   Evaluate interview
+//
+// IMPORTANT:
+//
+// `interview.evaluate` remains a standalone action for:
+//
+//   - retries
+//   - debugging
+//   - admin workflows
+//   - future automation
+//
+// But the normal user workflow no longer requires
+// a separate Evaluate button.
+// =====================================================
 
 export default async function completeInterview(
   ctx,
@@ -183,11 +177,9 @@ export default async function completeInterview(
     "=============================================="
   );
 
-
   console.log(
     "[completeInterview] START"
   );
-
 
   console.log(
     "=============================================="
@@ -294,12 +286,91 @@ export default async function completeInterview(
     // =================================================
 
     if (
-      interview.status ===
+      interview?.status ===
       "completed"
     ) {
 
       console.log(
         "[completeInterview] INTERVIEW ALREADY COMPLETED"
+      );
+
+
+      // -------------------------------------------------
+      // Already completed does NOT mean already evaluated.
+      //
+      // Run evaluation when a valid evaluation is missing.
+      // -------------------------------------------------
+
+      const existingEvaluation =
+        interview?.aiEvaluation ||
+        null;
+
+
+      const hasValidEvaluation =
+        existingEvaluation &&
+        typeof existingEvaluation ===
+          "object" &&
+        existingEvaluation.overallScore !==
+          undefined &&
+        existingEvaluation.overallScore !==
+          null;
+
+
+      if (
+        hasValidEvaluation
+      ) {
+
+        return {
+
+          ok:
+            true,
+
+          alreadyCompleted:
+            true,
+
+          alreadyEvaluated:
+            true,
+
+          result: {
+
+            interviewId,
+
+            projectId,
+
+            status:
+              "completed",
+
+            aiEvaluation:
+              existingEvaluation,
+
+          },
+
+        };
+
+      }
+
+
+      console.log(
+        "[completeInterview] COMPLETED INTERVIEW HAS NO VALID EVALUATION - RUNNING EVALUATION"
+      );
+
+
+      const evaluationResult =
+        await evaluateInterview(
+          ctx,
+          {
+
+            projectId,
+
+            interviewId,
+
+          }
+        );
+
+
+      console.log(
+        "[completeInterview] POST-COMPLETION EVALUATION RESULT",
+        evaluationResult
       );
 
 
@@ -311,6 +382,12 @@ export default async function completeInterview(
         alreadyCompleted:
           true,
 
+        alreadyEvaluated:
+          evaluationResult?.ok ===
+          true,
+
+        evaluationResult,
+
         result: {
 
           interviewId,
@@ -319,6 +396,11 @@ export default async function completeInterview(
 
           status:
             "completed",
+
+          aiEvaluation:
+            evaluationResult?.result ||
+            interview?.aiEvaluation ||
+            null,
 
         },
 
@@ -332,7 +414,7 @@ export default async function completeInterview(
     // =================================================
 
     if (
-      interview.status !==
+      interview?.status !==
       "active"
     ) {
 
@@ -343,7 +425,7 @@ export default async function completeInterview(
           interviewId,
 
           status:
-            interview.status,
+            interview?.status,
 
         }
       );
@@ -394,12 +476,7 @@ export default async function completeInterview(
     ) {
 
       // -------------------------------------------------
-      // IMPORTANT:
-      //
-      // Register the waiter BEFORE requesting the stop.
-      //
-      // This prevents a fast recording from completing
-      // before the waiter exists.
+      // Register BEFORE requesting stop.
       // -------------------------------------------------
 
       if (
@@ -428,7 +505,7 @@ export default async function completeInterview(
 
 
       // -------------------------------------------------
-      // Request the VideoFeed to stop and upload.
+      // Stop recording and request upload.
       // -------------------------------------------------
 
       recordingStopResult =
@@ -472,23 +549,21 @@ export default async function completeInterview(
 
       }
 
+
       console.log(
-        "%c ⏳ [completeInterview] ABOUT TO WAIT FOR RECORDING COMPLETION %c",
-        "background-color: #FFEDD5; color: #C2410C; font-weight: bold; padding: 3px 8px; border-radius: 4px; font-size: 11px;",
-        "",
+        "[completeInterview] ABOUT TO WAIT FOR RECORDING COMPLETION",
         {
-            videoTargetId,
-            recordingStopResult,
+
+          videoTargetId,
+
+          recordingStopResult,
+
         }
-        );
-            // -------------------------------------------------
-      // If there wasn't an active recorder when the stop
-      // action ran, there will be no onstop callback to
-      // resolve the waiter.
-      //
-      // Treat an already-uploaded recording as complete.
-      // Otherwise fail safely rather than completing the
-      // interview without confirming the recording.
+      );
+
+
+      // -------------------------------------------------
+      // Handle already-stopped recorder.
       // -------------------------------------------------
 
       if (
@@ -547,18 +622,9 @@ export default async function completeInterview(
 
       }
 
-      console.log(
-        "%c[completeInterview] AWAITING RECORDING COMPLETION PROMISE%c",
-        "color: #D97706; font-weight: bold;", // Amber text tag
-        "",
-        {
-            videoTargetId,
-        }
-        );
-
 
       // -------------------------------------------------
-      // WAIT FOR ACTUAL RECORDING UPLOAD.
+      // WAIT FOR ACTUAL UPLOAD.
       // -------------------------------------------------
 
       let recordingUploadResult;
@@ -602,10 +668,6 @@ export default async function completeInterview(
       );
 
 
-      // -------------------------------------------------
-      // Defensive verification.
-      // -------------------------------------------------
-
       if (
         recordingUploadResult?.ok !==
         true
@@ -628,10 +690,6 @@ export default async function completeInterview(
       }
 
 
-      // -------------------------------------------------
-      // Store for final result.
-      // -------------------------------------------------
-
       recordingStopResult = {
 
         ...recordingStopResult,
@@ -646,19 +704,15 @@ export default async function completeInterview(
     // =================================================
     // FINAL ACTIVE STATE CHECK
     // =================================================
-    //
-    // The runtime interview should still be active.
-    //
-    // =================================================
 
-    const latestInterview =
+    const latestInterviewBeforeComplete =
       ctx?.get?.(
         "interview"
       ) || {};
 
 
     if (
-      latestInterview?.status !==
+      latestInterviewBeforeComplete?.status !==
       "active"
     ) {
 
@@ -669,7 +723,7 @@ export default async function completeInterview(
           interviewId,
 
           status:
-            latestInterview?.status,
+            latestInterviewBeforeComplete?.status,
 
         }
       );
@@ -757,10 +811,22 @@ export default async function completeInterview(
     // =================================================
     // RUNTIME UPDATE
     // =================================================
+    //
+    // Make the freshly completed interview available
+    // immediately for the evaluator.
+    //
+    // =================================================
 
     ctx?.patch?.(
       "interview",
       {
+
+        id:
+          persistedInterview.id ||
+          persistedInterview._id ||
+          interviewId,
+
+        projectId,
 
         status:
           persistedInterview.status ||
@@ -770,6 +836,17 @@ export default async function completeInterview(
           true,
 
         completedAt,
+
+        questions:
+          Array.isArray(
+            persistedInterview.questions
+          )
+            ? persistedInterview.questions
+            : Array.isArray(
+                interview.questions
+              )
+                ? interview.questions
+                : [],
 
         answers:
           Array.isArray(
@@ -784,34 +861,220 @@ export default async function completeInterview(
 
         aiEvaluation:
           persistedInterview.aiEvaluation ||
-          interview.aiEvaluation ||
+          null,
+
+        result:
+          persistedInterview.result ||
           null,
 
       }
     );
 
 
+    console.log(
+      "[completeInterview] RUNTIME MARKED COMPLETED",
+      {
+
+        interviewId,
+
+        projectId,
+
+        status:
+          persistedInterview.status ||
+          "completed",
+
+      }
+    );
+
+
     // =================================================
-    // SUCCESS
+    // RUN AI EVALUATION
+    // =================================================
+    //
+    // IMPORTANT:
+    //
+    // Pass the freshly completed interview directly.
+    // This avoids depending on React/render timing before
+    // evaluation begins.
+    //
     // =================================================
 
     console.log(
       "=============================================="
     );
 
+    console.log(
+      "[completeInterview] STARTING AI EVALUATION"
+    );
+
+    console.log(
+      "=============================================="
+    );
+
+
+    let evaluationResult =
+      null;
+
+
+    try {
+
+      evaluationResult =
+        await evaluateInterview(
+          ctx,
+          {
+
+            projectId,
+
+            interviewId,
+
+            // Fresh authoritative backend object.
+            interview:
+              persistedInterview,
+
+          }
+        );
+
+
+      console.log(
+        "[completeInterview] AI EVALUATION RESULT",
+        evaluationResult
+      );
+
+    }
+    catch (
+      evaluationError
+    ) {
+
+      console.error(
+        "[completeInterview] AI EVALUATION EXCEPTION",
+        evaluationError
+      );
+
+
+      evaluationResult = {
+
+        ok:
+          false,
+
+        error:
+          evaluationError?.message ||
+          "INTERVIEW_EVALUATION_FAILED",
+
+      };
+
+    }
+
+
+    // =================================================
+    // EVALUATION FAILURE
+    // =================================================
+    //
+    // The interview itself is already completed.
+    //
+    // Do NOT report the overall Complete action as a
+    // failure simply because the evaluator had a problem.
+    //
+    // This allows the standalone interview.evaluate
+    // action to retry later.
+    //
+    // =================================================
+
+    if (
+      evaluationResult?.ok !==
+      true
+    ) {
+
+      console.warn(
+        "[completeInterview] INTERVIEW COMPLETED BUT EVALUATION FAILED",
+        {
+
+          interviewId,
+
+          projectId,
+
+          evaluationResult,
+
+        }
+      );
+
+
+      console.log(
+        "=============================================="
+      );
+
+      console.log(
+        "[completeInterview] SUCCESS - EVALUATION PENDING/FAILED"
+      );
+
+      console.log(
+        "=============================================="
+      );
+
+
+      return {
+
+        ok:
+          true,
+
+        result: {
+
+          interview:
+            persistedInterview,
+
+          interviewId,
+
+          projectId,
+
+          status:
+            persistedInterview.status ||
+            "completed",
+
+          completedAt,
+
+          aiEvaluation:
+            null,
+
+          evaluationPending:
+            true,
+
+          evaluationResult,
+
+          recordingStopResult,
+
+          videoTargetId,
+
+        },
+
+      };
+
+    }
+
+
+    // =================================================
+    // SUCCESS
+    // =================================================
+
+    const finalEvaluation =
+      evaluationResult?.result ||
+      persistedInterview.aiEvaluation ||
+      null;
+
+
+    console.log(
+      "=============================================="
+    );
 
     console.log(
       "[completeInterview] SUCCESS"
     );
 
-
     console.log(
       "=============================================="
     );
 
 
     console.log(
-      "[completeInterview] INTERVIEW COMPLETED",
+      "[completeInterview] INTERVIEW COMPLETED + EVALUATED",
       {
 
         interviewId,
@@ -822,6 +1085,9 @@ export default async function completeInterview(
           persistedInterview.status,
 
         completedAt,
+
+        hasEvaluation:
+          !!finalEvaluation,
 
         recordingStopResult,
 
@@ -850,8 +1116,12 @@ export default async function completeInterview(
         completedAt,
 
         aiEvaluation:
-          persistedInterview.aiEvaluation ||
-          null,
+          finalEvaluation,
+
+        evaluationPending:
+          false,
+
+        evaluationResult,
 
         recordingStopResult,
 
@@ -870,11 +1140,9 @@ export default async function completeInterview(
       "=============================================="
     );
 
-
     console.error(
       "[completeInterview] FAILED"
     );
-
 
     console.error(
       "=============================================="

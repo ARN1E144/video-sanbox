@@ -1,5 +1,3 @@
-// src/context/ActionContext.js
-
 import React, {
   createContext,
   useContext,
@@ -18,8 +16,7 @@ import { useRuntimeEvents } from "./RuntimeEventContext";
 import { useRuntimeAuth } from "./RuntimeAuthContext";
 
 
-const ActionContext =
-  createContext(null);
+const ActionContext = createContext(null);
 
 
 export function ActionProvider({
@@ -74,9 +71,8 @@ export function ActionProvider({
   //     timer
   //   }
   //
-  // This is intentionally separate from runtime state.
-  //
-  // It represents an asynchronous operation rather than
+  // This remains separate from runtime state because it
+  // represents an asynchronous handshake rather than
   // application state.
   //
   // ===================================================
@@ -189,10 +185,9 @@ export function ActionProvider({
         setBindings(
           prev => {
 
-            const next =
-              {
-                ...prev,
-              };
+            const next = {
+              ...prev,
+            };
 
 
             delete next[id];
@@ -499,7 +494,7 @@ export function ActionProvider({
 
 
   // ===================================================
-  // CLEANUP WAITERS
+  // CLEANUP RECORDING WAITERS
   // ===================================================
 
   useEffect(
@@ -532,6 +527,75 @@ export function ActionProvider({
     },
     []
   );
+
+
+  // ===================================================
+  // RUNTIME EVENT EMITTER
+  // ===================================================
+  //
+  // This is the important runtime bridge.
+  //
+  // Domain actions receive `ctx` from this provider.
+  //
+  // Therefore:
+  //
+  //   action
+  //      ↓
+  //   ctx.emit(...)
+  //      ↓
+  //   RuntimeEventContext.emit(...)
+  //      ↓
+  //   RuntimeTriggersContext
+  //
+  // Domain actions do NOT need to know about React,
+  // providers, listeners or the event bus implementation.
+  //
+  // ===================================================
+
+  const emit =
+    useCallback(
+      (
+        event,
+        payload = {}
+      ) => {
+
+        if (!event) {
+
+          console.warn(
+            "[ActionContext] Cannot emit event without event name",
+            {
+              event,
+              payload,
+            }
+          );
+
+          return false;
+
+        }
+
+
+        console.log(
+          "[ActionContext] EMITTING RUNTIME EVENT",
+          {
+            event,
+            payload,
+          }
+        );
+
+
+        runtimeEvents.emit(
+          event,
+          payload
+        );
+
+
+        return true;
+
+      },
+      [
+        runtimeEvents,
+      ]
+    );
 
 
   // ===================================================
@@ -569,6 +633,22 @@ export function ActionProvider({
           set,
 
           patch,
+
+
+          // --------------------------------------------
+          // RUNTIME EVENTS
+          // --------------------------------------------
+          //
+          // Domain actions can now do:
+          //
+          // ctx.emit(
+          //   "compliance.evidenceUploaded",
+          //   {...}
+          // )
+          //
+          // --------------------------------------------
+
+          emit,
 
 
           // --------------------------------------------
@@ -631,6 +711,8 @@ export function ActionProvider({
 
         set,
         patch,
+
+        emit,
 
         notify,
 
@@ -719,52 +801,78 @@ export function ActionProvider({
         }
 
 
-        // ---------------------------------------------
-        // RUNTIME READY
-        // ---------------------------------------------
-
-        if (
-          !runtimeState.runtimeReady
-        ) {
-
-          console.warn(
-            "[ACTION BLOCKED] Runtime not ready"
-          );
+        const runtimeExecution =
+  params?.__runtimeExecution === true;
 
 
-          return {
+    // ---------------------------------------------
+    // RUNTIME READY
+    // ---------------------------------------------
 
-            ok:
-              false,
+    if (
+      !runtimeState.runtimeReady &&
+      !runtimeExecution
+    ) {
 
-            error:
-              "runtime_not_ready",
-
-          };
-
+      console.warn(
+        "[ACTION BLOCKED] Runtime not ready",
+        {
+          action: actionName,
+          runtimeExecution,
+          runtimeReady:
+            runtimeState.runtimeReady,
         }
+      );
 
 
-        // ---------------------------------------------
-        // TRANSACTION
-        // ---------------------------------------------
+      return {
 
-        runtimeState.beginTransaction();
+        ok:
+          false,
+
+        error:
+          "runtime_not_ready",
+
+      };
+
+    }
 
 
-        const ctx =
-          buildRuntimeContext();
+    // ---------------------------------------------
+    // TRANSACTION
+    // ---------------------------------------------
+
+    runtimeState.beginTransaction();
 
 
-        try {
+    const ctx =
+      buildRuntimeContext();
 
-          const result =
+
+    try {
+
+      const {
+        __runtimeExecution,
+        ...actionParams
+      } = params;
+
+
+
+
+          // -------------------------------------------
+          // EXECUTE ACTION
+          // -------------------------------------------
+
+           const result =
             await runRuntimeAction(
               actionName,
               ctx,
-              params
+              actionParams
             );
 
+          // -------------------------------------------
+          // COMMIT SUCCESSFUL ACTION
+          // -------------------------------------------
 
           if (
             result?.ok
@@ -776,6 +884,26 @@ export function ActionProvider({
             const committedState =
               getAll();
 
+
+            // -----------------------------------------
+            // GENERIC ACTION EVENT
+            // -----------------------------------------
+            //
+            // This remains separate from domain events.
+            //
+            // Example:
+            //
+            //   compliance.uploadEvidence
+            //
+            // is the action event.
+            //
+            // The action itself may additionally emit:
+            //
+            //   compliance.evidenceUploaded
+            //
+            // through ctx.emit().
+            //
+            // -----------------------------------------
 
             runtimeEvents.emit(
               actionName,
@@ -817,6 +945,10 @@ export function ActionProvider({
           err
         ) {
 
+          // -------------------------------------------
+          // ROLLBACK / FINALISE TRANSACTION
+          // -------------------------------------------
+
           runtimeState.commit();
 
 
@@ -851,43 +983,53 @@ export function ActionProvider({
     );
 
 
+  // ===================================================
+  // ACTION REF
+  // ===================================================
+  //
+  // Allows the runtime context's `runAction()` to call
+  // the current executeAction implementation without
+  // creating a circular dependency.
+  //
+  // ===================================================
+
   executeActionRef.current =
     executeAction;
 
 
   // ===================================================
-  // PIPELINE
+  // ACTION PIPELINE
   // ===================================================
 
   const executePipeline =
-  useCallback(
-    async (
-      pipeline = [],
-      payload = {}
-    ) => {
+    useCallback(
+      async (
+        pipeline = [],
+        payload = {}
+      ) => {
 
-      const pipelineContext = {
+        const pipelineContext = {
 
-        ...buildRuntimeContext(),
+          ...buildRuntimeContext(),
 
-        runAction:
-          executeAction,
+          runAction:
+            executeAction,
 
-      };
+        };
 
 
-      return runActionPipeline(
-        pipeline,
-        pipelineContext,
-        payload
-      );
+        return runActionPipeline(
+          pipeline,
+          pipelineContext,
+          payload
+        );
 
-    },
-    [
-      buildRuntimeContext,
-      executeAction,
-    ]
-  );
+      },
+      [
+        buildRuntimeContext,
+        executeAction,
+      ]
+    );
 
 
   // ===================================================
@@ -898,11 +1040,18 @@ export function ActionProvider({
     useMemo(
       () => ({
 
+        // ---------------------------------------------
+        // RUNTIME
+        // ---------------------------------------------
+
         runtimeState,
 
 
-        bindings,
+        // ---------------------------------------------
+        // BINDINGS
+        // ---------------------------------------------
 
+        bindings,
 
         getBinding,
 
@@ -915,21 +1064,40 @@ export function ActionProvider({
         appendFeedItem,
 
 
+        // ---------------------------------------------
+        // STATE
+        // ---------------------------------------------
+
         get,
 
         set,
 
 
+        // ---------------------------------------------
+        // ACTIONS
+        // ---------------------------------------------
+
         runRuntimeAction:
           executeAction,
-
 
         runActionPipeline:
           executePipeline,
 
-
         runAction:
           executeAction,
+
+
+        // ---------------------------------------------
+        // EVENTS
+        // ---------------------------------------------
+        //
+        // Expose this at provider level as well.
+        // This is useful for components that need to
+        // explicitly emit runtime events.
+        //
+        // ---------------------------------------------
+
+        emit,
 
 
         // ---------------------------------------------
@@ -942,6 +1110,10 @@ export function ActionProvider({
 
         rejectRecordingCompletion,
 
+
+        // ---------------------------------------------
+        // NOTIFY
+        // ---------------------------------------------
 
         notify,
 
@@ -968,6 +1140,8 @@ export function ActionProvider({
         executeAction,
 
         executePipeline,
+
+        emit,
 
         waitForRecordingCompletion,
 

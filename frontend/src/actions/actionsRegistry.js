@@ -96,6 +96,7 @@ import endGroupCall
 import refreshGroupCall
   from "./call/group/refreshGroupCall";
 
+
 import startInterview
   from "./interview/startInterview";
 
@@ -132,6 +133,23 @@ import leaveTrainingSession
 
 import endTrainingSession
   from "./training/endTrainingSession";
+
+
+// =========================================================
+// COMPLIANCE
+// =========================================================
+
+import loadCompliance
+  from "./compliance/load";
+
+import requestEvidence
+  from "./compliance/requestEvidence";
+
+import uploadEvidence 
+  from "./compliance/uploadEvidence";
+
+import analyseEvidence 
+  from "./compliance/analyseEvidence";
 
 
 import {
@@ -209,8 +227,10 @@ export const ACTIONS = {
   CALL_END_GROUP:
     "call.endGroupCall",
 
-  CALL_REFRESH_GROUP: 
+  CALL_REFRESH_GROUP:
     "call.refreshGroupCall",
+
+
   // =======================================================
   // CALL MEDIA
   // =======================================================
@@ -294,10 +314,27 @@ export const ACTIONS = {
     "training.joinSession",
 
   TRAINING_LEAVE_SESSION:
-  "training.leaveSession",
+    "training.leaveSession",
 
   TRAINING_END_SESSION:
     "training.endSession",
+
+
+  // =======================================================
+  // COMPLIANCE
+  // =======================================================
+
+  COMPLIANCE_LOAD:
+    "compliance.load",
+  
+  COMPLIANCE_REQUEST_EVIDENCE: 
+    "compliance.requestEvidence",
+
+  COMPLIANCE_UPLOAD_EVIDENCE: 
+    "compliance.uploadEvidence",
+
+  COMPLIANCE_ANALYSE_EVIDENCE:
+    "compliance.analyseEvidence",
 
 
   // =======================================================
@@ -360,19 +397,6 @@ const conditionPath = ({
 // autoNextActions
 //   Actions the runtime may execute automatically after
 //   this action completes successfully.
-//
-// This distinction is important.
-//
-// Example:
-//
-//   joinGroupCall
-//       nextActions:
-//         toggleMic
-//         toggleVideo
-//         leaveGroupCall
-//         endGroupCall
-//
-// These must NOT all execute automatically.
 //
 // =========================================================
 
@@ -667,31 +691,45 @@ const PATH_TRAINING_SESSION_ID =
   conditionPath({
     path:
       "training.sessionId",
+
     label:
       "Training session ID",
+
     type:
       "string",
   });
 
 
-const PATH_TRAINING_STATE =
+const PATH_TRAINING_CHANNEL =
   conditionPath({
     path:
-      "training.state",
+      "training.channel",
+
     label:
-      "Training state",
+      "Training channel",
+
+    type:
+      "string",
+  });
+
+
+const PATH_TRAINING_STATUS =
+  conditionPath({
+    path:
+      "training.status",
+
+    label:
+      "Training status",
+
     type:
       "string",
 
     options: [
       "idle",
-      "pending",
-      "created",
-      "joined",
+      "inviting",
       "active",
       "ended",
     ],
-
   });
 
 
@@ -699,8 +737,10 @@ const PATH_TRAINING_PENDING_SESSIONS =
   conditionPath({
     path:
       "training.pendingSessions",
+
     label:
       "Pending training sessions",
+
     type:
       "object",
   });
@@ -1000,10 +1040,11 @@ export const actionRegistry = {
 
     }),
 
+
     inviteGroupParticipants: createAction({
 
       value:
-        ACTIONS.CALL_INVITE_GROUP,
+        ACTIONS.CALL_INVITE_PARTICIPANTS,
 
       label:
         "Invite / Re-invite Group Participants",
@@ -1067,6 +1108,7 @@ export const actionRegistry = {
       },
 
     }),
+
 
     leaveCall: createAction({
 
@@ -1418,16 +1460,11 @@ export const actionRegistry = {
         PATH_CALL_PARTICIPANTS,
       ],
 
-      // Actions which are valid after creating a group call.
       nextActions: [
         "call.joinGroupCall",
         "call.endGroupCall",
       ],
 
-      // Automatic transition:
-      //
-      // create → join
-      //
       autoNextActions: [
         "call.joinGroupCall",
       ],
@@ -1533,15 +1570,10 @@ export const actionRegistry = {
         PATH_CALL_PARTICIPANTS,
       ],
 
-      // Accepted invitation can proceed to join.
       nextActions: [
         "call.joinGroupCall",
       ],
 
-      // Automatic transition:
-      //
-      // accept → join
-      //
       autoNextActions: [],
 
       params: {
@@ -1650,9 +1682,6 @@ export const actionRegistry = {
         PATH_CALL_REMOTE_USERS,
       ],
 
-      // These are AVAILABLE after joining.
-      //
-      // They do not execute automatically.
       nextActions: [
         "call.toggleMic",
         "call.toggleVideo",
@@ -1676,7 +1705,9 @@ export const actionRegistry = {
 
     }),
 
+
     refreshGroupCall: createAction({
+
       value:
         ACTIONS.CALL_REFRESH_GROUP,
 
@@ -1721,16 +1752,20 @@ export const actionRegistry = {
       autoNextActions: [],
 
       params: {
+
         callId: {
+
           type:
             "string",
 
           required:
             false,
-        },
-      },
-    }),
 
+        },
+
+      },
+
+    }),
 
 
     leaveGroupCall: createAction({
@@ -2237,19 +2272,68 @@ export const actionRegistry = {
         "ParticipantSelector",
       ],
 
+      requires: [],
+
       produces: [
         "training.sessionId",
-        "training.state",
+        "training.channel",
+        "training.status",
+        "training.participantIds",
+        "training.joined",
       ],
 
       conditionPaths: [
         PATH_TRAINING_SESSION_ID,
-        PATH_TRAINING_STATE,
+        PATH_TRAINING_CHANNEL,
+        PATH_TRAINING_STATUS,
       ],
 
       nextActions: [
         "training.startSession",
       ],
+
+      params: {
+
+        participantIds: {
+
+          type:
+            "array",
+
+          itemType:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        userIds: {
+
+          type:
+            "array",
+
+          itemType:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        selectedParticipantIds: {
+
+          type:
+            "array",
+
+          itemType:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
 
     }),
 
@@ -2270,19 +2354,31 @@ export const actionRegistry = {
 
       targets: [
         "AgoraFeed",
+        "TrainingInvitation",
+      ],
+
+      requires: [
+        "training.sessionId",
       ],
 
       produces: [
-        "training.state",
+        "training.sessionId",
+        "training.channel",
+        "training.status",
+        "training.joined",
+
         "call.id",
         "call.channel",
         "call.joined",
       ],
 
       conditionPaths: [
-        PATH_TRAINING_STATE,
+        PATH_TRAINING_SESSION_ID,
+        PATH_TRAINING_CHANNEL,
+        PATH_TRAINING_STATUS,
+        PATH_CALL_ID,
+        PATH_CALL_CHANNEL,
         PATH_CALL_JOINED,
-        PATH_CALL_PARTICIPANTS,
       ],
 
       nextActions: [
@@ -2290,6 +2386,20 @@ export const actionRegistry = {
         "call.toggleVideo",
         "training.endSession",
       ],
+
+      params: {
+
+        sessionId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
 
     }),
 
@@ -2325,6 +2435,8 @@ export const actionRegistry = {
         "training.fetchPendingSessions",
       ],
 
+      params: {},
+
     }),
 
 
@@ -2352,14 +2464,20 @@ export const actionRegistry = {
       ],
 
       produces: [
-        "training.state",
+        "training.sessionId",
+        "training.channel",
+        "training.status",
+        "training.joined",
+
         "call.joined",
         "call.remoteUsers",
         "call.participants",
       ],
 
       conditionPaths: [
-        PATH_TRAINING_STATE,
+        PATH_TRAINING_SESSION_ID,
+        PATH_TRAINING_CHANNEL,
+        PATH_TRAINING_STATUS,
         PATH_CALL_JOINED,
         PATH_CALL_PARTICIPANTS,
       ],
@@ -2367,10 +2485,26 @@ export const actionRegistry = {
       nextActions: [
         "call.toggleMic",
         "call.toggleVideo",
+        "training.leaveSession",
         "training.endSession",
       ],
 
+      params: {
+
+        sessionId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
     }),
+
 
     leaveSession: createAction({
 
@@ -2396,18 +2530,38 @@ export const actionRegistry = {
       ],
 
       produces: [
-        "training.state",
+        "training.sessionId",
+        "training.channel",
+        "training.status",
+        "training.joined",
+
         "call.joined",
       ],
 
       conditionPaths: [
-        PATH_TRAINING_STATE,
+        PATH_TRAINING_SESSION_ID,
+        PATH_TRAINING_CHANNEL,
+        PATH_TRAINING_STATUS,
         PATH_CALL_JOINED,
       ],
 
       nextActions: [
         "training.fetchPendingSessions",
       ],
+
+      params: {
+
+        sessionId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
 
     }),
 
@@ -2432,22 +2586,42 @@ export const actionRegistry = {
       ],
 
       requires: [
-        "training.state",
+        "training.sessionId",
       ],
 
       produces: [
-        "training.state",
+        "training.sessionId",
+        "training.channel",
+        "training.status",
+        "training.joined",
+
         "call.joined",
       ],
 
       conditionPaths: [
-        PATH_TRAINING_STATE,
+        PATH_TRAINING_SESSION_ID,
+        PATH_TRAINING_CHANNEL,
+        PATH_TRAINING_STATUS,
         PATH_CALL_JOINED,
       ],
 
       nextActions: [
         "training.fetchPendingSessions",
       ],
+
+      params: {
+
+        sessionId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
 
     }),
 
@@ -2642,19 +2816,296 @@ export const actionRegistry = {
 
       produces: [
         "interview.status",
+        "interview.completedAt",
+        "interview.aiEvaluation",
       ],
 
       conditionPaths: [
         PATH_INTERVIEW_STATUS,
       ],
 
-      nextActions: [
-        "interview.evaluate",
-      ],
+      nextActions: [],
 
     }),
 
   },
+
+
+  // =======================================================
+  // COMPLIANCE SYSTEM
+  // =======================================================
+
+  compliance: {
+
+    load: createAction({
+
+      value:
+        ACTIONS.COMPLIANCE_LOAD,
+
+      label:
+        "Load Compliance Data",
+
+      category:
+        "compliance",
+
+      run:
+        loadCompliance,
+
+      targets: [
+        "ComplianceDashboard",
+        "ComplianceFramework",
+        "ComplianceControl",
+        "ComplianceEvidence",
+        "ComplianceRisk",
+        "ComplianceAction",
+        "CompliancePolicy",
+        "ComplianceAudit",
+      ],
+
+      requires: [],
+
+      produces: [
+
+        "compliance.organisation",
+
+        "compliance.framework",
+
+        "compliance.controls",
+
+        "compliance.evidence",
+
+        "compliance.risks",
+
+        "compliance.actions",
+
+        "compliance.policies",
+
+        "compliance.suppliers",
+
+        "compliance.training",
+
+        "compliance.audits",
+
+        "compliance.notifications",
+
+        "compliance.activity",
+
+        "compliance.metrics",
+
+      ],
+
+      conditionPaths: [],
+
+      /*
+       * Loading data does not recursively trigger itself.
+       *
+       * A UI refresh button, polling mechanism, or another
+       * runtime trigger can explicitly invoke compliance.load.
+       */
+      nextActions: [],
+
+      autoNextActions: [],
+
+      params: {},
+
+    }),
+
+
+    // =====================================================
+    // EVIDENCE
+    // =====================================================
+
+    requestEvidence: createAction({
+
+      value:
+        ACTIONS.COMPLIANCE_REQUEST_EVIDENCE,
+
+      label:
+        "Request Evidence",
+
+      category:
+        "compliance",
+
+      run:
+        requestEvidence,
+
+      targets: [
+        "ComplianceControl",
+        "ComplianceEvidence",
+        "ComplianceDashboard",
+      ],
+
+      requires: [
+        "compliance.controls",
+      ],
+
+      produces: [
+        "compliance.evidence",
+        "compliance.controls",
+      ],
+
+      conditionPaths: [],
+
+      /*
+       * Do not automatically chain another action here.
+       *
+       * The evidenceRequested event can later be consumed
+       * by RuntimeTriggers to perform things such as:
+       *
+       *   notify owner
+       *   create task
+       *   send reminder
+       *   escalate overdue evidence
+       */
+      nextActions: [],
+
+      autoNextActions: [],
+
+      params: {
+
+        controlId: {
+
+          type:
+            "string",
+
+          required:
+            true,
+
+        },
+
+        name: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        description: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        type: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        dueDate: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        requestedFor: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+    uploadEvidence: createAction({
+      value: ACTIONS.COMPLIANCE_UPLOAD_EVIDENCE,
+      label: "Upload Evidence",
+      category: "compliance",
+      run: uploadEvidence,
+
+      targets: [
+        "ComplianceEvidence",
+        "ComplianceControl",
+        "ComplianceDashboard",
+      ],
+
+      requires: [
+        "compliance.evidence",
+      ],
+
+      produces: [
+        "compliance.evidence",
+      ],
+
+      conditionPaths: [],
+      nextActions: [],
+      autoNextActions: [],
+
+      params: {
+        evidenceId: {
+          type: "string",
+          required: true,
+        },
+        fileName: {
+          type: "string",
+          required: true,
+        },
+        fileUrl: {
+          type: "string",
+          required: false,
+        },
+      },
+    }),
+
+    analyseEvidence: createAction({
+      value: ACTIONS.COMPLIANCE_ANALYSE_EVIDENCE,
+
+      label: "Analyse Evidence",
+
+      category: "compliance",
+
+      run: analyseEvidence,
+
+      targets: [
+        "ComplianceEvidence",
+        "ComplianceControl",
+        "ComplianceDashboard",
+      ],
+
+      requires: [
+        "compliance.evidence",
+      ],
+
+      produces: [
+        "compliance.evidence",
+      ],
+
+      conditionPaths: [],
+
+      nextActions: [],
+
+      autoNextActions: [],
+
+      params: {
+        evidenceId: {
+          type: "string",
+          required: true,
+        },
+      },
+    }),
+
+  },
+
 
 
   // =======================================================
@@ -2816,6 +3267,11 @@ console.log(
         actionRegistry.interview || {}
       ),
 
+    complianceActions:
+      Object.keys(
+        actionRegistry.compliance || {}
+      ),
+
     groupCallActions: [
       "createGroupCall",
       "fetchPendingInvitations",
@@ -2824,6 +3280,8 @@ console.log(
       "joinGroupCall",
       "leaveGroupCall",
       "endGroupCall",
+      "refreshGroupCall",
+      "inviteGroupParticipants",
     ],
 
   }
@@ -2854,7 +3312,7 @@ console.log(
     joinGroupCall:
       actionRegistry.call
         ?.joinGroupCall,
-    
+
     refreshGroupCall:
       actionRegistry.call
         ?.refreshGroupCall,
@@ -2911,6 +3369,48 @@ console.log(
         .video
         ?.uploadRecording
         ?.run,
+
+  }
+);
+
+
+console.log(
+  "[COMPLIANCE ACTION DEBUG]",
+  {
+
+    load:
+      actionRegistry
+        .compliance
+        ?.load,
+
+    loadRun:
+      typeof actionRegistry
+        .compliance
+        ?.load
+        ?.run,
+
+    requestEvidence:
+      actionRegistry
+        .compliance
+        ?.requestEvidence,
+
+    requestEvidenceRun:
+      typeof actionRegistry
+        .compliance
+        ?.requestEvidence
+        ?.run,
+
+    produces:
+      actionRegistry
+        .compliance
+        ?.requestEvidence
+        ?.produces,
+
+    params:
+      actionRegistry
+        .compliance
+        ?.requestEvidence
+        ?.params,
 
   }
 );

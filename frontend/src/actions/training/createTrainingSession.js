@@ -833,6 +833,11 @@ export default async function createTrainingSession(
       }
     );
 
+    console.log(
+    "[createTrainingSession] RUNTIME AFTER SESSION PATCH",
+    ctx.get?.("training")
+    );
+
 
     // =================================================
     // RESET TEMPORARY PICKER STATE
@@ -852,6 +857,11 @@ export default async function createTrainingSession(
     ctx.set?.(
       "training.selectedParticipantIds",
       clearedSelection
+    );
+
+    console.log(
+    "[createTrainingSession] RUNTIME AFTER PICKER RESET",
+    ctx.get?.("training")
     );
 
 

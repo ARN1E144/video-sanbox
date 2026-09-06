@@ -1,7 +1,8 @@
+
 {
   "id": "confo.group_call",
   "name": "Group Video Call",
-  "version": 2,
+  "version": 3,
   "type": "confo",
   "description": "Live multi-participant video calling with participant selection, invitations, re-invitations and runtime-driven media.",
 
@@ -10,7 +11,8 @@
     "audio",
     "group-call",
     "invitations",
-    "realtime"
+    "realtime",
+    "multi-participant"
   ],
 
   "tree": {
@@ -33,7 +35,6 @@
         }
       },
 
-
       {
         "id": "group-call-participants",
         "type": "ParticipantSelector",
@@ -43,10 +44,11 @@
 
         "props": {
           "label": "Invite Participants",
-          "placeholder": "Select participants..."
+          "placeholder": "Select participants...",
+          "multiple": true,
+          "selectionPath": "call.selectedParticipantIds"
         }
       },
-
 
       {
         "id": "group-call-controls",
@@ -71,7 +73,6 @@
             }
           },
 
-
           {
             "id": "group-call-invite",
             "type": "ControlButton",
@@ -81,7 +82,6 @@
               "action": "call.inviteGroupParticipants"
             }
           },
-
 
           {
             "id": "group-call-leave",
@@ -93,7 +93,6 @@
             }
           },
 
-
           {
             "id": "group-call-end",
             "type": "ControlButton",
@@ -104,7 +103,6 @@
             }
           },
 
-
           {
             "id": "group-call-mic",
             "type": "ControlButton",
@@ -114,7 +112,6 @@
               "action": "call.toggleMic"
             }
           },
-
 
           {
             "id": "group-call-video",
@@ -128,7 +125,6 @@
 
         ]
       },
-
 
       {
         "id": "group-call-local-video",
@@ -147,7 +143,6 @@
         }
       },
 
-
       {
         "id": "group-call-remote-grid",
         "type": "RemoteVideoGrid",
@@ -162,7 +157,6 @@
           "emptyText": "Waiting for participants..."
         }
       },
-
 
       {
         "id": "group-call-client-section",
@@ -188,7 +182,6 @@
             }
           },
 
-
           {
             "id": "group-call-client-alert",
             "type": "IncomingGroupCallAlert",
@@ -199,7 +192,6 @@
               "source": "calls.pendingInvitations"
             }
           },
-
 
           {
             "id": "group-call-client-actions",
@@ -224,7 +216,6 @@
                 }
               },
 
-
               {
                 "id": "group-call-client-accept",
                 "type": "ControlButton",
@@ -235,7 +226,6 @@
                 }
               },
 
-
               {
                 "id": "group-call-client-decline",
                 "type": "ControlButton",
@@ -245,7 +235,6 @@
                   "action": "call.declineInvitation"
                 }
               },
-
 
               {
                 "id": "group-call-client-join",

@@ -3,9 +3,36 @@
 import api from "../../services/api";
 
 
+// =====================================================
+// NORMALISE ID
+// =====================================================
+
 function normaliseId(
   value
 ) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    typeof value === "object"
+  ) {
+
+    value =
+      value?.id ||
+      value?._id ||
+      value?.sessionId ||
+      null;
+
+  }
+
 
   if (
     value === null ||
@@ -30,27 +57,120 @@ function normaliseId(
 
 
 // =====================================================
+// RESOLVE TRAINING SESSION ID
+// =====================================================
+//
+// We deliberately support several equivalent locations.
+//
+// Primary:
+//
+//   training.sessionId
+//
+// Also inspect:
+//
+//   training.id
+//   params.sessionId
+//   params.trainingSessionId
+//   params.session?.id
+//
+// The runtime state remains authoritative.
+// These additional locations simply make the action more
+// resilient to builder/runtime parameter variations.
+//
+// =====================================================
+
+function resolveTrainingSessionId(
+  ctx,
+  params,
+  currentTraining
+) {
+
+  const candidates = [
+
+    params?.sessionId,
+
+    params?.trainingSessionId,
+
+    params?.session?.id,
+
+    params?.session?._id,
+
+    currentTraining?.sessionId,
+
+    currentTraining?.id,
+
+    ctx.get?.(
+      "training.sessionId"
+    ),
+
+    ctx.get?.(
+      "training.id"
+    ),
+
+  ];
+
+
+  for (
+    const candidate of
+      candidates
+  ) {
+
+    const id =
+      normaliseId(
+        candidate
+      );
+
+
+    if (
+      id
+    ) {
+
+      return id;
+
+    }
+
+  }
+
+
+  return null;
+
+}
+
+
+// =====================================================
 // START TRAINING SESSION
 // =====================================================
 //
-// Responsibilities:
+// Lifecycle:
 //
-//   1. Start the backend training session.
-//   2. Resolve the training channel.
-//   3. Join Agora directly through ctx.agora.
-//   4. Update training runtime state.
-//
-// The training backend owns the training lifecycle.
-// AgoraEngine owns the media lifecycle.
+//   training.createSession
+//          ↓
+//   training.sessionId
+//          ↓
+//   training.startSession
+//          ↓
+//   POST /training/sessions/:id/start
+//          ↓
+//   training becomes active
+//          ↓
+//   Agora joins training.channel
 //
 // IMPORTANT:
 //
-// This action does NOT call:
+// This action:
 //
-//   call.joinCall
+//   - starts the backend training session
+//   - resolves the authoritative training channel
+//   - joins Agora
+//   - updates training runtime state
+//   - maintains the existing call.* compatibility bridge
 //
-// That generic call action is no longer part of the
-// Remote Training lifecycle.
+// This action does NOT:
+//
+//   - call call.joinCall
+//   - create a group call
+//   - alter ParticipantSelector state
+//
 // =====================================================
 
 export default async function startTrainingSession(
@@ -74,24 +194,102 @@ export default async function startTrainingSession(
   try {
 
     // =================================================
-    // RESOLVE SESSION
+    // READ COMPLETE TRAINING STATE FIRST
+    // =================================================
+    //
+    // Do this before resolving the ID so we can see
+    // exactly what the runtime contains at the moment
+    // Start Training is pressed.
+    //
+    // =================================================
+
+    const currentTraining =
+      ctx.get?.(
+        "training"
+      ) || {};
+
+
+    const directSessionId =
+      ctx.get?.(
+        "training.sessionId"
+      );
+
+
+    console.log(
+    "[startTrainingSession] RUNTIME BEFORE START",
+    JSON.stringify(
+        currentTraining,
+        null,
+        2
+    )
+    );
+
+
+    // =================================================
+    // RESOLVE SESSION ID
     // =================================================
 
     const sessionId =
-      normaliseId(
-        params?.sessionId ||
-        ctx.get?.(
-          "training.sessionId"
-        )
+      resolveTrainingSessionId(
+        ctx,
+        params,
+        currentTraining
       );
 
+
+    console.log(
+      "[startTrainingSession] RESOLVED SESSION",
+      {
+
+        sessionId,
+
+        sourceCandidates: {
+
+          paramSessionId:
+            params?.sessionId,
+
+          paramTrainingSessionId:
+            params?.trainingSessionId,
+
+          paramSessionIdObject:
+            params?.session?.id ||
+            params?.session?._id ||
+            null,
+
+          runtimeTrainingSessionId:
+            currentTraining?.sessionId,
+
+          runtimeTrainingId:
+            currentTraining?.id,
+
+          directRuntimeSessionId:
+            directSessionId,
+
+        },
+
+      }
+    );
+
+
+    // =================================================
+    // REQUIRE SESSION
+    // =================================================
 
     if (
       !sessionId
     ) {
 
       console.warn(
-        "[startTrainingSession] No training session"
+        "[startTrainingSession] NO TRAINING SESSION AVAILABLE",
+        {
+
+          currentTraining,
+
+          directSessionId,
+
+          params,
+
+        }
       );
 
 
@@ -108,20 +306,47 @@ export default async function startTrainingSession(
         error:
           "NO_TRAINING_SESSION",
 
+        result: {
+
+          currentTraining,
+
+          directSessionId,
+
+          params,
+
+        },
+
       };
 
     }
 
 
-    const currentTraining =
-      ctx.get?.(
-        "training"
-      ) || {};
+    // =================================================
+    // CURRENT TRAINING STATUS
+    // =================================================
+
+    const currentStatus =
+      currentTraining?.status ||
+      null;
 
 
     console.log(
-      "[startTrainingSession] CURRENT TRAINING STATE",
-      currentTraining
+      "[startTrainingSession] CURRENT TRAINING",
+      {
+
+        sessionId,
+
+        status:
+          currentStatus,
+
+        channel:
+          currentTraining?.channel ||
+          null,
+
+        joined:
+          currentTraining?.joined === true,
+
+      }
     );
 
 
@@ -164,7 +389,9 @@ export default async function startTrainingSession(
       console.error(
         "[startTrainingSession] Agora joinCall unavailable",
         {
+
           agora,
+
         }
       );
 
@@ -183,13 +410,15 @@ export default async function startTrainingSession(
 
 
     // =================================================
-    // START BACKEND SESSION
+    // BACKEND START
     // =================================================
 
     console.log(
       "[startTrainingSession] Starting backend training session",
       {
+
         sessionId,
+
       }
     );
 
@@ -208,20 +437,27 @@ export default async function startTrainingSession(
     );
 
 
+    // =================================================
+    // EXTRACT SESSION
+    // =================================================
+
     const session =
       data?.session ||
       null;
 
 
     if (
-      !session?.id ||
-      !session?.channelName
+      !session
     ) {
 
       console.error(
-        "[startTrainingSession] Invalid backend response",
+        "[startTrainingSession] Backend returned no session",
         {
+
           data,
+
+          sessionId,
+
         }
       );
 
@@ -234,26 +470,87 @@ export default async function startTrainingSession(
         error:
           "INVALID_TRAINING_START_RESPONSE",
 
+        result:
+          data ||
+          null,
+
       };
 
     }
 
 
+    // =================================================
+    // SESSION ID
+    // =================================================
+
     const actualSessionId =
       normaliseId(
-        session.id
+        session?.id
+      ) ||
+      normaliseId(
+        session?._id
+      ) ||
+      sessionId;
+
+
+    if (
+      !actualSessionId
+    ) {
+
+      console.error(
+        "[startTrainingSession] Missing session ID in backend response",
+        {
+
+          session,
+
+        }
       );
 
 
+      return {
+
+        ok:
+          false,
+
+        error:
+          "INVALID_TRAINING_START_RESPONSE",
+
+        result:
+          data ||
+          null,
+
+      };
+
+    }
+
+
+    // =================================================
+    // CHANNEL
+    // =================================================
+
     const channel =
-      String(
-        session.channelName
-      ).trim();
+      session?.channelName
+        ? String(
+            session.channelName
+          ).trim()
+        : null;
 
 
     if (
       !channel
     ) {
+
+      console.error(
+        "[startTrainingSession] Missing training channel",
+        {
+
+          actualSessionId,
+
+          session,
+
+        }
+      );
+
 
       return {
 
@@ -263,13 +560,31 @@ export default async function startTrainingSession(
         error:
           "MISSING_TRAINING_CHANNEL",
 
+        result: {
+
+          sessionId:
+            actualSessionId,
+
+          session,
+
+        },
+
       };
 
     }
 
 
     // =================================================
-    // STORE TRAINING SESSION
+    // BACKEND AUTHORITATIVE TRAINING STATE
+    // =================================================
+    //
+    // Important:
+    //
+    // The backend has now transitioned the session to
+    // active.
+    //
+    // We therefore update the runtime before Agora join.
+    //
     // =================================================
 
     ctx.patch?.(
@@ -286,7 +601,31 @@ export default async function startTrainingSession(
           "active",
 
         hostUserId:
-          session.hostUserId,
+          normaliseId(
+            session.hostUserId
+          ) ||
+          currentTraining?.hostUserId ||
+          null,
+
+        participantIds:
+          Array.isArray(
+            currentTraining?.participantIds
+          )
+            ? currentTraining.participantIds
+            : [],
+
+        participants:
+          Array.isArray(
+            session.participants
+          )
+            ? session.participants
+            : (
+                Array.isArray(
+                  currentTraining?.participants
+                )
+                  ? currentTraining.participants
+                  : []
+              ),
 
         startedAt:
           session.startedAt ||
@@ -303,18 +642,38 @@ export default async function startTrainingSession(
 
 
     // =================================================
-    // JOIN AGORA DIRECTLY
+    // DEBUG RUNTIME AFTER PATCH
+    // =================================================
+
+    console.log(
+      "[startTrainingSession] TRAINING STATE AFTER BACKEND PATCH",
+      {
+
+        training:
+          ctx.get?.(
+            "training"
+          ),
+
+        sessionId:
+          actualSessionId,
+
+        channel,
+
+      }
+    );
+
+
+    // =================================================
+    // JOIN AGORA
     // =================================================
     //
-    // AgoraEngine handles:
+    // Existing Agora lifecycle remains unchanged.
     //
-    //   UID generation
-    //   token retrieval
-    //   client.join()
-    //   local tracks
-    //   publish()
+    // The training action owns the application-level
+    // training lifecycle.
     //
-    // We only provide the training channel.
+    // AgoraEngine owns the media lifecycle.
+    //
     // =================================================
 
     console.log(
@@ -356,7 +715,7 @@ export default async function startTrainingSession(
 
 
     // =================================================
-    // AGORA JOIN FAILED
+    // AGORA JOIN FAILURE
     // =================================================
 
     if (
@@ -381,6 +740,11 @@ export default async function startTrainingSession(
       ctx.patch?.(
         "training",
         {
+
+          sessionId:
+            actualSessionId,
+
+          channel,
 
           status:
             "active",
@@ -423,7 +787,7 @@ export default async function startTrainingSession(
 
 
     // =================================================
-    // MARK TRAINING CONNECTED
+    // TRAINING CONNECTED
     // =================================================
 
     ctx.patch?.(
@@ -439,7 +803,11 @@ export default async function startTrainingSession(
           "active",
 
         hostUserId:
-          session.hostUserId,
+          normaliseId(
+            session.hostUserId
+          ) ||
+          currentTraining?.hostUserId ||
+          null,
 
         startedAt:
           session.startedAt ||
@@ -462,10 +830,10 @@ export default async function startTrainingSession(
     // TEMPORARY CALL BRIDGE
     // =================================================
     //
-    // Keep this ONLY because existing AgoraFeed/
-    // rendering code may still consume call.*.
+    // Existing AgoraFeed/runtime components can still
+    // consume call.* without making call.* the source
+    // of truth for training.
     //
-    // It is not used to perform the Agora join.
     // =================================================
 
     ctx.patch?.(
@@ -485,6 +853,41 @@ export default async function startTrainingSession(
 
         joined:
           true,
+
+        remoteUsers:
+          ctx.get?.(
+            "call.remoteUsers"
+          ) || {},
+
+      }
+    );
+
+
+    // =================================================
+    // VERIFY FINAL STATE
+    // =================================================
+
+    const finalTraining =
+      ctx.get?.(
+        "training"
+      ) || {};
+
+
+    const finalCall =
+      ctx.get?.(
+        "call"
+      ) || {};
+
+
+    console.log(
+      "[startTrainingSession] FINAL TRAINING STATE",
+      {
+
+        training:
+          finalTraining,
+
+        call:
+          finalCall,
 
       }
     );
@@ -545,7 +948,11 @@ export default async function startTrainingSession(
           true,
 
         hostUserId:
-          session.hostUserId,
+          normaliseId(
+            session.hostUserId
+          ) ||
+          currentTraining?.hostUserId ||
+          null,
 
         uid:
           agora.uid,

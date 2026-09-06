@@ -27,6 +27,9 @@ import CallControlsPanel
 import InterviewControlsPanel
   from "./panels/InterviewControlsPanel";
 
+import { useRuntimeTriggers } 
+  from "../context/RuntimeTriggersContext";
+
 
 // =====================================================
 // FIND PROJECT ELEMENT BY SOURCE ID
@@ -36,69 +39,44 @@ function findElementBySourceId(
   node,
   sourceId
 ) {
-
   if (
     !node ||
     typeof node !== "object"
   ) {
-
     return null;
-
   }
 
-
   if (
-    node?.meta?.sourceId ===
-    sourceId
+    node?.meta?.sourceId === sourceId
   ) {
-
     return node;
-
   }
 
-
   if (
-    node?.props?.meta?.sourceId ===
-    sourceId
+    node?.props?.meta?.sourceId === sourceId
   ) {
-
     return node;
-
   }
 
-
   if (
-    Array.isArray(
-      node.children
-    )
+    Array.isArray(node.children)
   ) {
-
     for (
       const child of node.children
     ) {
-
       const match =
         findElementBySourceId(
           child,
           sourceId
         );
 
-
-      if (
-        match
-      ) {
-
+      if (match) {
         return match;
-
       }
-
     }
-
   }
 
-
   return null;
-
 }
 
 
@@ -109,110 +87,67 @@ function findElementBySourceId(
 function looksLikeYouTube(
   value
 ) {
-
   return (
-    typeof value ===
-      "string" &&
+    typeof value === "string" &&
     (
-      value.includes(
-        "youtube.com"
-      ) ||
-      value.includes(
-        "youtu.be"
-      )
+      value.includes("youtube.com") ||
+      value.includes("youtu.be")
     )
   );
-
 }
 
 
 function detectMediaType(
   value
 ) {
-
   if (
     !value ||
-    typeof value !==
-      "string"
+    typeof value !== "string"
   ) {
-
     return "unknown";
-
   }
-
 
   if (
-    looksLikeYouTube(
-      value
-    )
+    looksLikeYouTube(value)
   ) {
-
     return "youtube";
-
   }
-
 
   const clean =
     value
       .split("?")[0]
       .toLowerCase();
 
-
   if (
-    clean.endsWith(
-      ".m3u8"
-    )
+    clean.endsWith(".m3u8")
   ) {
-
     return "hls";
-
   }
-
 
   if (
-    clean.endsWith(
-      ".mp4"
-    ) ||
-    clean.endsWith(
-      ".webm"
-    ) ||
-    clean.endsWith(
-      ".ogg"
-    ) ||
-    clean.endsWith(
-      ".mov"
-    )
+    clean.endsWith(".mp4") ||
+    clean.endsWith(".webm") ||
+    clean.endsWith(".ogg") ||
+    clean.endsWith(".mov")
   ) {
-
     return "video";
-
   }
-
 
   if (
     clean.match(
       /\.(jpg|jpeg|png|gif|webp|svg)$/
     )
   ) {
-
     return "image";
-
   }
-
 
   if (
-    clean.endsWith(
-      ".pdf"
-    )
+    clean.endsWith(".pdf")
   ) {
-
     return "pdf";
-
   }
 
-
   return "url";
-
 }
 
 
@@ -249,14 +184,18 @@ export default function RuntimeTestPanel() {
   const {
     runAction,
   } =
-    useActionContext();
+  useActionContext();
 
 
   const {
     projectSchema,
     activeProject,
   } =
-    useProjectContext();
+  useProjectContext();
+
+  const { 
+    registerTrigger 
+  } = useRuntimeTriggers();
 
 
   // ===================================================
@@ -292,9 +231,7 @@ export default function RuntimeTestPanel() {
     isOpen,
     setIsOpen,
   ] =
-  useState(
-    true
-  );
+  useState(true);
 
 
   // ===================================================
@@ -306,7 +243,6 @@ export default function RuntimeTestPanel() {
     setPosition,
   ] =
   useState({
-
     x:
       window.innerWidth > 600
         ? Math.max(
@@ -317,7 +253,6 @@ export default function RuntimeTestPanel() {
 
     y:
       80,
-
   });
 
 
@@ -371,12 +306,6 @@ export default function RuntimeTestPanel() {
 
   // ===================================================
   // GROUP CALL RUNTIME STATE
-  //
-  // IMPORTANT:
-  //
-  // These values are React state so the Runtime Test
-  // Panel re-renders whenever the runtime changes.
-  //
   // ===================================================
 
   const [
@@ -390,7 +319,6 @@ export default function RuntimeTestPanel() {
         runtime.get?.(
           "calls.pendingInvitations"
         );
-
 
       return Array.isArray(value)
         ? value
@@ -450,38 +378,23 @@ export default function RuntimeTestPanel() {
   );
 
 
-  // =====================================================
-// GROUP CALL PARTICIPANT COUNT
-// =====================================================
-//
-// call.participants is now normally an array of participant
-// objects rather than a numeric count.
-//
-// Keep the panel state as a number so the existing UI can
-// continue displaying:
-// 
-//   Participants: 3
-//
-// Supports both the new array format and the old numeric
-// format for backwards compatibility.
-//
-// =====================================================
+  // ===================================================
+  // GROUP CALL PARTICIPANT COUNT
+  // ===================================================
 
-const [
-  groupCallParticipantCount,
-  setGroupCallParticipantCount,
-] =
-useState(
-  () => {
+  const [
+    groupCallParticipantCount,
+    setGroupCallParticipantCount,
+  ] =
+  useState(
+    () => {
 
-    const initialParticipants =
-      runtime.get?.(
-        "call.participants"
-      );
+      const initialParticipants =
+        runtime.get?.(
+          "call.participants"
+        );
 
-
-    const initialParticipantCount =
-      Array.isArray(
+      return Array.isArray(
         initialParticipants
       )
         ? initialParticipants.length
@@ -489,11 +402,8 @@ useState(
             initialParticipants || 0
           );
 
-
-    return initialParticipantCount;
-
-  }
-);
+    }
+  );
 
 
   const [
@@ -570,16 +480,9 @@ useState(
 
   const dragRef =
     useRef({
-
-      dragging:
-        false,
-
-      offsetX:
-        0,
-
-      offsetY:
-        0,
-
+      dragging: false,
+      offsetX: 0,
+      offsetY: 0,
     });
 
 
@@ -603,21 +506,17 @@ useState(
         const mobile =
           window.innerWidth <= 600;
 
-
         setIsMobile(
           mobile
         );
-
 
         if (
           !mobile &&
           !isOpen
         ) {
-
           setIsOpen(
             true
           );
-
         }
 
       };
@@ -668,9 +567,7 @@ useState(
         value => {
 
           const ids =
-            Array.isArray(
-              value
-            )
+            Array.isArray(value)
               ? value
               : [];
 
@@ -696,13 +593,6 @@ useState(
 
   // ===================================================
   // GROUP CALL RUNTIME SUBSCRIPTIONS
-  // ===================================================
-  //
-  // This is the important fix for the refresh problem.
-  //
-  // Every displayed group-call value has its own runtime
-  // subscription and React state.
-  //
   // ===================================================
 
   useEffect(() => {
@@ -756,12 +646,20 @@ useState(
     );
 
 
+    const initialParticipants =
+      runtime.get?.(
+        "call.participants"
+      );
+
+
     setGroupCallParticipantCount(
-      Number(
-        runtime.get?.(
-          "call.participants"
-        ) || 0
+      Array.isArray(
+        initialParticipants
       )
+        ? initialParticipants.length
+        : Number(
+            initialParticipants || 0
+          )
     );
 
 
@@ -782,9 +680,7 @@ useState(
         value => {
 
           const list =
-            Array.isArray(
-              value
-            )
+            Array.isArray(value)
               ? value
               : [];
 
@@ -805,8 +701,6 @@ useState(
             list
           );
 
-
-          // Keep selected index valid.
 
           setSelectedGroupInvitationIndex(
             previous =>
@@ -867,35 +761,32 @@ useState(
         value => {
 
           setGroupCallJoined(
-            Boolean(
-              value
-            )
+            Boolean(value)
           );
 
         }
       );
 
-  const unsubscribeParticipants =
-  runtime.subscribe?.(
-    "call.participants",
-    value => {
 
-      const count =
-        Array.isArray(
-          value
-        )
-          ? value.length
-          : Number(
-              value || 0
-            );
+    const unsubscribeParticipants =
+      runtime.subscribe?.(
+        "call.participants",
+        value => {
+
+          const count =
+            Array.isArray(value)
+              ? value.length
+              : Number(
+                  value || 0
+                );
 
 
-      setGroupCallParticipantCount(
-        count
+          setGroupCallParticipantCount(
+            count
+          );
+
+        }
       );
-
-    }
-  );
 
 
     const unsubscribeRemoteUsers =
@@ -918,17 +809,11 @@ useState(
     return () => {
 
       unsubscribeInvitations?.();
-
       unsubscribeCallId?.();
-
       unsubscribeChannel?.();
-
       unsubscribeState?.();
-
       unsubscribeJoined?.();
-
       unsubscribeParticipants?.();
-
       unsubscribeRemoteUsers?.();
 
     };
@@ -936,6 +821,21 @@ useState(
   }, [
     runtime,
   ]);
+
+  // ===================================================
+  // RUNTIME TRIGGERS
+  // ===================================================
+
+
+  useEffect(() => {
+  registerTrigger({
+    name: "Auto analyse uploaded evidence",
+    event: "compliance.evidenceUploaded",
+    actions: ["compliance.analyseEvidence"],
+    condition: ({ payload }) =>
+      !!payload?.evidenceId,
+  });
+}, [registerTrigger]);
 
 
   // ===================================================
@@ -950,9 +850,7 @@ useState(
           "[data-debug-close]"
         )
       ) {
-
         return;
-
       }
 
 
@@ -990,9 +888,7 @@ useState(
       if (
         !dragRef.current.dragging
       ) {
-
         return;
-
       }
 
 
@@ -1017,7 +913,6 @@ useState(
 
 
       setPosition({
-
         x:
           Math.max(
             8,
@@ -1041,7 +936,6 @@ useState(
                 )
             )
           ),
-
       });
 
     };
@@ -1105,7 +999,6 @@ useState(
       console.log(
         "[PROJECT RUNTIME TEST]",
         {
-
           activeProject,
 
           runtimeProject,
@@ -1119,7 +1012,6 @@ useState(
           projectSchemaTree:
             projectSchema?.tree ||
             null,
-
         }
       );
 
@@ -1159,16 +1051,13 @@ useState(
       if (
         videoFeedId
       ) {
-
         return true;
-
       }
 
 
       console.warn(
         "[RuntimeTest] VideoFeed not found",
         {
-
           sourceId:
             VIDEO_FEED_SOURCE_ID,
 
@@ -1178,7 +1067,6 @@ useState(
 
           projectTree:
             projectSchema?.tree,
-
         }
       );
 
@@ -1198,9 +1086,7 @@ useState(
       if (
         !requireVideoFeed()
       ) {
-
         return;
-
       }
 
 
@@ -1208,13 +1094,11 @@ useState(
         await runAction(
           "video.toggleMic",
           {
-
             id:
               videoFeedId,
 
             targetId:
               videoFeedId,
-
           }
         );
 
@@ -1237,9 +1121,7 @@ useState(
       if (
         !requireVideoFeed()
       ) {
-
         return;
-
       }
 
 
@@ -1247,13 +1129,11 @@ useState(
         await runAction(
           "video.toggleVideo",
           {
-
             id:
               videoFeedId,
 
             targetId:
               videoFeedId,
-
           }
         );
 
@@ -1276,9 +1156,7 @@ useState(
       if (
         !requireVideoFeed()
       ) {
-
         return;
-
       }
 
 
@@ -1286,13 +1164,11 @@ useState(
         await runAction(
           "video.startRecording",
           {
-
             id:
               videoFeedId,
 
             targetId:
               videoFeedId,
-
           }
         );
 
@@ -1315,9 +1191,7 @@ useState(
       if (
         !requireVideoFeed()
       ) {
-
         return;
-
       }
 
 
@@ -1325,13 +1199,11 @@ useState(
         await runAction(
           "video.stopRecording",
           {
-
             id:
               videoFeedId,
 
             targetId:
               videoFeedId,
-
           }
         );
 
@@ -1353,18 +1225,12 @@ useState(
 
       return [
         ...new Set(
-
           trainingParticipantIds
-
             .map(
               id =>
-                String(
-                  id
-                ).trim()
+                String(id).trim()
             )
-
             .filter(Boolean)
-
         ),
       ];
 
@@ -1387,14 +1253,12 @@ useState(
 
 
       if (
-        participantIds.length ===
-        0
+        participantIds.length === 0
       ) {
 
         console.warn(
           "[RuntimeTest] Cannot create training session - no participants selected"
         );
-
 
         return;
 
@@ -1404,9 +1268,7 @@ useState(
       if (
         runningActionRef.current
       ) {
-
         return;
-
       }
 
 
@@ -1453,14 +1315,12 @@ useState(
 
 
       if (
-        participantIds.length ===
-        0
+        participantIds.length === 0
       ) {
 
         console.warn(
           "[RuntimeTest] Cannot start training session - no participants selected"
         );
-
 
         return;
 
@@ -1470,9 +1330,7 @@ useState(
       if (
         runningActionRef.current
       ) {
-
         return;
-
       }
 
 
@@ -1528,7 +1386,6 @@ useState(
           "[RuntimeTest] No training session to end"
         );
 
-
         return;
 
       }
@@ -1537,9 +1394,7 @@ useState(
       if (
         runningActionRef.current
       ) {
-
         return;
-
       }
 
 
@@ -1583,20 +1438,13 @@ useState(
 
       return [
         ...new Set(
-
           groupParticipantInput
-
-            .split(
-              /[\n,]+/
-            )
-
+            .split(/[\n,]+/)
             .map(
               value =>
                 value.trim()
             )
-
             .filter(Boolean)
-
         ),
       ];
 
@@ -1649,9 +1497,7 @@ useState(
       if (
         groupActionRunning
       ) {
-
         return null;
-
       }
 
 
@@ -1696,14 +1542,12 @@ useState(
 
 
         return {
-
           ok:
             false,
 
           error:
             error?.message ||
             "GROUP_ACTION_FAILED",
-
         };
 
       }
@@ -1730,14 +1574,12 @@ useState(
 
 
       if (
-        participantIds.length ===
-        0
+        participantIds.length === 0
       ) {
 
         console.warn(
           "[RuntimeTest] Enter at least one participant ID"
         );
-
 
         return;
 
@@ -1858,7 +1700,6 @@ useState(
           "[RuntimeTest] No group call ID selected"
         );
 
-
         return;
 
       }
@@ -1892,7 +1733,6 @@ useState(
         console.warn(
           "[RuntimeTest] No group call ID selected"
         );
-
 
         return;
 
@@ -1928,7 +1768,6 @@ useState(
           "[RuntimeTest] No group call ID available"
         );
 
-
         return;
 
       }
@@ -1943,52 +1782,47 @@ useState(
 
     };
 
-  
-// =====================================================
-// REFRESH GROUP CALL
-// =====================================================
 
-// =====================================================
-// REFRESH GROUP CALL
-// =====================================================
+  // =====================================================
+  // REFRESH GROUP CALL
+  // =====================================================
 
-const testRefreshGroupCall =
-  async () => {
+  const testRefreshGroupCall =
+    async () => {
 
-    const callId =
-      activeGroupCallId;
+      const callId =
+        activeGroupCallId;
 
 
-    if (
-      !callId
-    ) {
+      if (
+        !callId
+      ) {
 
-      console.warn(
-        "[RuntimeTest] No group call ID available"
+        console.warn(
+          "[RuntimeTest] No group call ID available"
+        );
+
+        return;
+
+      }
+
+
+      console.log(
+        "[RuntimeTest] Refreshing group call",
+        {
+          callId,
+        }
       );
 
-      return;
 
-    }
+      await runGroupAction(
+        "call.refreshGroupCall",
+        {
+          callId,
+        }
+      );
 
-
-    console.log(
-      "[RuntimeTest] Refreshing group call",
-      {
-        callId,
-      }
-    );
-
-
-    await runGroupAction(
-      "call.refreshGroupCall",
-      {
-        callId,
-      }
-    );
-
-  };
-
+    };
 
 
   // =====================================================
@@ -2009,7 +1843,6 @@ const testRefreshGroupCall =
         console.warn(
           "[RuntimeTest] No group call ID available"
         );
-
 
         return;
 
@@ -2044,7 +1877,6 @@ const testRefreshGroupCall =
         console.warn(
           "[RuntimeTest] No group call ID available"
         );
-
 
         return;
 
@@ -2084,6 +1916,295 @@ const testRefreshGroupCall =
 
 
   // =====================================================
+  // COMPLIANCE CONTROLS
+  // =====================================================
+
+  const testLoadCompliance =
+    async () => {
+
+      if (
+        runningActionRef.current
+      ) {
+        return;
+      }
+
+
+      runningActionRef.current =
+        true;
+
+
+      try {
+
+        console.log(
+          "[RuntimeTest] Loading compliance..."
+        );
+
+
+        const result =
+          await runAction(
+            "compliance.load"
+          );
+
+
+        console.log(
+          "[RuntimeTest] compliance.load result:",
+          result
+        );
+
+      }
+      catch (error) {
+
+        console.error(
+          "[RuntimeTest] compliance.load failed:",
+          error
+        );
+
+      }
+      finally {
+
+        runningActionRef.current =
+          false;
+
+      }
+
+    };
+
+
+  // =====================================================
+  // REQUEST COMPLIANCE EVIDENCE
+  // =====================================================
+
+  const testRequestEvidence =
+    async () => {
+
+      if (
+        runningActionRef.current
+      ) {
+        return;
+      }
+
+
+      runningActionRef.current =
+        true;
+
+
+      try {
+
+        const controls =
+          runtime.get?.(
+            "compliance.controls"
+          ) || [];
+
+
+        if (
+          !controls.length
+        ) {
+
+          console.warn(
+            "[RuntimeTest] No compliance controls loaded. Run compliance.load first."
+          );
+
+          return;
+
+        }
+
+
+        const control =
+          controls[0];
+
+
+        console.log(
+          "[RuntimeTest] Requesting evidence for:",
+          control
+        );
+
+
+        const result =
+          await runAction(
+            "compliance.requestEvidence",
+            {
+              controlId:
+                control.id,
+
+              name:
+                `Evidence for ${control.reference}`,
+
+              description:
+                `Evidence requested for ${control.reference} - ${control.title}`,
+
+              type:
+                "document",
+            }
+          );
+
+
+        console.log(
+          "[RuntimeTest] compliance.requestEvidence result:",
+          result
+        );
+
+      }
+      catch (error) {
+
+        console.error(
+          "[RuntimeTest] compliance.requestEvidence failed:",
+          error
+        );
+
+      }
+      finally {
+
+        runningActionRef.current =
+          false;
+
+      }
+
+    };
+
+
+  // =====================================================
+  // UPLOAD COMPLIANCE EVIDENCE
+  // =====================================================
+
+  const testUploadEvidence =
+    async () => {
+
+      if (
+        runningActionRef.current
+      ) {
+        return;
+      }
+
+
+      runningActionRef.current =
+        true;
+
+
+      try {
+
+        const evidence =
+          runtime.get?.(
+            "compliance.evidence"
+          ) || [];
+
+
+        if (
+          !evidence.length
+        ) {
+
+          console.warn(
+            "[RuntimeTest] No evidence found. Run requestEvidence first."
+          );
+
+          return;
+
+        }
+
+
+        const item =
+          evidence[0];
+
+
+        console.log(
+          "[RuntimeTest] Uploading evidence:",
+          item
+        );
+
+
+        const result =
+          await runAction(
+            "compliance.uploadEvidence",
+            {
+              evidenceId:
+                item.id,
+
+              fileName:
+                "information-security-policy.pdf",
+
+              fileUrl:
+                "/temporary/information-security-policy.pdf",
+            }
+          );
+
+
+        console.log(
+          "[RuntimeTest] compliance.uploadEvidence result:",
+          result
+        );
+
+      }
+      catch (error) {
+
+        console.error(
+          "[RuntimeTest] compliance.uploadEvidence failed:",
+          error
+        );
+
+      }
+      finally {
+
+        runningActionRef.current =
+          false;
+
+      }
+
+    };
+
+  // =====================================================
+  // ANALYSE EVIDENCE
+  // =====================================================
+
+    const testAnalyseEvidence = async () => {
+  if (runningActionRef.current) {
+    return;
+  }
+
+  runningActionRef.current = true;
+
+  try {
+    const evidence =
+      runtime.get?.(
+        "compliance.evidence"
+      ) || [];
+
+    if (!evidence.length) {
+      console.warn(
+        "[RuntimeTest] No evidence found. Run requestEvidence and uploadEvidence first."
+      );
+      return;
+    }
+
+    const item = evidence[0];
+
+    console.log(
+      "[RuntimeTest] Analysing evidence:",
+      item
+    );
+
+    const result =
+      await runAction(
+        "compliance.analyseEvidence",
+        {
+          evidenceId: item.id,
+        }
+      );
+
+    console.log(
+      "[RuntimeTest] compliance.analyseEvidence result:",
+      result
+    );
+  } catch (error) {
+    console.error(
+      "[RuntimeTest] compliance.analyseEvidence failed:",
+      error
+    );
+  } finally {
+    runningActionRef.current = false;
+  }
+};
+
+
+  // =====================================================
   // SET MEDIA TEST SOURCE
   // =====================================================
 
@@ -2101,7 +2222,6 @@ const testRefreshGroupCall =
         console.warn(
           "[RuntimeTest] Media source is empty"
         );
-
 
         return;
 
@@ -2129,14 +2249,12 @@ const testRefreshGroupCall =
       console.log(
         "[RuntimeTest] MEDIA SOURCE SET",
         {
-
           key:
             "media.testSource",
 
           value,
 
           detectedType,
-
         }
       );
 
@@ -2231,7 +2349,6 @@ const testRefreshGroupCall =
         console.warn(
           "[RuntimeTest] File source is empty"
         );
-
 
         return;
 
@@ -2344,7 +2461,6 @@ const testRefreshGroupCall =
         }}
 
         style={{
-
           position:
             "fixed",
 
@@ -2392,14 +2508,11 @@ const testRefreshGroupCall =
 
           justifyContent:
             "center",
-
         }}
 
-        aria-label=
-          "Open Runtime Test Panel"
+        aria-label="Open Runtime Test Panel"
 
-        title=
-          "Open Runtime Test Panel"
+        title="Open Runtime Test Panel"
 
       >
 
@@ -2421,7 +2534,6 @@ const testRefreshGroupCall =
     <div
 
       style={{
-
         position:
           "fixed",
 
@@ -2479,7 +2591,6 @@ const testRefreshGroupCall =
 
         boxSizing:
           "border-box",
-
       }}
 
     >
@@ -2497,7 +2608,6 @@ const testRefreshGroupCall =
         }
 
         style={{
-
           cursor:
             isMobile
               ? "default"
@@ -2523,7 +2633,6 @@ const testRefreshGroupCall =
 
           gap:
             8,
-
         }}
 
       >
@@ -2551,7 +2660,6 @@ const testRefreshGroupCall =
           }}
 
           style={{
-
             border:
               "none",
 
@@ -2587,14 +2695,11 @@ const testRefreshGroupCall =
 
             flexShrink:
               0,
-
           }}
 
-          aria-label=
-            "Minimise Runtime Test Panel"
+          aria-label="Minimise Runtime Test Panel"
 
-          title=
-            "Minimise Runtime Test Panel"
+          title="Minimise Runtime Test Panel"
 
         >
 
@@ -2612,7 +2717,6 @@ const testRefreshGroupCall =
       <div
 
         style={{
-
           overflowY:
             "auto",
 
@@ -2627,7 +2731,6 @@ const testRefreshGroupCall =
 
           WebkitOverflowScrolling:
             "touch",
-
         }}
 
       >
@@ -2674,22 +2777,19 @@ const testRefreshGroupCall =
 
             Active Project:
             {" "}
-            {activeProject ||
-              "null"}
+            {activeProject || "null"}
 
             <br />
 
             Runtime Project ID:
             {" "}
-            {runtimeProjectId ||
-              "null"}
+            {runtimeProjectId || "null"}
 
             <br />
 
             Runtime Project Name:
             {" "}
-            {runtimeProject?.name ||
-              "null"}
+            {runtimeProject?.name || "null"}
 
           </div>
 
@@ -2701,7 +2801,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -2713,7 +2812,6 @@ const testRefreshGroupCall =
 
               cursor:
                 "pointer",
-
             }}
 
           >
@@ -2745,7 +2843,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontWeight:
                 "bold",
 
@@ -2754,7 +2851,6 @@ const testRefreshGroupCall =
 
               fontSize:
                 13,
-
             }}
           >
 
@@ -2765,7 +2861,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontSize:
                 10,
 
@@ -2777,7 +2872,6 @@ const testRefreshGroupCall =
 
               marginBottom:
                 10,
-
             }}
           >
 
@@ -2793,7 +2887,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               padding:
                 10,
 
@@ -2814,7 +2907,6 @@ const testRefreshGroupCall =
 
               lineHeight:
                 1.6,
-
             }}
           >
 
@@ -2823,8 +2915,7 @@ const testRefreshGroupCall =
               Call ID:
               {" "}
               <strong>
-                {runtimeGroupCallId ||
-                  "none"}
+                {runtimeGroupCallId || "none"}
               </strong>
 
             </div>
@@ -2835,8 +2926,7 @@ const testRefreshGroupCall =
               Channel:
               {" "}
               <strong>
-                {groupCallChannel ||
-                  "none"}
+                {groupCallChannel || "none"}
               </strong>
 
             </div>
@@ -2884,8 +2974,7 @@ const testRefreshGroupCall =
               <strong>
                 {
                   groupRemoteUsers &&
-                  typeof groupRemoteUsers ===
-                    "object"
+                  typeof groupRemoteUsers === "object"
                     ? Object.keys(
                         groupRemoteUsers
                       ).length
@@ -2915,7 +3004,6 @@ const testRefreshGroupCall =
 
           <label
             style={{
-
               display:
                 "block",
 
@@ -2927,7 +3015,6 @@ const testRefreshGroupCall =
 
               fontSize:
                 11,
-
             }}
           >
 
@@ -2956,7 +3043,6 @@ const testRefreshGroupCall =
             rows={4}
 
             style={{
-
               width:
                 "100%",
 
@@ -2989,7 +3075,6 @@ const testRefreshGroupCall =
 
               fontSize:
                 10,
-
             }}
 
           />
@@ -2997,7 +3082,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontSize:
                 10,
 
@@ -3006,7 +3090,6 @@ const testRefreshGroupCall =
 
               marginBottom:
                 8,
-
             }}
           >
 
@@ -3024,13 +3107,11 @@ const testRefreshGroupCall =
             }
 
             disabled={
-              groupParticipantCount ===
-                0 ||
+              groupParticipantCount === 0 ||
               groupActionRunning
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -3051,7 +3132,6 @@ const testRefreshGroupCall =
                 !groupActionRunning
                   ? 1
                   : 0.55,
-
             }}
 
           >
@@ -3078,7 +3158,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -3092,7 +3171,6 @@ const testRefreshGroupCall =
                 groupActionRunning
                   ? "not-allowed"
                   : "pointer",
-
             }}
 
           >
@@ -3106,12 +3184,10 @@ const testRefreshGroupCall =
               INVITATION LIST
           --------------------------------------------- */}
 
-          {pendingGroupInvitations.length >
-          0 && (
+          {pendingGroupInvitations.length > 0 && (
 
             <div
               style={{
-
                 marginBottom:
                   10,
 
@@ -3126,13 +3202,11 @@ const testRefreshGroupCall =
 
                 background:
                   "#101010",
-
               }}
             >
 
               <div
                 style={{
-
                   color:
                     "#aaa",
 
@@ -3141,7 +3215,6 @@ const testRefreshGroupCall =
 
                   marginBottom:
                     8,
-
                 }}
               >
 
@@ -3186,7 +3259,6 @@ const testRefreshGroupCall =
                       }
 
                       style={{
-
                         width:
                           "100%",
 
@@ -3217,7 +3289,6 @@ const testRefreshGroupCall =
 
                         cursor:
                           "pointer",
-
                       }}
 
                     >
@@ -3246,7 +3317,6 @@ const testRefreshGroupCall =
 
                       <div
                         style={{
-
                           color:
                             "#777",
 
@@ -3255,7 +3325,6 @@ const testRefreshGroupCall =
 
                           wordBreak:
                             "break-all",
-
                         }}
                       >
 
@@ -3266,7 +3335,6 @@ const testRefreshGroupCall =
 
                       <div
                         style={{
-
                           color:
                             "#777",
 
@@ -3275,13 +3343,14 @@ const testRefreshGroupCall =
 
                           marginTop:
                             3,
-
                         }}
                       >
 
-                        {invitation?.participant?.status ||
+                        {
+                          invitation?.participant?.status ||
                           invitation?.status ||
-                          "invited"}
+                          "invited"
+                        }
 
                       </div>
 
@@ -3304,7 +3373,6 @@ const testRefreshGroupCall =
                 }
 
                 style={{
-
                   width:
                     "100%",
 
@@ -3323,7 +3391,6 @@ const testRefreshGroupCall =
                     selectedGroupInvitation
                       ? 1
                       : 0.55,
-
                 }}
 
               >
@@ -3343,7 +3410,6 @@ const testRefreshGroupCall =
 
           <label
             style={{
-
               display:
                 "block",
 
@@ -3355,7 +3421,6 @@ const testRefreshGroupCall =
 
               fontSize:
                 11,
-
             }}
           >
 
@@ -3377,11 +3442,9 @@ const testRefreshGroupCall =
                 )
             }
 
-            placeholder=
-              "Group call ObjectId"
+            placeholder="Group call ObjectId"
 
             style={{
-
               width:
                 "100%",
 
@@ -3411,7 +3474,6 @@ const testRefreshGroupCall =
 
               fontSize:
                 10,
-
             }}
 
           />
@@ -3419,7 +3481,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               padding:
                 8,
 
@@ -3443,7 +3504,6 @@ const testRefreshGroupCall =
 
               wordBreak:
                 "break-all",
-
             }}
           >
 
@@ -3465,7 +3525,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               display:
                 "flex",
 
@@ -3474,7 +3533,6 @@ const testRefreshGroupCall =
 
               marginBottom:
                 8,
-
             }}
           >
 
@@ -3490,7 +3548,6 @@ const testRefreshGroupCall =
               }
 
               style={{
-
                 flex:
                   1,
 
@@ -3508,7 +3565,6 @@ const testRefreshGroupCall =
                   !groupActionRunning
                     ? 1
                     : 0.55,
-
               }}
 
             >
@@ -3530,7 +3586,6 @@ const testRefreshGroupCall =
               }
 
               style={{
-
                 flex:
                   1,
 
@@ -3548,7 +3603,6 @@ const testRefreshGroupCall =
                   !groupActionRunning
                     ? 1
                     : 0.55,
-
               }}
 
             >
@@ -3576,7 +3630,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -3597,7 +3650,6 @@ const testRefreshGroupCall =
                 !groupActionRunning
                   ? 1
                   : 0.55,
-
             }}
 
           >
@@ -3606,52 +3658,50 @@ const testRefreshGroupCall =
 
           </button>
 
-        {/* ---------------------------------------------
-            REFRESH GROUP CALL
-        --------------------------------------------- */}
 
-        <button
+          {/* ---------------------------------------------
+              REFRESH
+          --------------------------------------------- */}
 
-          onClick={
-            testRefreshGroupCall
-          }
+          <button
 
-          disabled={
-            !activeGroupCallId ||
-            groupActionRunning
-          }
+            onClick={
+              testRefreshGroupCall
+            }
 
-          style={{
+            disabled={
+              !activeGroupCallId ||
+              groupActionRunning
+            }
 
-            width:
-              "100%",
+            style={{
+              width:
+                "100%",
 
-            minHeight:
-              38,
+              minHeight:
+                38,
 
-            marginBottom:
-              8,
+              marginBottom:
+                8,
 
-            cursor:
-              activeGroupCallId &&
-              !groupActionRunning
-                ? "pointer"
-                : "not-allowed",
+              cursor:
+                activeGroupCallId &&
+                !groupActionRunning
+                  ? "pointer"
+                  : "not-allowed",
 
-            opacity:
-              activeGroupCallId &&
-              !groupActionRunning
-                ? 1
-                : 0.55,
+              opacity:
+                activeGroupCallId &&
+                !groupActionRunning
+                  ? 1
+                  : 0.55,
+            }}
 
-          }}
+          >
 
-        >
+            Test Refresh Group Call
 
-          Test Refresh Group Call
-
-        </button>
-
+          </button>
 
 
           {/* ---------------------------------------------
@@ -3670,7 +3720,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -3691,7 +3740,6 @@ const testRefreshGroupCall =
                 !groupActionRunning
                   ? 1
                   : 0.55,
-
             }}
 
           >
@@ -3717,7 +3765,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -3738,7 +3785,6 @@ const testRefreshGroupCall =
                 !groupActionRunning
                   ? 1
                   : 0.55,
-
             }}
 
           >
@@ -3763,7 +3809,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -3774,7 +3819,6 @@ const testRefreshGroupCall =
                 groupActionRunning
                   ? "not-allowed"
                   : "pointer",
-
             }}
 
           >
@@ -3792,16 +3836,13 @@ const testRefreshGroupCall =
 
             <details
               style={{
-
                 marginTop:
                   10,
-
               }}
             >
 
               <summary
                 style={{
-
                   cursor:
                     "pointer",
 
@@ -3810,7 +3851,6 @@ const testRefreshGroupCall =
 
                   fontSize:
                     10,
-
                 }}
               >
 
@@ -3821,7 +3861,6 @@ const testRefreshGroupCall =
 
               <pre
                 style={{
-
                   marginTop:
                     8,
 
@@ -3851,7 +3890,6 @@ const testRefreshGroupCall =
 
                   wordBreak:
                     "break-word",
-
                 }}
               >
 
@@ -3898,7 +3936,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontSize:
                 11,
 
@@ -3910,7 +3947,6 @@ const testRefreshGroupCall =
 
               lineHeight:
                 1.5,
-
             }}
           >
 
@@ -3925,8 +3961,7 @@ const testRefreshGroupCall =
             {
               runtime.get?.(
                 "training.sessionId"
-              ) ||
-              "none"
+              ) || "none"
             }
 
             <br />
@@ -3936,8 +3971,7 @@ const testRefreshGroupCall =
             {
               runtime.get?.(
                 "training.status"
-              ) ||
-              "none"
+              ) || "none"
             }
 
           </div>
@@ -3954,7 +3988,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -3973,7 +4006,6 @@ const testRefreshGroupCall =
                 trainingParticipantCount > 0
                   ? 1
                   : 0.55,
-
             }}
 
           >
@@ -3998,7 +4030,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -4017,7 +4048,6 @@ const testRefreshGroupCall =
                 trainingParticipantCount > 0
                   ? 1
                   : 0.55,
-
             }}
 
           >
@@ -4044,7 +4074,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -4067,7 +4096,6 @@ const testRefreshGroupCall =
                 )
                   ? 1
                   : 0.55,
-
             }}
 
           >
@@ -4075,6 +4103,250 @@ const testRefreshGroupCall =
             Test End Training Session
 
           </button>
+
+        </div>
+
+
+        <hr />
+
+
+        {/* =================================================
+            COMPLIANCE CONTROLS
+        ================================================= */}
+
+        <div>
+
+          <div
+            style={{
+              fontWeight:
+                "bold",
+
+              marginBottom:
+                8,
+            }}
+          >
+
+            Compliance Controls
+
+          </div>
+
+
+          <div
+            style={{
+              fontSize:
+                11,
+
+              color:
+                "#aaa",
+
+              lineHeight:
+                1.5,
+
+              marginBottom:
+                10,
+            }}
+          >
+
+            Test the Compliance domain runtime
+            independently of the UI.
+
+            <br />
+
+            Runtime domain:
+            {" "}
+            <strong>
+              compliance
+            </strong>
+
+          </div>
+
+
+          {/* ---------------------------------------------
+              LOAD
+          --------------------------------------------- */}
+
+          <button
+
+            onClick={
+              testLoadCompliance
+            }
+
+            disabled={
+              runningActionRef.current
+            }
+
+            style={{
+              width:
+                "100%",
+
+              minHeight:
+                36,
+
+              marginBottom:
+                8,
+
+              cursor:
+                "pointer",
+            }}
+
+          >
+
+            Test Load Compliance
+
+          </button>
+
+
+          {/* ---------------------------------------------
+              REQUEST EVIDENCE
+          --------------------------------------------- */}
+
+          <button
+
+            onClick={
+              testRequestEvidence
+            }
+
+            disabled={
+              runningActionRef.current
+            }
+
+            style={{
+              width:
+                "100%",
+
+              minHeight:
+                36,
+
+              marginBottom:
+                8,
+
+              cursor:
+                "pointer",
+            }}
+
+          >
+
+            Test Request Evidence
+
+          </button>
+
+
+          {/* ---------------------------------------------
+              UPLOAD EVIDENCE
+          --------------------------------------------- */}
+
+          <button
+
+            onClick={
+              testUploadEvidence
+            }
+
+            disabled={
+              runningActionRef.current
+            }
+
+            style={{
+              width:
+                "100%",
+
+              minHeight:
+                36,
+
+              marginBottom:
+                8,
+
+              cursor:
+                "pointer",
+            }}
+
+          >
+
+            Test Upload Evidence
+
+          </button>
+
+           {/* ---------------------------------------------
+              ANALYSE EVIDENCE
+          --------------------------------------------- */}
+          <button
+            onClick={testAnalyseEvidence}
+            disabled={runningActionRef.current}
+            style={{
+              width: "100%",
+              minHeight: 36,
+              marginBottom: 8,
+              cursor: "pointer",
+            }}
+          >
+            Test Analyse Evidence
+          </button>
+
+
+          {/* ---------------------------------------------
+              COMPLIANCE RUNTIME SNAPSHOT
+          --------------------------------------------- */}
+
+          <details>
+
+            <summary
+              style={{
+                cursor:
+                  "pointer",
+
+                color:
+                  "#aaa",
+
+                marginBottom:
+                  10,
+              }}
+            >
+
+              Compliance Runtime Snapshot
+
+            </summary>
+
+
+            <pre
+              style={{
+                background:
+                  "#101010",
+
+                padding:
+                  10,
+
+                borderRadius:
+                  6,
+
+                overflow:
+                  "auto",
+
+                fontSize:
+                  10,
+
+                color:
+                  "#ccc",
+
+                whiteSpace:
+                  "pre-wrap",
+
+                wordBreak:
+                  "break-word",
+              }}
+            >
+
+              {
+                JSON.stringify(
+                  runtime.get?.(
+                    "compliance"
+                  ) || {},
+                  null,
+                  2
+                )
+              }
+
+            </pre>
+
+          </details>
 
         </div>
 
@@ -4105,7 +4377,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontSize:
                 11,
 
@@ -4117,7 +4388,6 @@ const testRefreshGroupCall =
 
               marginBottom:
                 10,
-
             }}
           >
 
@@ -4156,11 +4426,9 @@ const testRefreshGroupCall =
                 )
             }
 
-            placeholder=
-              "Enter video / media URL"
+            placeholder="Enter video / media URL"
 
             style={{
-
               width:
                 "100%",
 
@@ -4190,7 +4458,6 @@ const testRefreshGroupCall =
 
               outline:
                 "none",
-
             }}
 
           />
@@ -4203,7 +4470,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -4215,7 +4481,6 @@ const testRefreshGroupCall =
 
               cursor:
                 "pointer",
-
             }}
 
           >
@@ -4235,7 +4500,6 @@ const testRefreshGroupCall =
 
               marginBottom:
                 10,
-
             }}
           >
 
@@ -4246,7 +4510,6 @@ const testRefreshGroupCall =
               }
 
               style={{
-
                 flex:
                   1,
 
@@ -4255,7 +4518,6 @@ const testRefreshGroupCall =
 
                 cursor:
                   "pointer",
-
               }}
 
             >
@@ -4272,7 +4534,6 @@ const testRefreshGroupCall =
               }
 
               style={{
-
                 flex:
                   1,
 
@@ -4281,7 +4542,6 @@ const testRefreshGroupCall =
 
                 cursor:
                   "pointer",
-
               }}
 
             >
@@ -4295,7 +4555,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontSize:
                 10,
 
@@ -4304,7 +4563,6 @@ const testRefreshGroupCall =
 
               lineHeight:
                 1.5,
-
             }}
           >
 
@@ -4345,7 +4603,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontSize:
                 11,
 
@@ -4357,7 +4614,6 @@ const testRefreshGroupCall =
 
               lineHeight:
                 1.5,
-
             }}
           >
 
@@ -4385,11 +4641,9 @@ const testRefreshGroupCall =
                 )
             }
 
-            placeholder=
-              "File URL"
+            placeholder="File URL"
 
             style={{
-
               width:
                 "100%",
 
@@ -4419,7 +4673,6 @@ const testRefreshGroupCall =
 
               outline:
                 "none",
-
             }}
 
           />
@@ -4439,7 +4692,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -4466,7 +4718,6 @@ const testRefreshGroupCall =
 
               fontSize:
                 11,
-
             }}
 
           >
@@ -4505,11 +4756,9 @@ const testRefreshGroupCall =
                 )
             }
 
-            placeholder=
-              "File name"
+            placeholder="File name"
 
             style={{
-
               width:
                 "100%",
 
@@ -4539,7 +4788,6 @@ const testRefreshGroupCall =
 
               outline:
                 "none",
-
             }}
 
           />
@@ -4552,7 +4800,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -4564,7 +4811,6 @@ const testRefreshGroupCall =
 
               cursor:
                 "pointer",
-
             }}
 
           >
@@ -4581,7 +4827,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -4593,7 +4838,6 @@ const testRefreshGroupCall =
 
               cursor:
                 "pointer",
-
             }}
 
           >
@@ -4605,7 +4849,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontSize:
                 10,
 
@@ -4614,7 +4857,6 @@ const testRefreshGroupCall =
 
               lineHeight:
                 1.5,
-
             }}
           >
 
@@ -4655,7 +4897,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontSize:
                 11,
 
@@ -4667,7 +4908,6 @@ const testRefreshGroupCall =
 
               marginBottom:
                 10,
-
             }}
           >
 
@@ -4683,8 +4923,7 @@ const testRefreshGroupCall =
             {" "}
             {
               groupRemoteUsers &&
-              typeof groupRemoteUsers ===
-                "object"
+              typeof groupRemoteUsers === "object"
                 ? Object.keys(
                     groupRemoteUsers
                   ).length
@@ -4696,7 +4935,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               padding:
                 10,
 
@@ -4717,22 +4955,18 @@ const testRefreshGroupCall =
 
               color:
                 groupRemoteUsers &&
-                typeof groupRemoteUsers ===
-                  "object" &&
+                typeof groupRemoteUsers === "object" &&
                 Object.keys(
                   groupRemoteUsers
                 ).length > 0
                   ? "#86efac"
                   : "#777",
-
             }}
-
           >
 
             {
               groupRemoteUsers &&
-              typeof groupRemoteUsers ===
-                "object" &&
+              typeof groupRemoteUsers === "object" &&
               Object.keys(
                 groupRemoteUsers
               ).length > 0
@@ -4745,7 +4979,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontSize:
                 10,
 
@@ -4754,7 +4987,6 @@ const testRefreshGroupCall =
 
               lineHeight:
                 1.5,
-
             }}
           >
 
@@ -4803,7 +5035,6 @@ const testRefreshGroupCall =
 
           <div
             style={{
-
               fontSize:
                 11,
 
@@ -4815,7 +5046,6 @@ const testRefreshGroupCall =
 
               lineHeight:
                 1.4,
-
             }}
           >
 
@@ -4827,8 +5057,7 @@ const testRefreshGroupCall =
 
             Resolved Canvas ID:
             {" "}
-            {videoFeedId ||
-              "Not found"}
+            {videoFeedId || "Not found"}
 
           </div>
 
@@ -4844,7 +5073,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -4858,7 +5086,6 @@ const testRefreshGroupCall =
                 videoFeedId
                   ? "pointer"
                   : "not-allowed",
-
             }}
 
           >
@@ -4879,7 +5106,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -4893,7 +5119,6 @@ const testRefreshGroupCall =
                 videoFeedId
                   ? "pointer"
                   : "not-allowed",
-
             }}
 
           >
@@ -4914,7 +5139,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -4928,7 +5152,6 @@ const testRefreshGroupCall =
                 videoFeedId
                   ? "pointer"
                   : "not-allowed",
-
             }}
 
           >
@@ -4949,7 +5172,6 @@ const testRefreshGroupCall =
             }
 
             style={{
-
               width:
                 "100%",
 
@@ -4963,7 +5185,6 @@ const testRefreshGroupCall =
                 videoFeedId
                   ? "pointer"
                   : "not-allowed",
-
             }}
 
           >
@@ -5003,7 +5224,6 @@ const testRefreshGroupCall =
 
               marginBottom:
                 10,
-
             }}
           >
 
@@ -5014,7 +5234,6 @@ const testRefreshGroupCall =
 
           <pre
             style={{
-
               background:
                 "#101010",
 
@@ -5032,7 +5251,6 @@ const testRefreshGroupCall =
 
               color:
                 "#ccc",
-
             }}
           >
 
@@ -5063,7 +5281,6 @@ const testRefreshGroupCall =
           }
 
           style={{
-
             width:
               "100%",
 
@@ -5075,7 +5292,6 @@ const testRefreshGroupCall =
 
             cursor:
               "pointer",
-
           }}
 
         >

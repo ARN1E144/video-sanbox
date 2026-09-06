@@ -19,6 +19,9 @@ import remoteTraining
 import aiVideoInterviewer
   from "./ai-video-interviewer.json";
 
+import compliance
+  from "./compliance.json";
+
 import filePreview
   from "./file-preview.json";
 
@@ -84,7 +87,16 @@ const ConfosRegistry = {
   "confo.remote_video_grid":
     remoteVideoGrid,
 
+
+  // ===================================================
+  // COMPLIANCE
+  // ===================================================
+
+  "confo.compliance":
+    compliance,
+
 };
+
 
 
 // =====================================================

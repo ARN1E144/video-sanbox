@@ -93,7 +93,7 @@ export function RuntimeEventProvider({
         try {
 
 
-          callback(payload);
+          callback(payload, eventRecord);
 
 
         } catch(err){
@@ -212,10 +212,10 @@ export function RuntimeEventProvider({
 
 
       const handler =
-        (payload)=>{
+        (payload, eventRecord)=>{
 
 
-          callback(payload);
+          callback(payload, eventRecord);
 
 
           off(

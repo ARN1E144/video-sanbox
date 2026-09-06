@@ -1,14 +1,24 @@
 import dotenv from "dotenv";
+
 dotenv.config();
 
+
+// =====================================================
+// ENVIRONMENT
+// =====================================================
+
 console.log(
-  "OPENAI_API_KEY loaded:",
-  !!process.env.OPENAI_API_KEY
+  "[Server] OPENAI_API_KEY loaded:",
+  Boolean(
+    process.env.OPENAI_API_KEY
+  )
 );
+
 
 import {
   requireEnv,
 } from "./utils/requireEnv.js";
+
 
 requireEnv([
   "MONGODB_URI",
@@ -16,21 +26,24 @@ requireEnv([
   "JWT_REFRESH_SECRET",
 ]);
 
-import express
-  from "express";
 
-import http
-  from "http";
+// =====================================================
+// CORE
+// =====================================================
 
-import cors
-  from "cors";
-
-import bodyParser
-  from "body-parser";
+import express from "express";
+import http from "http";
+import cors from "cors";
+import bodyParser from "body-parser";
 
 import {
   Server as SocketIOServer,
 } from "socket.io";
+
+
+// =====================================================
+// ROUTES
+// =====================================================
 
 import aiTemplateRoutes
   from "./routes/aiTemplates.js";
@@ -43,10 +56,6 @@ import aiRoutes
 
 import authRoutes
   from "./routes/authRoutes.js";
-
-import {
-  connectWithRetry,
-} from "./db/connect.js";
 
 import tenantRoutes
   from "./routes/tenantRoutes.js";
@@ -84,9 +93,46 @@ import devRoutes
 import groupCallRoutes
   from "./routes/groupCallRoutes.js";
 
+import complianceRoutes
+  from "./routes/complianceRoutes.js";
+
+
+// =====================================================
+// DATABASE
+// =====================================================
+
+import {
+  connectWithRetry,
+} from "./db/connect.js";
+
+
+// =====================================================
+// REALTIME
+// =====================================================
+
 import {
   registerGroupCallSockets,
 } from "./realtime/groupCallSocket.js";
+
+
+// =====================================================
+// CONFIG
+// =====================================================
+
+const PORT =
+  Number(
+    process.env.PORT
+  ) ||
+  5000;
+
+
+const allowedOrigins = [
+
+  "http://localhost:3000",
+
+  "http://192.168.0.111:3000",
+
+];
 
 
 // =====================================================
@@ -100,14 +146,6 @@ const app =
 // =====================================================
 // CORS
 // =====================================================
-
-const allowedOrigins = [
-
-  "http://localhost:3000",
-
-  "http://192.168.0.111:3000",
-
-];
 
 app.use(
   cors({
@@ -141,7 +179,7 @@ app.use(
 
 
 // =====================================================
-// BODY
+// BODY PARSING
 // =====================================================
 
 app.use(
@@ -150,87 +188,7 @@ app.use(
 
 
 // =====================================================
-// ROUTES
-// =====================================================
-
-app.use(
-  "/api/agora",
-  agoraRoutes
-);
-
-app.use(
-  "/api/ai",
-  aiRoutes
-);
-
-app.use(
-  "/api/auth",
-  authRoutes
-);
-
-app.use(
-  "/api/tenant",
-  tenantRoutes
-);
-
-app.use(
-  "/api",
-  meRoutes
-);
-
-app.use(
-  "/api/calls",
-  callRoutes
-);
-
-app.use(
-  "/api/videos",
-  videoRoutes
-);
-
-app.use(
-  "/api/projects",
-  projectRoutes
-);
-
-app.use(
-  "/api",
-  interviewRoutes
-);
-
-app.use(
-  "/api/data",
-  dataHubRoutes
-);
-
-app.use(
-  "/api/data",
-  tenantMemberRoutes
-);
-
-app.use(
-  "/api/training",
-  trainingRoutes
-);
-
-app.use(
-  "/api/tenant",
-  tenantInvitationRoutes
-);
-
-app.use(
-  "/api/tenant",
-  devRoutes
-);
-
-app.use(
-  "/api/group-calls",
-  groupCallRoutes
-);
-
-
-// =====================================================
-// BASIC ROUTES
+// BASIC HEALTH / TEST ROUTES
 // =====================================================
 
 app.get(
@@ -271,7 +229,110 @@ app.get(
 
 
 // =====================================================
+// API ROUTES
+// =====================================================
+
+app.use(
+  "/api/agora",
+  agoraRoutes
+);
+
+
+app.use(
+  "/api/ai",
+  aiRoutes
+);
+
+
+app.use(
+  "/api/auth",
+  authRoutes
+);
+
+
+app.use(
+  "/api/tenant",
+  tenantRoutes
+);
+
+
+app.use(
+  "/api",
+  meRoutes
+);
+
+
+app.use(
+  "/api/calls",
+  callRoutes
+);
+
+
+app.use(
+  "/api/videos",
+  videoRoutes
+);
+
+
+app.use(
+  "/api/projects",
+  projectRoutes
+);
+
+
+app.use(
+  "/api",
+  interviewRoutes
+);
+
+
+app.use(
+  "/api/data",
+  dataHubRoutes
+);
+
+
+app.use(
+  "/api/data",
+  tenantMemberRoutes
+);
+
+
+app.use(
+  "/api/training",
+  trainingRoutes
+);
+
+
+app.use(
+  "/api/tenant",
+  tenantInvitationRoutes
+);
+
+
+app.use(
+  "/api/tenant",
+  devRoutes
+);
+
+
+app.use(
+  "/api/group-calls",
+  groupCallRoutes
+);
+
+app.use(
+  "/api/compliance",
+  complianceRoutes
+);
+
+
+// =====================================================
 // HTTP SERVER
+// =====================================================
+//
+// Socket.IO MUST attach to this exact HTTP server.
+//
 // =====================================================
 
 const server =
@@ -282,6 +343,23 @@ const server =
 
 // =====================================================
 // SOCKET.IO
+// =====================================================
+//
+// One shared Socket.IO instance for:
+//
+//   Group Calls
+//   Remote Training
+//
+// The same instance is:
+//
+//   1. attached to the HTTP server
+//   2. exposed to Express as app.get("io")
+//   3. passed to registerGroupCallSockets()
+//
+// This guarantees that training routes and realtime
+// sockets operate against the exact same Socket.IO
+// instance.
+//
 // =====================================================
 
 const io =
@@ -306,22 +384,41 @@ const io =
 
       },
 
+      transports: [
+
+        "websocket",
+
+        "polling",
+
+      ],
+
+      pingInterval:
+        25000,
+
+      pingTimeout:
+        20000,
+
     }
   );
 
 
 // =====================================================
-// MAKE IO AVAILABLE TO EXPRESS ROUTES
+// EXPOSE IO TO EXPRESS
 // =====================================================
 //
-// IMPORTANT.
+// Routes such as:
 //
-// groupCallRoutes.js uses:
+//   trainingRoutes.js
+//
+// can access:
 //
 //   req.app.get("io")
 //
-// Therefore the exact same Socket.IO instance must
-// be exposed through the Express application.
+// and therefore emit:
+//
+//   training-session:invited
+//   training-session:started
+//   training-session:ended
 //
 // =====================================================
 
@@ -332,44 +429,137 @@ app.set(
 
 
 // =====================================================
-// REGISTER GROUP CALL SOCKETS
+// VERIFY IO REGISTRATION
 // =====================================================
 
-registerGroupCallSockets(
-  io
+console.log(
+  "[Socket.IO] instance created"
 );
 
 
 // =====================================================
-// DATABASE
+// REGISTER REALTIME SOCKETS
+// =====================================================
+//
+// This creates:
+//
+//   /group-calls
+//
+// namespace.
+//
+// The realtime module is responsible for:
+//
+//   - socket authentication
+//   - user room membership
+//   - group-call rooms
+//   - training rooms
+//   - lifecycle event delivery
+//
 // =====================================================
 
-await connectWithRetry(
-  process.env.MONGODB_URI
+const groupCallNamespace =
+  registerGroupCallSockets(
+    io
+  );
+
+
+console.log(
+  "[Socket.IO] /group-calls namespace registered",
+  Boolean(
+    groupCallNamespace
+  )
 );
+
+
+// =====================================================
+// DATABASE + SERVER STARTUP
+// =====================================================
+
+async function startServer() {
+
+  try {
+
+    // ===============================================
+    // DATABASE
+    // ===============================================
+
+    await connectWithRetry(
+      process.env.MONGODB_URI
+    );
+
+
+    console.log(
+      "[Database] MongoDB connected"
+    );
+
+
+    // ===============================================
+    // SERVER
+    // ===============================================
+
+    server.listen(
+      PORT,
+      "0.0.0.0",
+      () => {
+
+        console.log(
+          "================================================="
+        );
+
+        console.log(
+          `[Server] API running on port ${PORT}`
+        );
+
+        console.log(
+          "[Server] HTTP server listening on 0.0.0.0"
+        );
+
+        console.log(
+          "[Socket.IO] server ready"
+        );
+
+        console.log(
+          "[Socket.IO] namespace: /group-calls"
+        );
+
+        console.log(
+          "================================================="
+        );
+
+      }
+    );
+
+  }
+  catch (error) {
+
+    console.error(
+      "================================================="
+    );
+
+    console.error(
+      "[Server] STARTUP FAILED"
+    );
+
+    console.error(
+      error
+    );
+
+    console.error(
+      "================================================="
+    );
+
+
+    process.exit(
+      1
+    );
+
+  }
+
+}
 
 
 // =====================================================
 // START
 // =====================================================
 
-const PORT =
-  process.env.PORT ||
-  5000;
-
-
-server.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-
-    console.log(
-      `Server running on port ${PORT}`
-    );
-
-    console.log(
-      "[Socket.IO] server ready"
-    );
-
-  }
-);
+await startServer();

@@ -394,6 +394,15 @@ export default function CanvasElementRenderer({
             !result?.ok
           ) {
 
+            console.log(
+              "[DEBUG] FULL PRIMARY ACTION FAILURE",
+              JSON.stringify(
+                result,
+                null,
+                2
+              )
+            );
+
             console.warn(
               "[CANVAS ACTION CHAIN]",
               "Primary action failed - chain stopped",
