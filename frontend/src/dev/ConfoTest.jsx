@@ -19,6 +19,8 @@ import {
 import ConfosRegistry
   from "../configs/confos/ConfosRegistry";
 
+import ConfoRuntimeTriggers
+  from "../runtime/confos/ConfoRuntimeTriggers";
 
 // =====================================================
 // AVAILABLE CONFOS
@@ -282,6 +284,7 @@ export default function ConfoTest() {
     useProjectContext();
 
 
+
   // ===================================================
   // SELECTED CONFO
   // ===================================================
@@ -342,6 +345,8 @@ export default function ConfoTest() {
       null
     );
 
+    
+
 
   // ===================================================
   // CURRENT PROJECT
@@ -364,187 +369,187 @@ export default function ConfoTest() {
   // LOAD SELECTED CONFO
   // ===================================================
 
-  useEffect(
-    () => {
+    useEffect(
+      () => {
 
-      let cancelled =
-        false;
-
-
-      const loadConfo =
-        () => {
-
-          try {
-
-            console.log(
-              "=============================================="
-            );
-
-            console.log(
-              "[ConfoTest] Loading",
-              selected
-            );
-
-            console.log(
-              "=============================================="
-            );
+        let cancelled =
+          false;
 
 
-            setErrors([]);
+        const loadConfo =
+          () => {
 
-            setInstallResult(
-              null
-            );
+            try {
 
-
-            setConfo(
-              null
-            );
-
-
-            // =========================================
-            // REGISTRY LOOKUP
-            // =========================================
-
-            const config =
-              ConfosRegistry[
-                selected
-              ];
-
-
-            if (
-              !config
-            ) {
-
-              throw new Error(
-                `Confo '${selected}' not found in ConfosRegistry.`
+              console.log(
+                "=============================================="
               );
 
-            }
+              console.log(
+                "[ConfoTest] Loading",
+                selected
+              );
+
+              console.log(
+                "=============================================="
+              );
 
 
-            console.log(
-              "[ConfoTest] Registry config",
-              config
-            );
+              setErrors([]);
+
+              setInstallResult(
+                null
+              );
 
 
-            // =========================================
-            // LOAD / VALIDATE
-            // =========================================
-
-            const loader =
-              new ConfoLoader();
+              setConfo(
+                null
+              );
 
 
-            const result =
-              loader.load(
+              // =========================================
+              // REGISTRY LOOKUP
+              // =========================================
+
+              const config =
+                ConfosRegistry[
+                  selected
+                ];
+
+
+              if (
+                !config
+              ) {
+
+                throw new Error(
+                  `Confo '${selected}' not found in ConfosRegistry.`
+                );
+
+              }
+
+
+              console.log(
+                "[ConfoTest] Registry config",
                 config
               );
 
 
-            console.log(
-              "[ConfoTest] LOAD RESULT",
-              result
-            );
+              // =========================================
+              // LOAD / VALIDATE
+              // =========================================
+
+              const loader =
+                new ConfoLoader();
 
 
-            if (
-              !result?.valid
-            ) {
-
-              const validationErrors =
-                result?.errors || [
-                  "Unknown Confo validation error.",
-                ];
+              const result =
+                loader.load(
+                  config
+                );
 
 
-              throw new Error(
-                validationErrors.join(
-                  "\n"
-                )
+              console.log(
+                "[ConfoTest] LOAD RESULT",
+                result
+              );
+
+
+              if (
+                !result?.valid
+              ) {
+
+                const validationErrors =
+                  result?.errors || [
+                    "Unknown Confo validation error.",
+                  ];
+
+
+                throw new Error(
+                  validationErrors.join(
+                    "\n"
+                  )
+                );
+
+              }
+
+
+              if (
+                cancelled
+              ) {
+
+                return;
+
+              }
+
+
+              setConfo(
+                result.confo
+              );
+
+
+              console.log(
+                "[ConfoTest] Confo ready",
+                {
+
+                  id:
+                    result.confo?.id,
+
+                  name:
+                    result.confo?.name,
+
+                }
               );
 
             }
-
-
-            if (
-              cancelled
+            catch (
+              error
             ) {
 
-              return;
-
-            }
-
-
-            setConfo(
-              result.confo
-            );
+              console.error(
+                "[ConfoTest] Load failed",
+                error
+              );
 
 
-            console.log(
-              "[ConfoTest] Confo ready",
-              {
+              if (
+                cancelled
+              ) {
 
-                id:
-                  result.confo?.id,
-
-                name:
-                  result.confo?.name,
+                return;
 
               }
-            );
-
-          }
-          catch (
-            error
-          ) {
-
-            console.error(
-              "[ConfoTest] Load failed",
-              error
-            );
 
 
-            if (
-              cancelled
-            ) {
+              setConfo(
+                null
+              );
 
-              return;
+
+              setErrors([
+                error?.message ||
+                "Failed to load Confo.",
+              ]);
 
             }
 
-
-            setConfo(
-              null
-            );
+          };
 
 
-            setErrors([
-              error?.message ||
-              "Failed to load Confo.",
-            ]);
+        loadConfo();
 
-          }
+
+        return () => {
+
+          cancelled =
+            true;
 
         };
 
-
-      loadConfo();
-
-
-      return () => {
-
-        cancelled =
-          true;
-
-      };
-
-    },
-    [
-      selected,
-    ]
-  );
+      },
+      [
+        selected,
+      ]
+    );
 
 
   // ===================================================
@@ -980,6 +985,12 @@ export default function ConfoTest() {
       }}
     >
 
+      {confo && (
+        <ConfoRuntimeTriggers
+          confo={confo}
+        />
+      )}
+
       <h2>
         Confo Project Installer
       </h2>
@@ -999,6 +1010,7 @@ export default function ConfoTest() {
         into the current project.
 
       </p>
+      
 
 
       {/* =================================================

@@ -63,6 +63,15 @@ import FilePreview
   from "../components/elements/FilePreview.js";
 
 
+
+// =====================================================
+// COMPLIANCE
+// =====================================================
+
+import ComplianceEvidence
+  from "../components/elements/ComplianceEvidence.js";
+
+
 // =====================================================
 // CONTRACTS
 // =====================================================
@@ -123,6 +132,14 @@ import remoteVideoGridContract
 
 import filePreviewContract
   from "../runtime/contracts/components/FilePreview.contract.js";
+
+
+// =====================================================
+// COMPLIANCE CONTRACTS
+// =====================================================
+
+import complianceEvidenceContract
+  from "../runtime/contracts/components/ComplianceEvidence.contract.js";
 
 
 // =====================================================
@@ -355,6 +372,21 @@ export const componentRegistry = {
 
 
   // ===================================================
+  // COMPLIANCE
+  // ===================================================
+
+  ComplianceEvidence: {
+
+    component:
+      ComplianceEvidence,
+
+    contract:
+      complianceEvidenceContract,
+
+  },
+
+
+  // ===================================================
   // DEBUG
   // ===================================================
 
@@ -406,6 +438,17 @@ console.log(
 
     FilePreview:
       !!componentRegistry.FilePreview,
+
+  }
+);
+
+
+console.log(
+  "[COMPLIANCE COMPONENT REGISTRY]",
+  {
+
+    ComplianceEvidence:
+      !!componentRegistry.ComplianceEvidence,
 
   }
 );

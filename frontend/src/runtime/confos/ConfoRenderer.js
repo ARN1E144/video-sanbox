@@ -1,3 +1,5 @@
+// src/runtime/confo/ConfoRenderer.jsx
+
 import React from "react";
 
 import {
@@ -12,9 +14,12 @@ import {
   useRuntimeProps
 } from "../../hooks/useRuntimeProps";
 
-// =====================================================
-// BUILD ACTION HANDLER
-// =====================================================
+
+/*
+=====================================================
+BUILD PROP ACTION
+=====================================================
+*/
 
 function buildActionHandler(
   element,
@@ -27,9 +32,13 @@ function buildActionHandler(
   const targetId =
     element?.props?.targetId;
 
+
   if (!action) {
+
     return undefined;
+
   }
+
 
   return (...args) => {
 
@@ -38,17 +47,26 @@ function buildActionHandler(
       {
         action,
         targetId,
-        elementId: element.id,
-        elementType: element.type
+        elementId:
+          element.id,
+        elementType:
+          element.type,
+        args
       }
     );
+
 
     return runAction(
       action,
       {
         targetId,
-        sourceId: element.id,
-        sourceType: element.type,
+
+        sourceId:
+          element.id,
+
+        sourceType:
+          element.type,
+
         args
       }
     );
@@ -57,54 +75,80 @@ function buildActionHandler(
 
 }
 
-// =====================================================
-// BUILD DECLARED ACTIONS
-// =====================================================
+
+/*
+=====================================================
+BUILD DECLARED ACTIONS
+=====================================================
+*/
 
 function buildActions(
   actions,
   runAction
 ) {
 
-  if (!Array.isArray(actions)) {
+  if (
+    !Array.isArray(actions)
+  ) {
+
     return {};
+
   }
+
 
   const handlers = {};
 
-  actions.forEach(action => {
 
-    if (!action?.name) {
-      return;
+  actions.forEach(
+    action => {
+
+      if (
+        !action?.name
+      ) {
+
+        return;
+
+      }
+
+
+      handlers[action.name] =
+        (...args) => {
+
+          console.log(
+            "[CONFO DECLARED ACTION]",
+            {
+              action:
+                action.name,
+
+              trigger:
+                action.trigger,
+
+              args
+            }
+          );
+
+
+          return runAction(
+            action.name,
+            ...args
+          );
+
+        };
+
     }
+  );
 
-    handlers[action.name] =
-      (...args) => {
-
-        console.log(
-          "[CONFO DECLARED ACTION]",
-          {
-            action: action.name,
-            trigger: action.trigger
-          }
-        );
-
-        return runAction(
-          action.name,
-          ...args
-        );
-
-      };
-
-  });
 
   return handlers;
 
 }
 
-// =====================================================
-// TREE ELEMENT RENDERER
-// =====================================================
+
+/*
+=====================================================
+TREE ELEMENT RENDERER
+=====================================================
+*/
 
 function ConfoElementRenderer({
   element
@@ -114,57 +158,72 @@ function ConfoElementRenderer({
     runAction
   } = useActionContext();
 
-  // ---------------------------------------------------
-  // RESOLVE RUNTIME PROPS
-  // ---------------------------------------------------
+
+  /*
+  ===================================================
+  RESOLVE RUNTIME PROPS
+  ===================================================
+  */
 
   const props =
     useRuntimeProps(
-      element.props || {}
+      element?.props || {}
     );
 
-  // ---------------------------------------------------
-  // LOOK UP COMPONENT
-  // ---------------------------------------------------
+
+  /*
+  ===================================================
+  LOOK UP COMPONENT
+  ===================================================
+  */
 
   const registryEntry =
     componentRegistry[
-      element.type
+      element?.type
     ];
+
 
   const Component =
     registryEntry?.component;
 
+
   if (!Component) {
 
     console.error(
-      "[ConfoElementRenderer] Missing component:",
-      element.type
+      "[ConfoElementRenderer] Missing component",
+      {
+        type:
+          element?.type,
+
+        id:
+          element?.id
+      }
     );
 
+
     return null;
+
   }
 
-  // ---------------------------------------------------
-  // DECLARED ACTIONS
-  // ---------------------------------------------------
+
+  /*
+  ===================================================
+  DECLARED ACTIONS
+  ===================================================
+  */
 
   const declaredActions =
     buildActions(
-      element.actions,
+      element?.actions,
       runAction
     );
 
-  // ---------------------------------------------------
-  // PROP ACTION
-  //
-  // This supports:
-  //
-  // props: {
-  //   action: "call.toggleMic",
-  //   targetId: "training-video"
-  // }
-  // ---------------------------------------------------
+
+  /*
+  ===================================================
+  PROP ACTION
+  ===================================================
+  */
 
   const propAction =
     buildActionHandler(
@@ -172,39 +231,60 @@ function ConfoElementRenderer({
       runAction
     );
 
-  // ---------------------------------------------------
-  // CHILDREN
-  // ---------------------------------------------------
+
+  /*
+  ===================================================
+  CHILDREN
+  ===================================================
+  */
 
   const children =
-    Array.isArray(element.children)
+    Array.isArray(
+      element?.children
+    )
       ? element.children
       : [];
 
-  // ---------------------------------------------------
-  // DEBUG
-  // ---------------------------------------------------
+
+  /*
+  ===================================================
+  DEBUG
+  ===================================================
+  */
 
   console.log(
     "[ConfoElementRenderer]",
     {
-      type: element.type,
-      id: element.id,
+      type:
+        element?.type,
+
+      id:
+        element?.id,
+
       props,
-      action: props.action,
-      targetId: props.targetId
+
+      action:
+        props?.action,
+
+      targetId:
+        props?.targetId
     }
   );
 
-  // ---------------------------------------------------
-  // RENDER
-  // ---------------------------------------------------
+
+  /*
+  ===================================================
+  RENDER
+  ===================================================
+  */
 
   return (
 
     <Component
 
-      id={element.id}
+      id={
+        element?.id
+      }
 
       {...props}
 
@@ -214,7 +294,9 @@ function ConfoElementRenderer({
       -----------------------------------------------
       */
 
-      actions={declaredActions}
+      actions={
+        declaredActions
+      }
 
       /*
       -----------------------------------------------
@@ -222,7 +304,9 @@ function ConfoElementRenderer({
       -----------------------------------------------
       */
 
-      onAction={propAction}
+      onAction={
+        propAction
+      }
 
     >
 
@@ -232,9 +316,13 @@ function ConfoElementRenderer({
 
             <ConfoElementRenderer
 
-              key={child.id}
+              key={
+                child.id
+              }
 
-              element={child}
+              element={
+                child
+              }
 
             />
 
@@ -248,26 +336,54 @@ function ConfoElementRenderer({
 
 }
 
-// =====================================================
-// MAIN CONFO RENDERER
-// =====================================================
+
+/*
+=====================================================
+MAIN CONFO RENDERER
+=====================================================
+*/
 
 export default function ConfoRenderer({
   config
 }) {
 
+  /*
+  ===================================================
+  NO CONFIG
+  ===================================================
+  */
+
   if (!config) {
+
+    console.warn(
+      "[ConfoRenderer] No config provided"
+    );
+
     return null;
+
   }
+
 
   console.log(
     "[ConfoRenderer]",
-    config
+    {
+      id:
+        config?.id,
+
+      name:
+        config?.name,
+
+      version:
+        config?.version
+    }
   );
 
-  // ---------------------------------------------------
-  // CONFO TREE
-  // ---------------------------------------------------
+
+  /*
+  ===================================================
+  NO TREE
+  ===================================================
+  */
 
   if (!config.tree) {
 
@@ -277,12 +393,22 @@ export default function ConfoRenderer({
     );
 
     return null;
+
   }
+
+
+  /*
+  ===================================================
+  RENDER CONFO TREE
+  ===================================================
+  */
 
   return (
 
     <ConfoElementRenderer
-      element={config.tree}
+      element={
+        config.tree
+      }
     />
 
   );

@@ -186,8 +186,14 @@ export const ROLE_PERMISSIONS = {
       "compliance.requestEvidence",
 
       "compliance.uploadEvidence",
-      
+
       "compliance.analyseEvidence",
+
+      "compliance.acceptEvidence",
+
+      "compliance.rejectEvidence",
+
+      "compliance.updateControlStatus"
 
     ],
 

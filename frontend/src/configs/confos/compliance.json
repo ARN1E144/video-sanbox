@@ -8,10 +8,52 @@
     "compliance"
   ],
 
+  "runtime": {
+    "triggers": [
+      {
+        "id": "analyse-uploaded-evidence",
+        "name": "Analyse uploaded evidence",
+        "event": "compliance.evidenceUploaded",
+
+        "condition": {
+          "source": "payload",
+          "path": "evidenceId",
+          "operator": "exists"
+        },
+
+        "actions": [
+          "compliance.analyseEvidence"
+        ]
+      }
+    ]
+  },
+
   "tree": {
-    "id": "root",
+    "id": "compliance-root",
     "type": "Container",
-    "props": {},
-    "children": []
+
+    "props": {
+      "layout": "vertical"
+    },
+
+    "children": [
+
+      {
+        "id": "compliance-title",
+        "type": "TextLabel",
+
+        "props": {
+          "label": "ISO 27001 Compliance"
+        }
+      },
+
+      {
+        "id": "compliance-evidence",
+        "type": "ComplianceEvidence",
+
+        "props": {}
+      }
+
+    ]
   }
 }

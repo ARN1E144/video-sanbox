@@ -151,6 +151,15 @@ import uploadEvidence
 import analyseEvidence 
   from "./compliance/analyseEvidence";
 
+import acceptEvidence
+  from "./compliance/acceptEvidence";
+
+import rejectEvidence
+  from "./compliance/rejectEvidence";
+
+import updateControlStatus
+  from "./compliance/updateControlStatus";
+
 
 import {
   setColor,
@@ -335,6 +344,15 @@ export const ACTIONS = {
 
   COMPLIANCE_ANALYSE_EVIDENCE:
     "compliance.analyseEvidence",
+  
+  COMPLIANCE_ACCEPT_EVIDENCE:
+  "compliance.acceptEvidence",
+
+  COMPLIANCE_REJECT_EVIDENCE:
+    "compliance.rejectEvidence",
+  
+  COMPLIANCE_UPDATE_CONTROL_STATUS:
+    "compliance.updateControlStatus",
 
 
   // =======================================================
@@ -3103,6 +3121,133 @@ export const actionRegistry = {
         },
       },
     }),
+
+    acceptEvidence: createAction({
+      value:
+        ACTIONS.COMPLIANCE_ACCEPT_EVIDENCE,
+
+      label:
+        "Accept Evidence",
+
+      category:
+        "compliance",
+
+      run:
+        acceptEvidence,
+
+      targets: [
+        "ComplianceEvidence",
+        "ComplianceControl",
+        "ComplianceDashboard",
+      ],
+
+      requires: [
+        "compliance.evidence",
+      ],
+
+      produces: [
+        "compliance.evidence",
+      ],
+
+      conditionPaths: [],
+
+      nextActions: [],
+
+      autoNextActions: [],
+
+      params: {
+        evidenceId: {
+          type: "string",
+          required: true,
+        },
+      },
+    }),
+
+    rejectEvidence: createAction({
+      value:
+        ACTIONS.COMPLIANCE_REJECT_EVIDENCE,
+
+      label:
+        "Reject Evidence",
+
+      category:
+        "compliance",
+
+      run:
+        rejectEvidence,
+
+      targets: [
+        "ComplianceEvidence",
+        "ComplianceControl",
+        "ComplianceDashboard",
+      ],
+
+      requires: [
+        "compliance.evidence",
+      ],
+
+      produces: [
+        "compliance.evidence",
+      ],
+
+      conditionPaths: [],
+
+      nextActions: [],
+
+      autoNextActions: [],
+
+      params: {
+        evidenceId: {
+          type: "string",
+          required: true,
+        },
+      },
+    }),
+
+    updateControlStatus: createAction({
+  value:
+    ACTIONS.COMPLIANCE_UPDATE_CONTROL_STATUS,
+
+  label:
+    "Update Control Status",
+
+  category:
+    "compliance",
+
+  run:
+    updateControlStatus,
+
+  targets: [
+    "ComplianceControl",
+    "ComplianceDashboard",
+  ],
+
+  requires: [
+    "compliance.controls",
+  ],
+
+  produces: [
+    "compliance.controls",
+  ],
+
+  conditionPaths: [],
+
+  nextActions: [],
+
+  autoNextActions: [],
+
+  params: {
+    controlId: {
+      type: "string",
+      required: true,
+    },
+
+    status: {
+      type: "string",
+      required: true,
+    },
+  },
+}),
 
   },
 

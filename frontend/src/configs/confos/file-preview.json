@@ -1,15 +1,16 @@
 {
-  "id": "confo.pdf_preview",
-  "name": "File Preview Test",
+  "id": "test.compliance",
+  "name": "Compliance Test",
   "version": 1,
   "type": "confo",
-  "description": "Test PDF and file preview rendering.",
+  "description": "Compliance runtime and ISO 27001 workflow test.",
+
   "capabilities": [
-    "media",
-    "files"
+    "compliance"
   ],
+
   "tree": {
-    "id": "file-preview-root",
+    "id": "compliance-root",
     "type": "Container",
     "props": {
       "layout": "vertical",
@@ -17,17 +18,19 @@
     },
     "children": [
       {
-        "id": "file-preview",
-        "type": "FilePreview",
-        "width": 800,
-        "height": 600,
-        "props": {
-            "source": "{{media.fileSource}}",
-            "title": "File Preview",
-            "objectFit": "contain",
-            "borderRadius": 8,
-            "controls": true
-            }
+        "id": "compliance-dashboard",
+        "type": "ComplianceDashboard",
+        "props": {}
+      },
+      {
+        "id": "compliance-controls",
+        "type": "ComplianceControl",
+        "props": {}
+      },
+      {
+        "id": "compliance-evidence",
+        "type": "ComplianceEvidence",
+        "props": {}
       }
     ]
   }

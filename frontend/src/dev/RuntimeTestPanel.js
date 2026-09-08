@@ -822,21 +822,6 @@ export default function RuntimeTestPanel() {
     runtime,
   ]);
 
-  // ===================================================
-  // RUNTIME TRIGGERS
-  // ===================================================
-
-
-  useEffect(() => {
-  registerTrigger({
-    name: "Auto analyse uploaded evidence",
-    event: "compliance.evidenceUploaded",
-    actions: ["compliance.analyseEvidence"],
-    condition: ({ payload }) =>
-      !!payload?.evidenceId,
-  });
-}, [registerTrigger]);
-
 
   // ===================================================
   // DRAG HANDLERS
@@ -2203,6 +2188,152 @@ export default function RuntimeTestPanel() {
   }
 };
 
+const testAcceptEvidence = async () => {
+  const evidence =
+    (runtime.get?.("compliance.evidence") || [])
+      .find((item) => item.status === "review_required");
+
+  if (!evidence) {
+    console.warn(
+      "[RuntimeTestPanel] No evidence requiring review"
+    );
+    return;
+  }
+
+  await runAction(
+    "compliance.acceptEvidence",
+    {
+      evidenceId: evidence.id,
+    }
+  );
+};
+
+
+const testRejectEvidence = async () => {
+  const evidence =
+    (runtime.get?.("compliance.evidence") || [])
+      .find((item) => item.status === "review_required");
+
+  if (!evidence) {
+    console.warn(
+      "[RuntimeTestPanel] No evidence requiring review"
+    );
+    return;
+  }
+
+  await runAction(
+    "compliance.rejectEvidence",
+    {
+      evidenceId: evidence.id,
+    }
+  );
+};
+
+// =====================================================
+// UPDATE COMPLIANCE CONTROL STATUS
+// =====================================================
+
+const testUpdateControlStatus =
+  async () => {
+
+    if (
+      runningActionRef.current
+    ) {
+      return;
+    }
+
+    runningActionRef.current =
+      true;
+
+    try {
+
+      const controls =
+        runtime.get?.(
+          "compliance.controls"
+        ) || [];
+
+      if (
+        !Array.isArray(controls) ||
+        controls.length === 0
+      ) {
+
+        console.warn(
+          "[RuntimeTest] No compliance controls loaded. Run compliance.load first."
+        );
+
+        return;
+      }
+
+      // -----------------------------------------------
+      // For the first test, use the first ISO control
+      // -----------------------------------------------
+
+      const control =
+        controls[0];
+
+      if (
+        !control?.id
+      ) {
+
+        console.warn(
+          "[RuntimeTest] Selected control has no ID",
+          control
+        );
+
+        return;
+      }
+
+      console.log(
+        "[RuntimeTest] Updating control status",
+        {
+          controlId:
+            control.id,
+
+          reference:
+            control.reference,
+
+          previousStatus:
+            control.status,
+
+          newStatus:
+            "satisfied",
+        }
+      );
+
+      const result =
+        await runAction(
+          "compliance.updateControlStatus",
+          {
+            controlId:
+              control.id,
+
+            status:
+              "satisfied",
+          }
+        );
+
+      console.log(
+        "[RuntimeTest] compliance.updateControlStatus result:",
+        result
+      );
+
+    }
+    catch (error) {
+
+      console.error(
+        "[RuntimeTest] compliance.updateControlStatus failed:",
+        error
+      );
+
+    }
+    finally {
+
+      runningActionRef.current =
+        false;
+
+    }
+
+  };
 
   // =====================================================
   // SET MEDIA TEST SOURCE
@@ -4195,6 +4326,40 @@ export default function RuntimeTestPanel() {
 
           </button>
 
+          {/* ---------------------------------------------
+              UPDATE CONTROL STATUS
+          --------------------------------------------- */}
+
+          <button
+
+            onClick={
+              testUpdateControlStatus
+            }
+
+            disabled={
+              runningActionRef.current
+            }
+
+            style={{
+              width:
+                "100%",
+
+              minHeight:
+                36,
+
+              marginBottom:
+                8,
+
+              cursor:
+                "pointer",
+            }}
+
+          >
+
+            Test Update Control Status
+
+          </button>
+
 
           {/* ---------------------------------------------
               REQUEST EVIDENCE
@@ -4279,6 +4444,14 @@ export default function RuntimeTestPanel() {
             }}
           >
             Test Analyse Evidence
+          </button>
+
+          <button onClick={testAcceptEvidence}>
+            Accept Evidence
+          </button>
+
+          <button onClick={testRejectEvidence}>
+            Reject Evidence
           </button>
 
 
