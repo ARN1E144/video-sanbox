@@ -22,58 +22,58 @@ export const ROLE_PERMISSIONS = {
 
     allowedElements: [
 
-      // -----------------------------------------------
-      // CORE
-      // -----------------------------------------------
+  // -----------------------------------------------
+  // CORE
+  // -----------------------------------------------
 
-      "Container",
+  "Container",
+  "Text",
+  "ControlPanel",
+  "ControlButton",
 
-      "Text",
+  // -----------------------------------------------
+  // INPUT
+  // -----------------------------------------------
 
-      "ControlPanel",
+  "FileUpload",
+  "Select",
 
-      "ControlButton",
+  // -----------------------------------------------
+  // VIDEO
+  // -----------------------------------------------
 
+  "AgoraFeed",
+  "RemoteVideoGrid",
+  "VideoFeed",
+  "MediaFeed",
 
-      // -----------------------------------------------
-      // VIDEO
-      // -----------------------------------------------
+  // -----------------------------------------------
+  // CALL
+  // -----------------------------------------------
 
-      "AgoraFeed",
+  "ChatPanel",
+  "AvailabilityButton",
+  "FetchCallsDebug",
 
-      "RemoteVideoGrid",
+  // -----------------------------------------------
+  // GROUP CALL
+  // -----------------------------------------------
 
-      "VideoFeed",
+  "ParticipantSelector",
+  "IncomingGroupCallAlert",
+  "GroupCallControls",
 
-      "MediaFeed",
+  // -----------------------------------------------
+  // REMOTE TRAINING
+  // -----------------------------------------------
 
+  "TrainingInvitation",
 
-      // -----------------------------------------------
-      // CALL
-      // -----------------------------------------------
+  // -----------------------------------------------
+  // COMPLIANCE
+  // -----------------------------------------------
 
-      "ChatPanel",
-
-      "AvailabilityButton",
-
-      "FetchCallsDebug",
-
-
-      // -----------------------------------------------
-      // GROUP CALL
-      // -----------------------------------------------
-
-      "ParticipantSelector",
-
-      "IncomingGroupCallAlert",
-
-      "GroupCallControls",
-
-      // -----------------------------------------------
-      // REMOTE TRAINING
-      // -----------------------------------------------
-      
-      "TrainingInvitation",
+  "ComplianceEvidence",
     ],
 
 
@@ -211,32 +211,27 @@ export const ROLE_PERMISSIONS = {
 
     allowedElements: [
 
-      "Container",
+  "Container",
+  "Text",
+  "AgoraFeed",
+  "RemoteVideoGrid",
+  "VideoFeed",
+  "ControlPanel",
+  "ControlButton",
 
-      "Text",
+  // INPUT
+  "FileUpload",
+  "Select",
 
-      "AgoraFeed",
+  "ChatPanel",
+  "AvailabilityButton",
+  "ParticipantSelector",
+  "IncomingGroupCallAlert",
+  "GroupCallControls",
+  "TrainingInvitation",
 
-      "RemoteVideoGrid",
-
-      "VideoFeed",
-
-      "ControlPanel",
-
-      "ControlButton",
-
-      "ChatPanel",
-
-      "AvailabilityButton",
-
-      "ParticipantSelector",
-
-      "IncomingGroupCallAlert",
-
-      "GroupCallControls",
-
-      "TrainingInvitation"
-
+  // COMPLIANCE
+  "ComplianceEvidence"
     ],
 
 
@@ -336,6 +331,8 @@ export const ROLE_PERMISSIONS = {
       "ControlButton",
 
       "ChatPanel",
+
+      "Select",
 
 
       // -----------------------------------------------

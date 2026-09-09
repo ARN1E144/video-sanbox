@@ -297,10 +297,15 @@ const canDropIntoParent = (
   childType,
   parentType
 ) => {
-  // ControlPanel accepts ControlButton
+  // ControlPanel accepts registered control elements
   if (
     parentType === "ControlPanel" &&
-    childType === "ControlButton"
+    [
+      "ControlButton",
+      "Select",
+      "Input",
+      "TextBox",
+    ].includes(childType)
   ) {
     return true;
   }
@@ -1345,13 +1350,19 @@ export default function Canvas({
 
     if (
       parent?.type ===
-      "ControlPanel"
-    ) {
-      const panelChildren =
+        "ControlPanel"
+          ) {
+            const panelChildren =
         children.filter(
           (child) =>
-            child.type ===
-            "ControlButton"
+            [
+              "ControlButton",
+              "Select",
+              "Input",
+              "TextBox",
+            ].includes(
+              child.type
+            )
         );
 
       return (

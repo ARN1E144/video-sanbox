@@ -48,10 +48,104 @@
       },
 
       {
+        "id": "compliance-actions",
+        "type": "ControlPanel",
+
+        "props": {
+          "layout": "horizontal",
+          "gap": 12
+        },
+
+        "children": [
+
+          {
+            "id": "compliance-load",
+            "type": "ControlButton",
+
+            "props": {
+              "label": "Load Compliance",
+              "action": "compliance.load"
+            }
+          },
+
+          {
+            "id": "compliance-request-evidence",
+            "type": "ControlButton",
+
+            "props": {
+              "label": "Request Evidence",
+              "action": "compliance.requestEvidence"
+            }
+          }
+
+        ]
+      },
+
+      {
+        "id": "compliance-control-panel",
+        "type": "ControlPanel",
+
+        "props": {
+          "layout": "horizontal",
+          "gap": 12
+        },
+
+        "children": [
+
+          {
+            "id": "compliance-control-select",
+            "type": "Select",
+
+            "props": {
+              "label": "Control",
+              "bindTo": "compliance.selectedControlId",
+              "placeholder": "Select a control",
+
+              "options": [
+                {
+                  "value": "a-5.1",
+                  "label": "A.5.1 — Policies for information security"
+                },
+                {
+                  "value": "a-5.2",
+                  "label": "A.5.2 — Information security roles and responsibilities"
+                },
+                {
+                  "value": "a-5.3",
+                  "label": "A.5.3 — Segregation of duties"
+                },
+                {
+                  "value": "a-5.4",
+                  "label": "A.5.4 — Management responsibilities"
+                }
+              ]
+            }
+          }
+
+        ]
+      },
+
+      {
+        "id": "compliance-upload",
+        "type": "FileUpload",
+
+        "props": {
+          "label": "Upload Evidence",
+          "accept": ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg",
+          "multiple": false,
+          "bindTo": "compliance.selectedEvidenceFile"
+        }
+      },
+
+      {
         "id": "compliance-evidence",
         "type": "ComplianceEvidence",
 
-        "props": {}
+        "props": {
+          "showStatus": true,
+          "showAssessment": true,
+          "showActions": true
+        }
       }
 
     ]

@@ -105,6 +105,11 @@ const DEFAULT_ELEMENT_SIZE = {
     height: 44,
   },
 
+  Select: {
+    width: 260,
+    height: 44,
+  },
+
   ChatPanel: {
     width: 300,
     height: 300,
@@ -123,6 +128,16 @@ const DEFAULT_ELEMENT_SIZE = {
   MicButton: {
     width: 140,
     height: 44,
+  },
+
+  FileUpload: {
+    width: 300,
+    height: 80,
+  },
+
+  ComplianceEvidence: {
+    width: 600,
+    height: 300,
   },
 
   default: {

@@ -1,7 +1,6 @@
-
 import React from "react";
 
-export const CONTROL_PANEL_MAX_BUTTONS = 4;
+export const CONTROL_PANEL_MAX_CONTROLS = 6;
 
 export default function ControlPanel({
   children,
@@ -15,12 +14,12 @@ export default function ControlPanel({
 
   V1 behaviour:
 
-  - Maximum 4 ControlButton children
-  - Children fill the available panel width
-  - Children share the available panel height
-  - Button dimensions are derived from the panel
-  - Child positioning is controlled by this component
+  - Supports generic control children
+  - Maximum 6 controls
+  - Children share available space
+  - Horizontal and vertical layouts
   - Panel remains visible when empty
+  - Does not clip child controls
   =====================================================
   */
 
@@ -30,10 +29,10 @@ export default function ControlPanel({
   const visibleChildren =
     childArray.slice(
       0,
-      CONTROL_PANEL_MAX_BUTTONS
+      CONTROL_PANEL_MAX_CONTROLS
     );
 
-  const buttonCount =
+  const controlCount =
     visibleChildren.length;
 
   const isHorizontal =
@@ -47,10 +46,6 @@ export default function ControlPanel({
 
   const panelStyle = {
 
-    /*
-    Fill the Rnd element created by Canvas.
-    */
-
     width: "100%",
     height: "100%",
 
@@ -60,10 +55,6 @@ export default function ControlPanel({
     boxSizing: "border-box",
 
     position: "relative",
-
-    /*
-    Make the panel visually obvious on the canvas.
-    */
 
     background:
       "rgba(30, 41, 59, 0.95)",
@@ -77,11 +68,8 @@ export default function ControlPanel({
     padding:
       "10px",
 
-    /*
-    Child layout.
-    */
-
-    display: "flex",
+    display:
+      "flex",
 
     flexDirection:
       isHorizontal
@@ -97,23 +85,22 @@ export default function ControlPanel({
     justifyContent:
       "stretch",
 
+    /*
+    Do not clip controls such as Select,
+    dropdowns, inputs, etc.
+    */
+
     overflow:
-      "hidden",
+      "visible",
   };
 
   /*
   =====================================================
   EMPTY PANEL
-
-  The panel must still render visibly when there
-  are no children.
-
-  This is particularly important while building
-  on the canvas.
   =====================================================
   */
 
-  if (!buttonCount) {
+  if (!controlCount) {
 
     return (
 
@@ -214,8 +201,12 @@ export default function ControlPanel({
               boxSizing:
                 "border-box",
 
+              /*
+              Do not clip child controls.
+              */
+
               overflow:
-                "hidden",
+                "visible",
             }}
           >
 

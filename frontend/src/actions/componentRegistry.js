@@ -62,6 +62,12 @@ import RemoteVideoGrid
 import FilePreview
   from "../components/elements/FilePreview.js";
 
+import FileUpload
+  from "../components/elements/FileUpload";
+
+import Select 
+  from "../components/elements/Select";
+
 
 
 // =====================================================
@@ -132,6 +138,12 @@ import remoteVideoGridContract
 
 import filePreviewContract
   from "../runtime/contracts/components/FilePreview.contract.js";
+
+import fileUploadContract
+  from "../runtime/contracts/components/FileUpload.contract.js";
+
+import selectContract 
+  from "../runtime/contracts/components/Select.contract.js";
 
 
 // =====================================================
@@ -205,6 +217,25 @@ export const componentRegistry = {
     contract:
       filePreviewContract,
 
+  },
+
+  FileUpload: {
+
+  component:
+    FileUpload,
+
+  contract:
+    fileUploadContract,
+
+  },
+
+  Select: {
+
+    component: 
+      Select,
+
+    contract: 
+      selectContract
   },
 
 

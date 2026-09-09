@@ -128,19 +128,22 @@ export default {
 
   targets: {
 
-    accepts: [
-      "ControlButton"
-    ],
+  accepts: [
+    "ControlButton",
+    "Select",
+    "Input",
+    "TextBox"
+  ],
 
-    rejects: [
-      "AgoraFeed",
-      "VideoFeed",
-      "ChatPanel",
-      "Text",
-      "TextBox"
-    ]
+  rejects: [
+    "AgoraFeed",
+    "VideoFeed",
+    "ChatPanel",
+    "Text",
+    "TextLabel"
+  ]
 
-  },
+},
 
   validation: {
 

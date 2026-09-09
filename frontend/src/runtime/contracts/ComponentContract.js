@@ -72,9 +72,14 @@ import trainingInvitation
 
   from "./components/TrainingInvitation.contract.js";
 
-import incomingGroupCallAlert
+  import incomingGroupCallAlert
+    from "./components/IncomingGroupCallAlert.contract.js";
 
-  from "./components/IncomingGroupCallAlert.contract.js";
+  import fileUpload
+    from "./components/FileUpload.contract.js";
+
+  import select 
+    from "./components/Select.contract.js";
 
 
 // =====================================================
@@ -121,6 +126,7 @@ const ComponentContract = {
   FilePreview:
 
     filePreview,
+  
 
 
   // ===================================================
@@ -182,7 +188,7 @@ const ComponentContract = {
 
   // ===================================================
 
-  // TEXT
+  // INPUTS
 
   // ===================================================
 
@@ -197,6 +203,14 @@ const ComponentContract = {
   TextLabel:
 
     textLabel,
+  
+  FileUpload:
+
+    fileUpload,
+
+  Select:
+
+    select,
 
 
   // ===================================================
