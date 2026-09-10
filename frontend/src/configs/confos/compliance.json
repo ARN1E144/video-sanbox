@@ -71,10 +71,14 @@
           {
             "id": "compliance-request-evidence",
             "type": "ControlButton",
-
             "props": {
               "label": "Request Evidence",
-              "action": "compliance.requestEvidence"
+              "action": "compliance.requestEvidence",
+              "params": {
+                "controlId": {
+                  "$state": "compliance.selectedControlId"
+                }
+              }
             }
           }
 
@@ -128,12 +132,17 @@
       {
         "id": "compliance-upload",
         "type": "FileUpload",
-
         "props": {
           "label": "Upload Evidence",
           "accept": ".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg",
           "multiple": false,
-          "bindTo": "compliance.selectedEvidenceFile"
+          "bindTo": "compliance.selectedEvidenceFile",
+          "action": "compliance.uploadEvidence",
+          "params": {
+            "evidenceId": {
+              "$state": "compliance.selectedEvidenceId"
+            }
+          }
         }
       },
 

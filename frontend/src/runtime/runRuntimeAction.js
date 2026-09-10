@@ -61,6 +61,211 @@ function actionSucceeded(
 
 
 // =====================================================
+// RUNTIME PARAMETER RESOLVER
+// =====================================================
+//
+// Resolves runtime references inside action params.
+//
+// Example:
+//
+// {
+//   controlId: {
+//     "$state":
+//       "compliance.selectedControlId"
+//   }
+// }
+//
+// becomes:
+//
+// {
+//   controlId: "a-5.1"
+// }
+//
+// This is intentionally generic.
+//
+// Any Confo action can reference runtime state.
+//
+// =====================================================
+
+function resolveRuntimeParams(
+  params,
+  ctx
+) {
+
+  // ---------------------------------------------------
+  // Primitive values
+  // ---------------------------------------------------
+
+  if (
+    params === null ||
+    params === undefined ||
+    typeof params !== "object"
+  ) {
+
+    return params;
+
+  }
+
+
+  // ---------------------------------------------------
+  // Arrays
+  // ---------------------------------------------------
+
+  if (
+    Array.isArray(params)
+  ) {
+
+    return params.map(
+      item =>
+        resolveRuntimeParams(
+          item,
+          ctx
+        )
+    );
+
+  }
+
+
+  // ---------------------------------------------------
+  // Object
+  // ---------------------------------------------------
+
+  const resolved = {};
+
+
+  for (
+    const [key, value] of
+      Object.entries(params)
+  ) {
+
+    // -------------------------------------------------
+    // $state reference
+    // -------------------------------------------------
+    //
+    // Exact form:
+    //
+    // {
+    //   "$state":
+    //     "some.runtime.path"
+    // }
+    //
+    // -------------------------------------------------
+
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.keys(value).length === 1 &&
+      typeof value.$state === "string"
+    ) {
+
+      const statePath =
+        value.$state.trim();
+
+
+      if (
+        !statePath
+      ) {
+
+        console.warn(
+          "[RUNTIME PARAM] Empty $state path",
+          {
+            key,
+            value,
+          }
+        );
+
+
+        resolved[key] =
+          undefined;
+
+        continue;
+
+      }
+
+
+      if (
+        typeof ctx?.get !== "function"
+      ) {
+
+        console.error(
+          "[RUNTIME PARAM] Runtime get() unavailable",
+          {
+            key,
+            statePath,
+          }
+        );
+
+
+        resolved[key] =
+          undefined;
+
+        continue;
+
+      }
+
+
+      const runtimeValue =
+        ctx.get(
+          statePath
+        );
+
+
+      console.log(
+        "[RUNTIME PARAM] $state RESOLVED",
+        {
+          key,
+          statePath,
+          value:
+            runtimeValue,
+        }
+      );
+
+
+      resolved[key] =
+        runtimeValue;
+
+      continue;
+
+    }
+
+
+    // -------------------------------------------------
+    // Nested object / array
+    // -------------------------------------------------
+
+    if (
+      value &&
+      typeof value === "object"
+    ) {
+
+      resolved[key] =
+        resolveRuntimeParams(
+          value,
+          ctx
+        );
+
+      continue;
+
+    }
+
+
+    // -------------------------------------------------
+    // Normal value
+    // -------------------------------------------------
+
+    resolved[key] =
+      value;
+
+  }
+
+
+  return resolved;
+
+}
+
+
+// =====================================================
 // AUTO ACTION PARAM BUILDER
 // =====================================================
 //
@@ -346,6 +551,44 @@ async function executeRuntimeAction(
 
 
   // ===================================================
+  // RESOLVE ACTION PARAMS
+  // ===================================================
+  //
+  // Runtime references such as:
+  //
+  // {
+  //   "$state":
+  //     "compliance.selectedControlId"
+  // }
+  //
+  // are resolved immediately before the action runs.
+  //
+  // ===================================================
+
+  const resolvedParams =
+    resolveRuntimeParams(
+      params,
+      ctx
+    );
+
+
+  console.log(
+    "[RUNTIME ACTION PARAMS]",
+    {
+      action:
+        actionValue,
+
+      originalParams:
+        params,
+
+      resolvedParams,
+
+      chainDepth,
+    }
+  );
+
+
+  // ===================================================
   // EXECUTE PRIMARY ACTION
   // ===================================================
 
@@ -357,7 +600,7 @@ async function executeRuntimeAction(
     result =
       await action.run(
         ctx,
-        params
+        resolvedParams
       );
 
   }

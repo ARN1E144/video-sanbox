@@ -1,5 +1,3 @@
-// src/actions/compliance/rejectEvidence.js
-
 export default async function rejectEvidence(ctx, params = {}) {
   const evidenceId = params?.evidenceId;
 
@@ -69,8 +67,14 @@ export default async function rejectEvidence(ctx, params = {}) {
   const reviewedAt =
     new Date().toISOString();
 
+
+  // =====================================================
+  // UPDATE EVIDENCE
+  // =====================================================
+
   const updatedEvidence =
     evidenceList.map((item) => {
+
       if (
         String(item?.id) !==
         String(evidenceId)
@@ -81,7 +85,8 @@ export default async function rejectEvidence(ctx, params = {}) {
       return {
         ...item,
 
-        status: "rejected",
+        status:
+          "rejected",
 
         reviewDecision:
           "rejected",
@@ -95,6 +100,70 @@ export default async function rejectEvidence(ctx, params = {}) {
     updatedEvidence
   );
 
+
+  // =====================================================
+  // UPDATE CONTROL
+  // =====================================================
+
+  const controlId =
+    evidence?.controlId;
+
+  const controls =
+    ctx?.get?.(
+      "compliance.controls"
+    ) || [];
+
+  let updatedControls =
+    controls;
+
+  if (
+    controlId &&
+    Array.isArray(controls)
+  ) {
+
+    updatedControls =
+      controls.map(
+        (control) => {
+
+          if (
+            String(control?.id) !==
+            String(controlId)
+          ) {
+            return control;
+          }
+
+          return {
+            ...control,
+
+            status:
+              "remediation",
+
+            evidenceStatus:
+              "rejected",
+
+            evidenceVerified:
+              false,
+
+            evidenceVerifiedAt:
+              null,
+
+            lastEvidenceId:
+              evidenceId,
+          };
+        }
+      );
+
+    ctx.set(
+      "compliance.controls",
+      updatedControls
+    );
+  }
+
+
+  // =====================================================
+  // GET UPDATED EVIDENCE
+  // =====================================================
+
   const rejectedEvidence =
     updatedEvidence.find(
       (item) =>
@@ -102,10 +171,16 @@ export default async function rejectEvidence(ctx, params = {}) {
         String(evidenceId)
     );
 
+
+  // =====================================================
+  // DOMAIN EVENT
+  // =====================================================
+
   console.log(
     "[compliance.rejectEvidence] Evidence rejected",
     {
       evidenceId,
+      controlId,
     }
   );
 
@@ -113,16 +188,28 @@ export default async function rejectEvidence(ctx, params = {}) {
     "compliance.evidenceRejected",
     {
       evidenceId,
-      evidence: rejectedEvidence,
+
+      controlId,
+
+      evidence:
+        rejectedEvidence,
     }
   );
+
+
+  // =====================================================
+  // RESULT
+  // =====================================================
 
   return {
     ok: true,
 
     evidenceId,
 
-    status: "rejected",
+    controlId,
+
+    status:
+      "rejected",
 
     reviewDecision:
       "rejected",

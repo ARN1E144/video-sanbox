@@ -19,25 +19,17 @@ import {
 export default function FileUpload(props) {
 
   const {
-    label = "Choose file",
-
-    accept = "",
-
-    multiple = false,
-
-    bindTo = "fileUpload",
-
-    action,
-
-    params = {},
-
-    style = {},
-
-    disabled = false,
-
-    ...rest
-
-  } = props;
+  label = "Choose file",
+  accept = "",
+  multiple = false,
+  bindTo = "fileUpload",
+  action,
+  params = {},
+  style = {},
+  disabled = false,
+  emit,
+  ...rest
+} = props;
 
 
   const theme = useTheme();

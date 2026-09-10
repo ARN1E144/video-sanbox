@@ -49,6 +49,15 @@ export default async function requestEvidence(ctx, params = {}) {
     }
 
     /*
+    * Store the newly created evidence ID as the
+    * currently selected evidence in runtime state.
+    */
+    ctx.set?.(
+      "compliance.selectedEvidenceId",
+      evidence.id
+    );
+
+    /*
      * Add the new evidence record to runtime state.
      */
     const currentEvidence =

@@ -13,6 +13,7 @@ export default function Select(props) {
     placeholder = "Select an option...",
     disabled = false,
     style = {},
+    emit,
     ...rest
   } = props;
 
@@ -23,10 +24,9 @@ export default function Select(props) {
     ? runtime.get(bindTo)
     : undefined;
 
-  const displayValue =
-    value !== undefined
-      ? value
-      : runtimeValue ?? "";
+  const displayValue = bindTo
+    ? runtimeValue ?? ""
+    : value ?? "";
 
   const handleChange = (event) => {
     const newValue = event.target.value;

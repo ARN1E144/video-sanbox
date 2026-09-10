@@ -5,7 +5,6 @@ export default async function uploadEvidence(ctx, params = {}) {
     const {
       evidenceId,
       fileName,
-      fileUrl = null,
     } = params;
 
     if (!evidenceId) {
@@ -27,7 +26,6 @@ export default async function uploadEvidence(ctx, params = {}) {
       {
         evidenceId,
         fileName,
-        fileUrl,
       }
     );
 
@@ -36,7 +34,6 @@ export default async function uploadEvidence(ctx, params = {}) {
       {
         evidenceId,
         fileName,
-        fileUrl,
       }
     );
 
@@ -77,13 +74,13 @@ export default async function uploadEvidence(ctx, params = {}) {
         status: "processing",
       }
     );
-    
+
     console.log(
-    "[compliance.uploadEvidence] EMITTING DOMAIN EVENT",
-    {
+      "[compliance.uploadEvidence] EMITTING DOMAIN EVENT",
+      {
         event: "compliance.evidenceUploaded",
         evidenceId,
-    }
+      }
     );
 
     ctx.emit?.(
