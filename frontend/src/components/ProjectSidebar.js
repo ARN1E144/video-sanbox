@@ -36,6 +36,9 @@ export default function ProjectSidebar() {
     collapsed,
     setCollapsed,
 
+    hasUnsavedChanges,
+    confirmDiscardUnsavedChanges,
+
   } =
     useContext(
       ProjectContext
@@ -64,11 +67,208 @@ export default function ProjectSidebar() {
 
 
   // ===================================================
+  // DIRTY-STATE GUARD
+  // ===================================================
+  //
+  // All operations which replace the current project
+  // now pass through one guard.
+  //
+  // This protects:
+  //
+  // - Build → another project
+  // - Unsaved project → saved project
+  // - Existing project → New Project
+  //
+  // It does NOT interfere with Save.
+  //
+  // ===================================================
+
+  const canLeaveCurrentProject =
+    () => {
+
+      if (
+        !hasUnsavedChanges
+      ) {
+
+        return true;
+
+      }
+
+
+      const confirmed =
+        typeof confirmDiscardUnsavedChanges ===
+          "function"
+
+          ? confirmDiscardUnsavedChanges(
+              "You have unsaved changes to this project. Leave without saving?"
+            )
+
+          : window.confirm(
+              "You have unsaved changes to this project. Leave without saving?"
+            );
+
+
+      if (
+        !confirmed
+      ) {
+
+        console.log(
+          "[ProjectSidebar] Project navigation cancelled",
+          {
+            activeProject,
+            hasUnsavedChanges,
+          }
+        );
+
+        return false;
+
+      }
+
+
+      console.log(
+        "[ProjectSidebar] Leaving project with unsaved changes discarded",
+        {
+          activeProject,
+        }
+      );
+
+
+      return true;
+
+    };
+
+
+  // ===================================================
+  // LOAD PROJECT
+  // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // Project loading always goes through this wrapper.
+  //
+  // loadProject() itself remains responsible for:
+  //
+  // API
+  // ↓
+  // hydrateProject()
+  // ↓
+  // applyProject()
+  // ↓
+  // Canvas hydration
+  //
+  // ===================================================
+
+  const handleLoadProject =
+    async (
+      projectId
+    ) => {
+
+      if (
+        !projectId
+      ) {
+
+        return;
+
+      }
+
+
+      // -----------------------------------------------
+      // Clicking the already-active project
+      // -----------------------------------------------
+
+      if (
+        String(
+          projectId
+        ) ===
+        String(
+          activeProject
+        )
+      ) {
+
+        console.log(
+          "[ProjectSidebar] Project already active",
+          projectId
+        );
+
+        return;
+
+      }
+
+
+      // -----------------------------------------------
+      // Guard navigation
+      // -----------------------------------------------
+
+      if (
+        !canLeaveCurrentProject()
+      ) {
+
+        return;
+
+      }
+
+
+      try {
+
+        console.log(
+          "[ProjectSidebar] Loading project",
+          {
+            projectId,
+          }
+        );
+
+
+        await loadProject(
+          projectId
+        );
+
+
+        console.log(
+          "[ProjectSidebar] Project loaded successfully",
+          {
+            projectId,
+          }
+        );
+
+      }
+      catch (
+        error
+      ) {
+
+        console.error(
+          "[ProjectSidebar] Load project failed",
+          error
+        );
+
+        alert(
+          error?.message ||
+          "Failed to load project."
+        );
+
+      }
+
+    };
+
+
+  // ===================================================
   // NEW PROJECT
   // ===================================================
 
   const handleNewProject =
     () => {
+
+      // -----------------------------------------------
+      // Guard leaving the current project
+      // -----------------------------------------------
+
+      if (
+        !canLeaveCurrentProject()
+      ) {
+
+        return;
+
+      }
+
 
       try {
 
@@ -76,6 +276,11 @@ export default function ProjectSidebar() {
 
         setNewProjectName(
           ""
+        );
+
+
+        console.log(
+          "[ProjectSidebar] New unsaved project started"
         );
 
       }
@@ -154,6 +359,7 @@ export default function ProjectSidebar() {
           );
 
           alert(
+            error?.message ||
             "Failed to create project."
           );
 
@@ -183,6 +389,7 @@ export default function ProjectSidebar() {
         );
 
         alert(
+          error?.message ||
           "Failed to save project."
         );
 
@@ -204,6 +411,45 @@ export default function ProjectSidebar() {
       event.stopPropagation();
 
 
+      // -----------------------------------------------
+      // Prevent deleting the active project while
+      // unsaved editor work exists.
+      // -----------------------------------------------
+
+      if (
+        String(
+          projectId
+        ) ===
+        String(
+          activeProject
+        ) &&
+        hasUnsavedChanges
+      ) {
+
+        const confirmed =
+          typeof confirmDiscardUnsavedChanges ===
+            "function"
+
+            ? confirmDiscardUnsavedChanges(
+                "This project has unsaved changes. Delete the saved project and discard those changes?"
+              )
+
+            : window.confirm(
+                "This project has unsaved changes. Delete the saved project and discard those changes?"
+              );
+
+
+        if (
+          !confirmed
+        ) {
+
+          return;
+
+        }
+
+      }
+
+
       try {
 
         await deleteProject(
@@ -221,6 +467,7 @@ export default function ProjectSidebar() {
         );
 
         alert(
+          error?.message ||
           "Failed to delete project."
         );
 
@@ -787,99 +1034,49 @@ export default function ProjectSidebar() {
             NEW PROJECT BUTTON
         ========================================= */}
 
-        {activeProject && (
+        <button
+          type="button"
 
-          <button
-            type="button"
+          onClick={
+            handleNewProject
+          }
 
-            onClick={
-              handleNewProject
-            }
+          style={{
+            width:
+              "100%",
 
-            style={{
-              width:
-                "100%",
+            padding:
+              "8px 10px",
 
-              padding:
-                "8px 10px",
+            marginBottom:
+              14,
 
-              marginBottom:
-                14,
+            borderRadius:
+              7,
 
-              borderRadius:
-                7,
+            border:
+              "1px solid #333",
 
-              border:
-                "1px solid #333",
+            background:
+              "#1a1a1a",
 
-              background:
-                "#1a1a1a",
+            color:
+              "#ccc",
 
-              color:
-                "#ccc",
+            cursor:
+              "pointer",
 
-              cursor:
-                "pointer",
+            fontSize:
+              11,
 
-              fontSize:
-                11,
+            fontWeight:
+              600,
+          }}
+        >
 
-              fontWeight:
-                600,
-            }}
-          >
+          + New Project
 
-            + New Project
-
-          </button>
-
-        )}
-
-
-        {!activeProject && (
-
-          <button
-            type="button"
-
-            onClick={
-              handleNewProject
-            }
-
-            style={{
-              width:
-                "100%",
-
-              padding:
-                "7px 10px",
-
-              marginBottom:
-                14,
-
-              borderRadius:
-                7,
-
-              border:
-                "1px solid #333",
-
-              background:
-                "#171717",
-
-              color:
-                "#888",
-
-              cursor:
-                "pointer",
-
-              fontSize:
-                10,
-            }}
-          >
-
-            Reset New Project
-
-          </button>
-
-        )}
+        </button>
 
 
         {/* =========================================
@@ -1005,7 +1202,7 @@ export default function ProjectSidebar() {
                     type="button"
 
                     onClick={() =>
-                      loadProject(
+                      handleLoadProject(
                         projectId
                       )
                     }

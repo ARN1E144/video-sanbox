@@ -1,5 +1,3 @@
-// src/MainApp.js
-
 import React, {
   useState,
   useEffect,
@@ -7,6 +5,10 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+
+import {
+  useCanvasState,
+} from "./context/CanvasContext";
 
 import PromptForm
   from "./components/PromptForm";
@@ -37,9 +39,6 @@ import {
   usePreviewMode,
 } from "./context/PreviewContext";
 
-import AuthPortal
-  from "./components/AuthPortal";
-
 import CallsPortal
   from "./components/CallsPortal";
 
@@ -50,15 +49,8 @@ import {
 import SplitPreviewLayout
   from "./components/splitPreviewLayout";
 
-import {
-  useCanvasState,
-} from "./context/CanvasContext";
-
 import DataHub
   from "./components/DataHub";
-
-import InspectorContent
-  from "./components/inspectorPanel/InspectorContent";
 
 import InterviewConfigurationPanel
   from "./components/projects/InterviewConfigurationPanel";
@@ -108,7 +100,9 @@ function DraggablePanel({
           if (
             !draggingRef.current
           ) {
+
             return;
+
           }
 
           setPos({
@@ -227,10 +221,7 @@ function DraggablePanel({
       }}
     >
 
-      {/* HEADER */}
-
       <div
-
         onMouseDown={
           onMouseDown
         }
@@ -259,7 +250,6 @@ function DraggablePanel({
             "center",
 
         }}
-
       >
 
         <div
@@ -278,7 +268,6 @@ function DraggablePanel({
 
 
         <button
-
           onClick={
             onClose
           }
@@ -303,15 +292,12 @@ function DraggablePanel({
           }}
 
           title="Close"
-
         >
           ✕
         </button>
 
       </div>
 
-
-      {/* BODY */}
 
       <div
         style={{
@@ -339,22 +325,6 @@ function DraggablePanel({
 
 // =====================================================
 // SETTINGS NAVIGATION
-// =====================================================
-//
-// IMPORTANT:
-//
-// settingsSection is local to MainApp.
-//
-// It does NOT depend on activeProject.
-//
-// Therefore:
-//
-// Team & Members
-//   = tenant-level
-//
-// Project Settings
-//   = project-level
-//
 // =====================================================
 
 const SETTINGS_SECTIONS = [
@@ -403,6 +373,10 @@ export default function MainApp() {
 
     projectSchema,
 
+    hasUnsavedChanges,
+
+    confirmDiscardUnsavedChanges,
+
   } =
     useContext(
       ProjectContext
@@ -444,9 +418,83 @@ export default function MainApp() {
   const [
     currentView,
     setCurrentView,
-  ] = useState(
-    "templates"
-  );
+  ] =
+    useState(
+      "templates"
+    );
+
+
+  // ===================================================
+  // GUARDED MAIN VIEW NAVIGATION
+  // ===================================================
+
+  const handleViewChange =
+    useCallback(
+      nextView => {
+
+        if (
+          nextView ===
+          currentView
+        ) {
+
+          return;
+
+        }
+
+
+        const allowed =
+          typeof confirmDiscardUnsavedChanges ===
+            "function"
+
+            ? confirmDiscardUnsavedChanges(
+                "You have unsaved changes to this project. Leave without saving?"
+              )
+
+            : true;
+
+
+        if (
+          !allowed
+        ) {
+
+          console.log(
+            "[MainApp] Navigation cancelled",
+            {
+              currentView,
+              nextView,
+            }
+          );
+
+
+          return;
+
+        }
+
+
+        console.log(
+          "[MainApp] View changed",
+          {
+
+            from:
+              currentView,
+
+            to:
+              nextView,
+
+          }
+        );
+
+
+        setCurrentView(
+          nextView
+        );
+
+      },
+      [
+        currentView,
+        confirmDiscardUnsavedChanges,
+      ]
+    );
 
 
   // ===================================================
@@ -456,9 +504,10 @@ export default function MainApp() {
   const [
     settingsSection,
     setSettingsSection,
-  ] = useState(
-    "team"
-  );
+  ] =
+    useState(
+      "team"
+    );
 
 
   // ===================================================
@@ -468,11 +517,12 @@ export default function MainApp() {
   const [
     isMobile,
     setIsMobile,
-  ] = useState(
-    () =>
-      window.innerWidth <=
-      768
-  );
+  ] =
+    useState(
+      () =>
+        window.innerWidth <=
+        768
+    );
 
 
   useEffect(
@@ -519,21 +569,24 @@ export default function MainApp() {
   const [
     showBgPanel,
     setShowBgPanel,
-  ] = useState(false);
+  ] =
+    useState(false);
 
 
   const [
     showDebug,
     setShowDebug,
-  ] = useState(false);
+  ] =
+    useState(false);
 
 
   const [
     panelTargetRole,
     setPanelTargetRole,
-  ] = useState(
-    "client"
-  );
+  ] =
+    useState(
+      "client"
+    );
 
 
   // ===================================================
@@ -543,15 +596,16 @@ export default function MainApp() {
   const [
     selectedByRole,
     setSelectedByRole,
-  ] = useState({
+  ] =
+    useState({
 
-    client:
-      null,
+      client:
+        null,
 
-    host:
-      null,
+      host:
+        null,
 
-  });
+    });
 
 
   const activeSelectedId =
@@ -817,11 +871,13 @@ export default function MainApp() {
 
       <div
         style={{
+
           color:
             "#aaa",
 
           padding:
             20,
+
         }}
       >
         Loading session…
@@ -933,8 +989,6 @@ export default function MainApp() {
         !collapsed && (
           <>
 
-            {/* BACKDROP */}
-
             <div
               onClick={
                 closeMobileSidebar
@@ -957,8 +1011,6 @@ export default function MainApp() {
               }}
             />
 
-
-            {/* DRAWER */}
 
             <div
               style={{
@@ -1068,15 +1120,114 @@ export default function MainApp() {
             MAIN MENU
         ================================================= */}
 
-        <MainMenu
-          currentView={
-            currentView
-          }
+        <div
+          style={{
 
-          setCurrentView={
-            setCurrentView
-          }
-        />
+            position:
+              "relative",
+
+          }}
+        >
+
+          <MainMenu
+            currentView={
+              currentView
+            }
+
+            setCurrentView={
+              handleViewChange
+            }
+          />
+
+
+          {/* ===============================================
+              UNSAVED INDICATOR
+          =============================================== */}
+
+          {hasUnsavedChanges && (
+
+            <div
+              style={{
+
+                position:
+                  "absolute",
+
+                right:
+                  12,
+
+                top:
+                  "50%",
+
+                transform:
+                  "translateY(-50%)",
+
+                display:
+                  "inline-flex",
+
+                alignItems:
+                  "center",
+
+                gap:
+                  7,
+
+                padding:
+                  "5px 9px",
+
+                border:
+                  "1px solid #92400e",
+
+                borderRadius:
+                  999,
+
+                background:
+                  "rgba(120,53,15,.35)",
+
+                color:
+                  "#fbbf24",
+
+                fontSize:
+                  11,
+
+                fontWeight:
+                  600,
+
+                pointerEvents:
+                  "none",
+
+                zIndex:
+                  2,
+
+                whiteSpace:
+                  "nowrap",
+
+              }}
+            >
+
+              <span
+                style={{
+
+                  width:
+                    6,
+
+                  height:
+                    6,
+
+                  borderRadius:
+                    "50%",
+
+                  background:
+                    "#f59e0b",
+
+                }}
+              />
+
+              Unsaved changes
+
+            </div>
+
+          )}
+
+        </div>
 
 
         {/* =================================================
@@ -1395,10 +1546,6 @@ export default function MainApp() {
 
                   ) : (
 
-                    /* =========================================
-                       SINGLE PREVIEW
-                    ========================================= */
-
                     <div
                       style={{
 
@@ -1479,10 +1626,6 @@ export default function MainApp() {
                 </>
 
               ) : (
-
-                /* ===========================================
-                   ACTIONS MODE
-                =========================================== */
 
                 <div
                   style={{
@@ -1570,8 +1713,6 @@ export default function MainApp() {
 
                 >
 
-                  {/* TYPE */}
-
                   <div
                     style={{
                       marginBottom:
@@ -1645,8 +1786,6 @@ export default function MainApp() {
                   </div>
 
 
-                  {/* COLOR */}
-
                   {activeBg.kind ===
                     "color" && (
 
@@ -1666,7 +1805,6 @@ export default function MainApp() {
                     >
 
                       <input
-
                         type="color"
 
                         value={
@@ -1750,8 +1888,6 @@ export default function MainApp() {
                   )}
 
 
-                  {/* IMAGE */}
-
                   {activeBg.kind ===
                     "image" && (
 
@@ -1771,6 +1907,7 @@ export default function MainApp() {
 
                             marginBottom:
                               6,
+
                           }}
                         >
                           Image URL
@@ -2045,10 +2182,6 @@ export default function MainApp() {
             }}
           >
 
-            {/* =================================================
-                SETTINGS SIDEBAR
-            ================================================= */}
-
             <div
               style={{
 
@@ -2108,8 +2241,6 @@ export default function MainApp() {
 
               </div>
 
-
-              {/* TENANT */}
 
               <div
                 style={{
@@ -2193,8 +2324,6 @@ export default function MainApp() {
 
               </button>
 
-
-              {/* PROJECT */}
 
               <div
                 style={{
@@ -2281,10 +2410,6 @@ export default function MainApp() {
             </div>
 
 
-            {/* =================================================
-                SETTINGS CONTENT
-            ================================================= */}
-
             <div
               style={{
 
@@ -2303,10 +2428,6 @@ export default function MainApp() {
               }}
             >
 
-              {/* ===============================================
-                  TENANT-LEVEL TEAM
-              =============================================== */}
-
               {settingsSection ===
                 "team" && (
 
@@ -2314,10 +2435,6 @@ export default function MainApp() {
 
               )}
 
-
-              {/* ===============================================
-                  PROJECT SETTINGS
-              =============================================== */}
 
               {settingsSection ===
                 "project" && (

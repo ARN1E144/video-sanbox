@@ -3,13 +3,31 @@ import {
   createInitialComplianceState,
 } from "../../runtime/domains/compliance/ComplianceState";
 
-export default async function loadCompliance(ctx) {
+export default async function loadCompliance(ctx, params) {
+
+    const projectId =
+    params.projectId ||
+    ctx.projectId ||
+    ctx.get?.("project.id");
+
+  console.log("[compliance.load] projectId:", projectId);
+
+  if (!projectId) {
+    return {
+      ok: false,
+      error: "No active project ID available",
+    };
+  }
+
+
   try {
     console.log(
       "[compliance.load] Loading compliance data..."
     );
 
-    const { data } = await api.get("/compliance");
+    const { data } = await api.get(
+      `/compliance?projectId=${encodeURIComponent(projectId)}`
+    );
 
     const response = data || {};
 

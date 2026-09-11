@@ -15,23 +15,11 @@ import { useRuntimeState } from "./RuntimeStateContext";
 import { useRuntimeEvents } from "./RuntimeEventContext";
 import { useRuntimeAuth } from "./RuntimeAuthContext";
 
-
 const ActionContext = createContext(null);
-
 
 export function ActionProvider({
   children,
 }) {
-
-  // ===================================================
-  // BINDINGS
-  // ===================================================
-
-  const [
-    bindings,
-    setBindings,
-  ] = useState({});
-
 
   // ===================================================
   // RUNTIME CONTEXTS
@@ -45,6 +33,64 @@ export function ActionProvider({
 
   const runtimeAuth =
     useRuntimeAuth();
+
+
+  // ===================================================
+  // RUNTIME STATE SHORTCUTS
+  // ===================================================
+
+  const get =
+    runtimeState.get;
+
+  const getAll =
+    runtimeState.getAll;
+
+  const set =
+    runtimeState.set;
+
+  const patch =
+    runtimeState.patch;
+
+
+  // ===================================================
+  // PROJECT ID
+  // ===================================================
+  //
+  // ProjectContext synchronises:
+  //
+  //   project.id
+  //
+  // into RuntimeState.
+  //
+  // ActionContext therefore does NOT depend on
+  // ProjectContext directly.
+  //
+  // Flow:
+  //
+  // ProjectContext
+  //      ↓
+  // runtime.patch("project", ...)
+  //      ↓
+  // RuntimeState
+  //      ↓
+  // get("project.id")
+  //      ↓
+  // ctx.projectId
+  //
+  // ===================================================
+
+  const projectId =
+    get("project.id");
+
+
+  // ===================================================
+  // BINDINGS
+  // ===================================================
+
+  const [
+    bindings,
+    setBindings,
+  ] = useState({});
 
 
   // ===================================================
@@ -84,24 +130,7 @@ export function ActionProvider({
 
 
   // ===================================================
-  // RUNTIME STATE SHORTCUTS
-  // ===================================================
-
-  const get =
-    runtimeState.get;
-
-  const getAll =
-    runtimeState.getAll;
-
-  const set =
-    runtimeState.set;
-
-  const patch =
-    runtimeState.patch;
-
-
-  // ===================================================
-  // BINDINGS
+  // BINDING HELPERS
   // ===================================================
 
   const getBinding =
@@ -126,14 +155,12 @@ export function ActionProvider({
           return;
         }
 
-
         setBindings(
           prev => {
 
             const current =
               prev[id] ||
               {};
-
 
             return {
 
@@ -181,7 +208,6 @@ export function ActionProvider({
           return;
         }
 
-
         setBindings(
           prev => {
 
@@ -189,9 +215,7 @@ export function ActionProvider({
               ...prev,
             };
 
-
             delete next[id];
-
 
             return next;
 
@@ -225,14 +249,12 @@ export function ActionProvider({
           return;
         }
 
-
         setBindings(
           prev => {
 
             const current =
               prev[id] ||
               {};
-
 
             return {
 
@@ -310,7 +332,6 @@ export function ActionProvider({
 
         }
 
-
         // -----------------------------------------------
         // Replace an existing waiter for the same target.
         // -----------------------------------------------
@@ -320,13 +341,11 @@ export function ActionProvider({
             id
           );
 
-
         if (existing) {
 
           clearTimeout(
             existing.timer
           );
-
 
           existing.reject(
             new Error(
@@ -335,7 +354,6 @@ export function ActionProvider({
           );
 
         }
-
 
         return new Promise(
           (
@@ -351,7 +369,6 @@ export function ActionProvider({
                     id
                   );
 
-
                   reject(
                     new Error(
                       "RECORDING_COMPLETION_TIMEOUT"
@@ -361,7 +378,6 @@ export function ActionProvider({
                 },
                 timeoutMs
               );
-
 
             recordingWaitersRef.current.set(
               id,
@@ -399,34 +415,26 @@ export function ActionProvider({
           return false;
         }
 
-
         const waiter =
           recordingWaitersRef.current.get(
             id
           );
 
-
         if (!waiter) {
-
           return false;
-
         }
-
 
         clearTimeout(
           waiter.timer
         );
 
-
         recordingWaitersRef.current.delete(
           id
         );
 
-
         waiter.resolve(
           result
         );
-
 
         return true;
 
@@ -450,29 +458,22 @@ export function ActionProvider({
           return false;
         }
 
-
         const waiter =
           recordingWaitersRef.current.get(
             id
           );
 
-
         if (!waiter) {
-
           return false;
-
         }
-
 
         clearTimeout(
           waiter.timer
         );
 
-
         recordingWaitersRef.current.delete(
           id
         );
-
 
         waiter.reject(
           error instanceof Error
@@ -484,7 +485,6 @@ export function ActionProvider({
                 )
               )
         );
-
 
         return true;
 
@@ -509,7 +509,6 @@ export function ActionProvider({
               waiter.timer
             );
 
-
             waiter.reject(
               new Error(
                 "ACTION_CONTEXT_UNMOUNTED"
@@ -518,7 +517,6 @@ export function ActionProvider({
 
           }
         );
-
 
         recordingWaitersRef.current.clear();
 
@@ -533,9 +531,7 @@ export function ActionProvider({
   // RUNTIME EVENT EMITTER
   // ===================================================
   //
-  // This is the important runtime bridge.
-  //
-  // Domain actions receive `ctx` from this provider.
+  // Domain actions receive ctx from this provider.
   //
   // Therefore:
   //
@@ -546,9 +542,6 @@ export function ActionProvider({
   //   RuntimeEventContext.emit(...)
   //      ↓
   //   RuntimeTriggersContext
-  //
-  // Domain actions do NOT need to know about React,
-  // providers, listeners or the event bus implementation.
   //
   // ===================================================
 
@@ -573,7 +566,6 @@ export function ActionProvider({
 
         }
 
-
         console.log(
           "[ActionContext] EMITTING RUNTIME EVENT",
           {
@@ -582,12 +574,10 @@ export function ActionProvider({
           }
         );
 
-
         runtimeEvents.emit(
           event,
           payload
         );
-
 
         return true;
 
@@ -601,12 +591,28 @@ export function ActionProvider({
   // ===================================================
   // RUNTIME ACTION CONTEXT
   // ===================================================
+  //
+  // This is the context supplied to every runtime action.
+  //
+  // Important:
+  //
+  // projectId comes from RuntimeState rather than
+  // ProjectContext.
+  //
+  // ===================================================
 
   const buildRuntimeContext =
     useCallback(
       () => {
 
         return {
+
+          // --------------------------------------------
+          // PROJECT
+          // --------------------------------------------
+
+          projectId,
+
 
           // --------------------------------------------
           // BINDINGS
@@ -637,15 +643,6 @@ export function ActionProvider({
 
           // --------------------------------------------
           // RUNTIME EVENTS
-          // --------------------------------------------
-          //
-          // Domain actions can now do:
-          //
-          // ctx.emit(
-          //   "compliance.evidenceUploaded",
-          //   {...}
-          // )
-          //
           // --------------------------------------------
 
           emit,
@@ -691,6 +688,11 @@ export function ActionProvider({
           // --------------------------------------------
           // ACTION CHAIN
           // --------------------------------------------
+          //
+          // Allows actions to invoke another runtime action
+          // without directly depending on ActionProvider.
+          //
+          // --------------------------------------------
 
           runAction:
             (...args) =>
@@ -702,6 +704,9 @@ export function ActionProvider({
 
       },
       [
+
+        projectId,
+
         bindings,
 
         runtimeAuth,
@@ -727,6 +732,7 @@ export function ActionProvider({
         rejectRecordingCompletion,
 
         runtimeState.agora,
+
       ]
     );
 
@@ -801,74 +807,80 @@ export function ActionProvider({
         }
 
 
+        // ---------------------------------------------
+        // RUNTIME EXECUTION FLAG
+        // ---------------------------------------------
+
         const runtimeExecution =
-  params?.__runtimeExecution === true;
+          params?.__runtimeExecution === true;
 
 
-    // ---------------------------------------------
-    // RUNTIME READY
-    // ---------------------------------------------
+        // ---------------------------------------------
+        // RUNTIME READY
+        // ---------------------------------------------
 
-    if (
-      !runtimeState.runtimeReady &&
-      !runtimeExecution
-    ) {
+        if (
+          !runtimeState.runtimeReady &&
+          !runtimeExecution
+        ) {
 
-      console.warn(
-        "[ACTION BLOCKED] Runtime not ready",
-        {
-          action: actionName,
-          runtimeExecution,
-          runtimeReady:
-            runtimeState.runtimeReady,
+          console.warn(
+            "[ACTION BLOCKED] Runtime not ready",
+            {
+              action:
+                actionName,
+
+              runtimeExecution,
+
+              runtimeReady:
+                runtimeState.runtimeReady,
+            }
+          );
+
+
+          return {
+
+            ok:
+              false,
+
+            error:
+              "runtime_not_ready",
+
+          };
+
         }
-      );
 
 
-      return {
+        // ---------------------------------------------
+        // TRANSACTION
+        // ---------------------------------------------
 
-        ok:
-          false,
-
-        error:
-          "runtime_not_ready",
-
-      };
-
-    }
+        runtimeState.beginTransaction();
 
 
-    // ---------------------------------------------
-    // TRANSACTION
-    // ---------------------------------------------
-
-    runtimeState.beginTransaction();
+        const ctx =
+          buildRuntimeContext();
 
 
-    const ctx =
-      buildRuntimeContext();
+        try {
 
-
-    try {
-
-      const {
-        __runtimeExecution,
-        ...actionParams
-      } = params;
-
-
+          const {
+            __runtimeExecution,
+            ...actionParams
+          } = params;
 
 
           // -------------------------------------------
           // EXECUTE ACTION
           // -------------------------------------------
 
-           const result =
+          const result =
             await runRuntimeAction(
               actionName,
               ctx,
               actionParams
             );
+
 
           // -------------------------------------------
           // COMMIT SUCCESSFUL ACTION
@@ -887,22 +899,6 @@ export function ActionProvider({
 
             // -----------------------------------------
             // GENERIC ACTION EVENT
-            // -----------------------------------------
-            //
-            // This remains separate from domain events.
-            //
-            // Example:
-            //
-            //   compliance.uploadEvidence
-            //
-            // is the action event.
-            //
-            // The action itself may additionally emit:
-            //
-            //   compliance.evidenceUploaded
-            //
-            // through ctx.emit().
-            //
             // -----------------------------------------
 
             runtimeEvents.emit(
@@ -987,9 +983,9 @@ export function ActionProvider({
   // ACTION REF
   // ===================================================
   //
-  // Allows the runtime context's `runAction()` to call
-  // the current executeAction implementation without
-  // creating a circular dependency.
+  // Allows runtime context runAction() to call the
+  // current executeAction implementation without creating
+  // a circular dependency.
   //
   // ===================================================
 
@@ -1048,6 +1044,13 @@ export function ActionProvider({
 
 
         // ---------------------------------------------
+        // PROJECT
+        // ---------------------------------------------
+
+        projectId,
+
+
+        // ---------------------------------------------
         // BINDINGS
         // ---------------------------------------------
 
@@ -1090,12 +1093,6 @@ export function ActionProvider({
         // ---------------------------------------------
         // EVENTS
         // ---------------------------------------------
-        //
-        // Expose this at provider level as well.
-        // This is useful for components that need to
-        // explicitly emit runtime events.
-        //
-        // ---------------------------------------------
 
         emit,
 
@@ -1120,6 +1117,8 @@ export function ActionProvider({
       }),
       [
         runtimeState,
+
+        projectId,
 
         bindings,
 

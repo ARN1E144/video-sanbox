@@ -1,15 +1,15 @@
-// src/context/CanvasContext.js
-
 import React, {
   createContext,
   useContext,
   useState,
   useEffect,
   useCallback,
-  useRef
+  useRef,
 } from "react";
 
-import { useProjectContext } from "./ProjectContext";
+import {
+  useProjectContext,
+} from "./ProjectContext";
 
 import componentRegistry from "../actions/componentRegistry";
 
@@ -17,54 +17,14 @@ import {
   projectTreeToElements,
 } from "../runtime/project/ProjectTreeLoader";
 
-import {
-  elementsToProjectTree,
-} from "../runtime/project/ProjectTreeWriter";
 
-const CanvasContext = createContext();
+const CanvasContext =
+  createContext();
 
-// =====================================================
-// DEFAULT EXTRACTION
-// =====================================================
-//
-// Contract editableProps describe the PROPERTY TYPE.
-// They are not the property's actual runtime value.
-//
-// Example:
-//
-// editableProps: {
-//
-//   source: {
-//     type: "string"
-//   },
-//
-//   columns: {
-//     type: "number"
-//   }
-//
-// }
-//
-// MUST become:
-//
-// props: {
-//
-//   source: "",
-//
-//   columns: 0
-//
-// }
-//
-// rather than:
-//
-// props: {
-//
-//   source: {
-//     type: "string"
-//   }
-//
-// }
-//
-// =====================================================
+
+/* =========================================================
+   DEFAULT EXTRACTION
+========================================================= */
 
 function extractDefaults(
   editableProps = {}
@@ -72,50 +32,30 @@ function extractDefaults(
 
   const result = {};
 
-
   Object.entries(
     editableProps
   ).forEach(
-    (
-      [
-        key,
-        definition,
-      ]
-    ) => {
-
-      // -------------------------------------------------
-      // Explicit default always wins.
-      // -------------------------------------------------
+    ([
+      key,
+      definition,
+    ]) => {
 
       if (
         definition &&
-        typeof definition ===
-          "object" &&
-        definition.default !==
-          undefined
+        typeof definition === "object" &&
+        definition.default !== undefined
       ) {
 
         result[key] =
           definition.default;
 
-
         return;
 
       }
 
-
-      // -------------------------------------------------
-      // Primitive definition.
-      //
-      // Example:
-      //
-      // source: ""
-      // -------------------------------------------------
-
       if (
-        typeof definition !==
-          "object" ||
-        definition === null
+        definition === null ||
+        typeof definition !== "object"
       ) {
 
         result[key] =
@@ -125,22 +65,16 @@ function extractDefaults(
 
       }
 
-
-      // -------------------------------------------------
-      // Type-based defaults.
-      // -------------------------------------------------
-
       const type =
         String(
           definition.type ||
           ""
         )
-          .toLowerCase();
-
+          .toLowerCase()
+          .trim();
 
       if (
-        type ===
-          "string"
+        type.includes("string")
       ) {
 
         result[key] =
@@ -150,10 +84,8 @@ function extractDefaults(
 
       }
 
-
       if (
-        type ===
-          "number"
+        type.includes("number")
       ) {
 
         result[key] =
@@ -163,10 +95,8 @@ function extractDefaults(
 
       }
 
-
       if (
-        type ===
-          "boolean"
+        type.includes("boolean")
       ) {
 
         result[key] =
@@ -176,23 +106,8 @@ function extractDefaults(
 
       }
 
-
       if (
-        type ===
-          "object"
-      ) {
-
-        result[key] =
-          null;
-
-        return;
-
-      }
-
-
-      if (
-        type ===
-          "array"
+        type.includes("array")
       ) {
 
         result[key] =
@@ -202,63 +117,16 @@ function extractDefaults(
 
       }
 
-
-      // -------------------------------------------------
-      // Union types.
-      //
-      // Example:
-      //
-      // "number|string"
-      // -------------------------------------------------
-
       if (
-        type.includes(
-          "string"
-        )
+        type.includes("object")
       ) {
 
         result[key] =
-          "";
+          null;
 
         return;
 
       }
-
-
-      if (
-        type.includes(
-          "number"
-        )
-      ) {
-
-        result[key] =
-          0;
-
-        return;
-
-      }
-
-
-      if (
-        type.includes(
-          "boolean"
-        )
-      ) {
-
-        result[key] =
-          false;
-
-        return;
-
-      }
-
-
-      // -------------------------------------------------
-      // Unknown definition.
-      //
-      // Don't leak the contract object into component
-      // props.
-      // -------------------------------------------------
 
       result[key] =
         null;
@@ -266,369 +134,1122 @@ function extractDefaults(
     }
   );
 
-
   return result;
 
 }
 
-// =====================================================
-// NORMALIZE ELEMENT
-// =====================================================
+
+/* =========================================================
+   NORMALISE ELEMENT
+========================================================= */
 
 function normalizeElement(
-  el
+  element
 ) {
 
   if (
-    !el ||
-    typeof el !==
-      "object"
+    !element ||
+    typeof element !== "object"
   ) {
 
     return null;
 
   }
 
-
   const registryEntry =
     componentRegistry?.[
-      el.type
+      element.type
     ];
 
-
-  // ===================================================
-  // CONTRACT DEFAULTS
-  // ===================================================
-
-  const contractDefaults =
+  const editableProps =
     registryEntry
       ?.contract
       ?.editableProps ||
     {};
 
-
   const defaultProps =
     extractDefaults(
-      contractDefaults
+      editableProps
     );
 
-
-  // ===================================================
-  // ACTUAL ELEMENT PROPS
-  // ===================================================
-  //
-  // Explicit element props override contract defaults.
-  //
-  // ===================================================
-
   const props = {
-
     ...defaultProps,
-
-    ...(el.props || {}),
-
+    ...(element.props || {}),
   };
 
+  const normalized = {
 
-  // ===================================================
-  // NORMALISED ELEMENT
-  // ===================================================
+    ...element,
 
-  return {
-
-    ...el,
+    id:
+      element.id ||
+      null,
 
     type:
       registryEntry
-        ? el.type
+        ? element.type
         : "Text",
 
     parentId:
-      el.parentId ??
+      element.parentId ??
       null,
+
+    role:
+      element.role ??
+      null,
+
+    x:
+      Number.isFinite(element.x)
+        ? element.x
+        : 0,
+
+    y:
+      Number.isFinite(element.y)
+        ? element.y
+        : 0,
+
+    width:
+      Number.isFinite(element.width)
+        ? element.width
+        : 300,
+
+    height:
+      Number.isFinite(element.height)
+        ? element.height
+        : 150,
 
     props,
 
+    meta: {
+      ...(element.meta || {}),
+    },
+
   };
+
+  return normalized;
 
 }
 
 
-// =====================================================
-// NORMALIZE ELEMENTS
-// =====================================================
+/* =========================================================
+   NORMALISE ELEMENT COLLECTION
+========================================================= */
 
-function normalizeElements(list) {
+function normalizeElements(
+  list
+) {
 
-  if (!Array.isArray(list)) {
+  if (
+    !Array.isArray(list)
+  ) {
 
     return [];
 
   }
 
-  return list
-    .map(normalizeElement)
-    .filter(Boolean);
+  const seenIds =
+    new Set();
+
+  const result = [];
+
+  list.forEach(
+    element => {
+
+      const normalized =
+        normalizeElement(
+          element
+        );
+
+      if (!normalized) {
+
+        return;
+
+      }
+
+      if (!normalized.id) {
+
+        console.warn(
+          "[Canvas] Ignoring element without ID",
+          normalized
+        );
+
+        return;
+
+      }
+
+      if (
+        seenIds.has(
+          normalized.id
+        )
+      ) {
+
+        console.warn(
+          "[Canvas] Duplicate element ID ignored",
+          {
+            id:
+              normalized.id,
+
+            element:
+              normalized,
+          }
+        );
+
+        return;
+
+      }
+
+      seenIds.add(
+        normalized.id
+      );
+
+      result.push(
+        normalized
+      );
+
+    }
+  );
+
+  return result;
 
 }
 
-// =====================================================
-// PROVIDER
-// =====================================================
+
+/* =========================================================
+   VALIDATE HIERARCHY
+========================================================= */
+
+function validateHierarchy(
+  elements
+) {
+
+  if (
+    !Array.isArray(elements)
+  ) {
+
+    return [];
+
+  }
+
+  const ids =
+    new Set(
+      elements.map(
+        element =>
+          element.id
+      )
+    );
+
+  return elements.map(
+    element => {
+
+      if (
+        !element.parentId
+      ) {
+
+        return element;
+
+      }
+
+      if (
+        element.parentId ===
+        element.id
+      ) {
+
+        console.warn(
+          "[Canvas] Self-parenting removed",
+          {
+            elementId:
+              element.id,
+          }
+        );
+
+        return {
+          ...element,
+          parentId:
+            null,
+        };
+
+      }
+
+      if (
+        !ids.has(
+          element.parentId
+        )
+      ) {
+
+        console.warn(
+          "[Canvas] Missing parent removed",
+          {
+            elementId:
+              element.id,
+
+            parentId:
+              element.parentId,
+          }
+        );
+
+        return {
+          ...element,
+          parentId:
+            null,
+        };
+
+      }
+
+      return element;
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   DETECT CIRCULAR REFERENCES
+========================================================= */
+
+function hasCircularParentChain(
+  element,
+  elementMap
+) {
+
+  const visited =
+    new Set();
+
+  let current =
+    element;
+
+  while (
+    current?.parentId
+  ) {
+
+    if (
+      visited.has(
+        current.id
+      )
+    ) {
+
+      return true;
+
+    }
+
+    visited.add(
+      current.id
+    );
+
+    current =
+      elementMap.get(
+        current.parentId
+      );
+
+    if (!current) {
+
+      return false;
+
+    }
+
+  }
+
+  return false;
+
+}
+
+
+/* =========================================================
+   REPAIR CIRCULAR REFERENCES
+========================================================= */
+
+function repairCircularHierarchy(
+  elements
+) {
+
+  const elementMap =
+    new Map(
+      elements.map(
+        element => [
+          element.id,
+          element,
+        ]
+      )
+    );
+
+  return elements.map(
+    element => {
+
+      if (
+        hasCircularParentChain(
+          element,
+          elementMap
+        )
+      ) {
+
+        console.warn(
+          "[Canvas] Circular hierarchy repaired",
+          {
+            elementId:
+              element.id,
+
+            parentId:
+              element.parentId,
+          }
+        );
+
+        return {
+          ...element,
+          parentId:
+            null,
+        };
+
+      }
+
+      return element;
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   CANVAS → PROJECT TREE
+=========================================================
+//
+// Canvas elements are the canonical editable model.
+//
+// element.parentId
+// element.x
+// element.y
+// element.width
+// element.height
+//
+// parentId is authoritative for hierarchy.
+//
+// Child coordinates remain LOCAL to their parent.
+// ========================================================= */
+
+function elementsToProjectTree(
+  elements,
+  previousTree = null
+) {
+
+  const normalized =
+    repairCircularHierarchy(
+      validateHierarchy(
+        normalizeElements(
+          elements
+        )
+      )
+    );
+
+  const safePreviousTree =
+    previousTree &&
+    typeof previousTree === "object"
+      ? previousTree
+      : null;
+
+  const previousRoot =
+    safePreviousTree?.type === "App"
+      ? safePreviousTree
+      : null;
+
+  const root = {
+
+    type:
+      "App",
+
+    props: {
+      ...(previousRoot?.props || {}),
+    },
+
+    meta: {
+      ...(previousRoot?.meta || {}),
+    },
+
+    children: [],
+
+  };
+
+  /* Preserve App-level identity information. */
+
+  if (
+    previousRoot?.id !== undefined
+  ) {
+
+    root.id =
+      previousRoot.id;
+
+  }
+
+  if (
+    previousRoot?.name !== undefined
+  ) {
+
+    root.name =
+      previousRoot.name;
+
+  }
+
+  if (
+    previousRoot?.version !== undefined
+  ) {
+
+    root.version =
+      previousRoot.version;
+
+  }
+
+  if (
+    previousRoot?.metadata !== undefined
+  ) {
+
+    root.metadata =
+      previousRoot.metadata;
+
+  }
+
+  const elementMap =
+    new Map();
+
+  normalized.forEach(
+    element => {
+
+      elementMap.set(
+        element.id,
+        element
+      );
+
+    }
+  );
+
+  const nodeMap =
+    new Map();
+
+  normalized.forEach(
+    element => {
+
+      const node = {
+
+        id:
+          element.id,
+
+        type:
+          element.type,
+
+        x:
+          element.x,
+
+        y:
+          element.y,
+
+        width:
+          element.width,
+
+        height:
+          element.height,
+
+        props: {
+          ...(element.props || {}),
+        },
+
+        meta: {
+          ...(element.meta || {}),
+        },
+
+        children: [],
+
+      };
+
+      if (
+        element.role !== undefined
+      ) {
+
+        node.role =
+          element.role;
+
+      }
+
+      nodeMap.set(
+        element.id,
+        node
+      );
+
+    }
+  );
+
+  /*
+   * Attach strictly through parentId.
+   *
+   * Never infer hierarchy from:
+   * - x/y
+   * - component type
+   * - visual order
+   */
+
+  normalized.forEach(
+    element => {
+
+      const node =
+        nodeMap.get(
+          element.id
+        );
+
+      if (!node) {
+
+        return;
+
+      }
+
+      if (
+        element.parentId
+      ) {
+
+        const parent =
+          nodeMap.get(
+            element.parentId
+          );
+
+        if (
+          parent
+        ) {
+
+          parent.children.push(
+            node
+          );
+
+          return;
+
+        }
+
+        console.warn(
+          "[Canvas] Parent node missing during tree write",
+          {
+            elementId:
+              element.id,
+
+            parentId:
+              element.parentId,
+          }
+        );
+
+      }
+
+      root.children.push(
+        node
+      );
+
+    }
+  );
+
+  console.log(
+    "[Canvas] ELEMENTS → TREE",
+    {
+      elementCount:
+        normalized.length,
+
+      topLevelCount:
+        root.children.length,
+
+      tree:
+        root,
+    }
+  );
+
+  return root;
+
+}
+
+
+/* =========================================================
+   PROVIDER
+========================================================= */
 
 export function CanvasProvider({
-  children
+  children,
 }) {
 
   const {
     projectSchema,
     setProjectSchema,
-  } = useProjectContext();
+    markProjectDirty,
+  } =
+    useProjectContext();
+
 
   const [
     elements,
-    setElements
-  ] = useState([]);
+    setElements,
+  ] =
+    useState([]);
 
-  const isSyncingRef =
+
+  const isHydratingRef =
     useRef(false);
 
-  // =====================================================
-  // TREE → CANVAS
-  // =====================================================
 
-  useEffect(() => {
+  /* =======================================================
+     TREE → CANVAS
+  ======================================================= */
 
-    if (
-      isSyncingRef.current
-    ) {
+  useEffect(
+    () => {
 
-      isSyncingRef.current =
-        false;
+      /*
+       * A tree change caused by Canvas → Tree is immediately
+       * followed by this effect. It is already represented by
+       * the current Canvas state, so do not re-hydrate it.
+       */
 
-      return;
+      if (
+        isHydratingRef.current
+      ) {
 
-    }
+        isHydratingRef.current =
+          false;
 
-    if (
-      !projectSchema?.tree
-    ) {
+        return;
 
-      setElements([]);
+      }
 
-      return;
 
-    }
+      if (
+        !projectSchema?.tree
+      ) {
 
-    const generated =
-      projectTreeToElements(
-        projectSchema.tree
+        setElements(
+          []
+        );
+
+        return;
+
+      }
+
+
+      const generated =
+        projectTreeToElements(
+          projectSchema.tree
+        );
+
+
+      const normalized =
+        repairCircularHierarchy(
+          validateHierarchy(
+            normalizeElements(
+              generated
+            )
+          )
+        );
+
+
+      console.table(
+        normalized.map(
+          element => ({
+
+            id:
+              element.id,
+
+            type:
+              element.type,
+
+            parentId:
+              element.parentId,
+
+            x:
+              element.x,
+
+            y:
+              element.y,
+
+            width:
+              element.width,
+
+            height:
+              element.height,
+
+          })
+        )
       );
 
-    const normalized =
-      normalizeElements(
-        generated
+
+      console.log(
+        "[Canvas] HYDRATING FROM PROJECT TREE",
+        {
+          tree:
+            projectSchema.tree,
+
+          elementCount:
+            normalized.length,
+
+          elements:
+            normalized,
+        }
       );
 
-    console.table(
-      normalized.map(el => ({
-        id: el.id,
-        type: el.type,
-        parentId: el.parentId,
-        x: el.x,
-        y: el.y,
-        width: el.width,
-        height: el.height
-      }))
-    );
 
-    console.log(
-      "[Canvas] Hydrating from tree",
-      normalized
-    );
+      setElements(
+        normalized
+      );
 
-    console.log(
-      "🟢 TREE → CANVAS",
-      projectSchema?.tree
-    );
+    },
+    [
+      projectSchema?.tree,
+    ]
+  );
 
-    setElements(
-      normalized
-    );
 
-  }, [
-    projectSchema?.tree
-  ]);
-
-  // =====================================================
-  // CANVAS → TREE
-  // =====================================================
+  /* =======================================================
+     CANVAS → TREE
+  ======================================================= */
 
   const syncTree =
     useCallback(
-      (nextElements) => {
+      (
+        nextElements,
+        {
+          markDirty = true,
+        } = {}
+      ) => {
 
         const tree =
           elementsToProjectTree(
-            nextElements
+            nextElements,
+
+            projectSchema?.tree ||
+              null
           );
 
+
         console.log(
-          "🔵 CANVAS → TREE",
+          "[Canvas] CANVAS → TREE",
           tree
         );
 
-        isSyncingRef.current =
+
+        /*
+         * The next projectSchema.tree update is generated
+         * by the current Canvas state, not an external load.
+         */
+
+        isHydratingRef.current =
           true;
 
-        setProjectSchema(
-          prev => ({
 
-            ...prev,
+        setProjectSchema(
+          previous => ({
+
+            ...previous,
 
             tree,
 
           })
         );
 
+
+        if (
+          markDirty
+        ) {
+
+          markProjectDirty();
+
+        }
+
       },
       [
-        setProjectSchema
+        projectSchema?.tree,
+        setProjectSchema,
+        markProjectDirty,
       ]
     );
 
-  // =====================================================
-  // ADD ELEMENT
-  // =====================================================
+
+  /* =======================================================
+     ADD ELEMENT
+  ======================================================= */
 
   const addElement =
     useCallback(
-      (newEl) => {
+      newElement => {
 
         const normalized =
           normalizeElement(
-            newEl
+            newElement
           );
 
-        console.log(
-          "[NORMALIZED ELEMENT]",
-          {
-            input: newEl,
-            output: normalized
-          }
-        );
 
         if (!normalized) {
+
+          console.warn(
+            "[Canvas] Invalid element rejected",
+            newElement
+          );
 
           return;
 
         }
 
-        setElements(prev => {
 
-          const next = [
+        if (!normalized.id) {
 
-            ...prev,
-
-            normalized
-
-          ];
-
-          console.log(
-            "[CANVAS ELEMENTS AFTER ADD]",
-            next.map(e => ({
-
-              id: e.id,
-
-              type: e.type,
-
-              role: e.role,
-
-              parentId:
-                e.parentId
-
-            }))
+          console.warn(
+            "[Canvas] Element requires an ID",
+            newElement
           );
 
-          syncTree(next);
+          return;
 
-          return next;
+        }
 
-        });
+
+        setElements(
+          previous => {
+
+            const existing =
+              previous.some(
+                element =>
+                  element.id ===
+                  normalized.id
+              );
+
+
+            if (
+              existing
+            ) {
+
+              console.warn(
+                "[Canvas] Duplicate element prevented",
+                {
+                  id:
+                    normalized.id,
+                }
+              );
+
+              return previous;
+
+            }
+
+
+            let next = [
+              ...previous,
+              normalized,
+            ];
+
+
+            next =
+              repairCircularHierarchy(
+                validateHierarchy(
+                  next
+                )
+              );
+
+
+            console.log(
+              "[CANVAS ELEMENT ADDED]",
+              {
+                id:
+                  normalized.id,
+
+                type:
+                  normalized.type,
+
+                parentId:
+                  normalized.parentId,
+              }
+            );
+
+
+            syncTree(
+              next,
+              {
+                markDirty:
+                  true,
+              }
+            );
+
+
+            return next;
+
+          }
+        );
 
       },
       [
-        syncTree
+        syncTree,
       ]
     );
 
-  // =====================================================
-  // UPDATE ELEMENT
-  // =====================================================
+
+  /* =======================================================
+     UPDATE ELEMENT
+  ======================================================= */
 
   const updateElement =
     useCallback(
       (
         id,
-        updates
+        updates = {}
       ) => {
 
-        setElements(prev => {
+        if (!id) {
 
-          const next =
-            prev.map(el => {
+          return;
 
-              if (
-                el.id !== id
-              ) {
+        }
 
-                return el;
 
-              }
+        setElements(
+          previous => {
 
-              return normalizeElement({
+            const target =
+              previous.find(
+                element =>
+                  element.id ===
+                  id
+              );
 
-                ...el,
 
-                ...updates,
+            if (!target) {
 
-                props: {
+              console.warn(
+                "[Canvas] Cannot update missing element",
+                {
+                  id,
+                }
+              );
 
-                  ...(el.props || {}),
+              return previous;
 
-                  ...(updates?.props || {})
+            }
+
+
+            const next =
+              previous.map(
+                element => {
+
+                  if (
+                    element.id !==
+                    id
+                  ) {
+
+                    return element;
+
+                  }
+
+
+                  const merged = {
+
+                    ...element,
+
+                    ...updates,
+
+                    props: {
+
+                      ...(element.props || {}),
+
+                      ...(updates?.props || {}),
+
+                    },
+
+                  };
+
+
+                  /*
+                   * Explicit null detaches.
+                   * Undefined preserves the existing parent.
+                   */
+
+                  if (
+                    updates.parentId !==
+                    undefined
+                  ) {
+
+                    merged.parentId =
+                      updates.parentId ??
+                      null;
+
+                  }
+                  else {
+
+                    merged.parentId =
+                      element.parentId ??
+                      null;
+
+                  }
+
+
+                  return normalizeElement(
+                    merged
+                  );
 
                 }
+              );
 
-              });
 
-            });
+            const validated =
+              repairCircularHierarchy(
+                validateHierarchy(
+                  next
+                )
+              );
 
-          console.log(
-            "[UPDATE ELEMENT → SYNC TREE]",
-            next.find(el => el.id === id)
-          );
 
-          syncTree(next);
+            const updated =
+              validated.find(
+                element =>
+                  element.id ===
+                  id
+              );
 
-          console.log(
-            "[SYNC TREE INPUT]",
-            next
-          );
 
-          return next;
+            console.log(
+              "[CANVAS UPDATE ELEMENT]",
+              {
+                id,
 
-        });
+                before:
+                  target,
+
+                updates,
+
+                after:
+                  updated,
+
+                parentId:
+                  updated?.parentId ??
+                  null,
+              }
+            );
+
+
+            /*
+             * Parent movement and child movement are
+             * independent.
+             *
+             * Updating a parent does not rewrite children.
+             * Updating a child does not rewrite parentId.
+             */
+
+            syncTree(
+              validated,
+              {
+                markDirty:
+                  true,
+              }
+            );
+
+
+            return validated;
+
+          }
+        );
 
       },
       [
-        syncTree
+        syncTree,
       ]
     );
 
-  // =====================================================
-  // MOVE ELEMENT TO PARENT
-  // =====================================================
+
+  /* =======================================================
+     MOVE ELEMENT TO PARENT
+  ======================================================= */
 
   const moveElementToParent =
     useCallback(
@@ -637,276 +1258,426 @@ export function CanvasProvider({
         parentId = null
       ) => {
 
-        setElements(prev => {
+        setElements(
+          previous => {
 
-          const element =
-            prev.find(
-              el =>
-                el.id === elementId
-            );
-
-          if (!element) {
-
-            console.warn(
-              "[Canvas] Cannot move missing element",
-              elementId
-            );
-
-            return prev;
-
-          }
-
-          // ---------------------------------------------
-          // Prevent self-parenting
-          // ---------------------------------------------
-
-          if (
-            parentId === elementId
-          ) {
-
-            console.warn(
-              "[Canvas] Cannot parent element to itself",
-              {
-                elementId,
-                parentId
-              }
-            );
-
-            return prev;
-
-          }
-
-          // ---------------------------------------------
-          // Parent must exist unless null
-          // ---------------------------------------------
-
-          if (
-            parentId !== null &&
-            !prev.some(
-              el =>
-                el.id === parentId
-            )
-          ) {
-
-            console.warn(
-              "[Canvas] Parent does not exist",
-              {
-                elementId,
-                parentId
-              }
-            );
-
-            return prev;
-
-          }
-
-          // ---------------------------------------------
-          // Prevent circular hierarchy
-          // ---------------------------------------------
-
-          if (parentId !== null) {
-
-            let currentParent =
-              prev.find(
-                el =>
-                  el.id === parentId
+            const element =
+              previous.find(
+                item =>
+                  item.id ===
+                  elementId
               );
 
-            while (currentParent) {
 
-              if (
-                currentParent.id === elementId
-              ) {
+            if (!element) {
 
-                console.warn(
-                  "[Canvas] Circular hierarchy rejected",
-                  {
-                    elementId,
-                    parentId
-                  }
-                );
+              console.warn(
+                "[Canvas] Cannot move missing element",
+                {
+                  elementId,
+                }
+              );
 
-                return prev;
-
-              }
-
-              if (
-                !currentParent.parentId
-              ) {
-
-                break;
-
-              }
-
-              currentParent =
-                prev.find(
-                  el =>
-                    el.id ===
-                    currentParent.parentId
-                );
+              return previous;
 
             }
+
+
+            if (
+              parentId ===
+              elementId
+            ) {
+
+              console.warn(
+                "[Canvas] Cannot parent element to itself",
+                {
+                  elementId,
+                  parentId,
+                }
+              );
+
+              return previous;
+
+            }
+
+
+            if (
+              parentId !== null &&
+              !previous.some(
+                item =>
+                  item.id ===
+                  parentId
+              )
+            ) {
+
+              console.warn(
+                "[Canvas] Parent does not exist",
+                {
+                  elementId,
+                  parentId,
+                }
+              );
+
+              return previous;
+
+            }
+
+
+            /*
+             * Prevent parent → descendant cycles.
+             */
+
+            if (
+              parentId !== null
+            ) {
+
+              const visited =
+                new Set();
+
+              let currentId =
+                parentId;
+
+
+              while (
+                currentId
+              ) {
+
+                if (
+                  currentId ===
+                  elementId
+                ) {
+
+                  console.warn(
+                    "[Canvas] Circular hierarchy rejected",
+                    {
+                      elementId,
+                      parentId,
+                    }
+                  );
+
+                  return previous;
+
+                }
+
+
+                if (
+                  visited.has(
+                    currentId
+                  )
+                ) {
+
+                  console.warn(
+                    "[Canvas] Existing circular hierarchy detected",
+                    {
+                      elementId,
+                      parentId,
+                    }
+                  );
+
+                  return previous;
+
+                }
+
+
+                visited.add(
+                  currentId
+                );
+
+
+                const current =
+                  previous.find(
+                    item =>
+                      item.id ===
+                      currentId
+                  );
+
+
+                currentId =
+                  current?.parentId ||
+                  null;
+
+              }
+
+            }
+
+
+            const next =
+              previous.map(
+                item => {
+
+                  if (
+                    item.id !==
+                    elementId
+                  ) {
+
+                    return item;
+
+                  }
+
+
+                  /*
+                   * ONLY parentId changes.
+                   * Child-local x/y are preserved.
+                   */
+
+                  return normalizeElement({
+
+                    ...item,
+
+                    parentId:
+                      parentId ??
+                      null,
+
+                  });
+
+                }
+              );
+
+
+            const validated =
+              repairCircularHierarchy(
+                validateHierarchy(
+                  next
+                )
+              );
+
+
+            console.log(
+              "[CANVAS PARENT CHANGE]",
+              {
+                elementId,
+
+                previousParentId:
+                  element.parentId ??
+                  null,
+
+                parentId:
+                  parentId ??
+                  null,
+
+              }
+            );
+
+
+            syncTree(
+              validated,
+              {
+                markDirty:
+                  true,
+              }
+            );
+
+
+            return validated;
 
           }
-
-          const next =
-            prev.map(el => {
-
-              if (
-                el.id !== elementId
-              ) {
-
-                return el;
-
-              }
-
-              return normalizeElement({
-
-                ...el,
-
-                parentId
-
-              });
-
-            });
-
-          console.log(
-            "[CANVAS PARENT CHANGE]",
-            {
-              elementId,
-              parentId
-            }
-          );
-
-          syncTree(next);
-
-          return next;
-
-        });
+        );
 
       },
       [
-        syncTree
+        syncTree,
       ]
     );
 
-  // =====================================================
-  // REMOVE ELEMENT
-  // =====================================================
+
+  /* =======================================================
+     REMOVE ELEMENT
+  ======================================================= */
 
   const removeElement =
     useCallback(
-      (id) => {
+      id => {
 
-        setElements(prev => {
+        if (!id) {
 
-          /*
-          =================================================
-          REMOVE THE ELEMENT AND ITS CHILDREN
-          =================================================
-          */
+          return;
 
-          const idsToRemove =
-            new Set([id]);
+        }
 
-          let changed = true;
 
-          while (changed) {
+        setElements(
+          previous => {
 
-            changed = false;
+            const idsToRemove =
+              new Set([
+                id,
+              ]);
 
-            prev.forEach(el => {
 
-              if (
-                el.parentId &&
-                idsToRemove.has(
-                  el.parentId
-                ) &&
-                !idsToRemove.has(
-                  el.id
-                )
-              ) {
+            let changed =
+              true;
 
-                idsToRemove.add(
-                  el.id
-                );
 
-                changed = true;
+            while (
+              changed
+            ) {
 
+              changed =
+                false;
+
+
+              previous.forEach(
+                element => {
+
+                  if (
+                    element.parentId &&
+                    idsToRemove.has(
+                      element.parentId
+                    ) &&
+                    !idsToRemove.has(
+                      element.id
+                    )
+                  ) {
+
+                    idsToRemove.add(
+                      element.id
+                    );
+
+                    changed =
+                      true;
+
+                  }
+
+                }
+              );
+
+            }
+
+
+            const next =
+              previous.filter(
+                element =>
+                  !idsToRemove.has(
+                    element.id
+                  )
+              );
+
+
+            console.log(
+              "[CANVAS REMOVE ELEMENT]",
+              {
+                removedId:
+                  id,
+
+                removedIds:
+                  Array.from(
+                    idsToRemove
+                  ),
+
+                remaining:
+                  next.length,
               }
-
-            });
-
-          }
-
-          const next =
-            prev.filter(
-              el =>
-                !idsToRemove.has(
-                  el.id
-                )
             );
 
-          syncTree(next);
 
-          return next;
+            syncTree(
+              next,
+              {
+                markDirty:
+                  true,
+              }
+            );
 
-        });
+
+            return next;
+
+          }
+        );
 
       },
       [
-        syncTree
+        syncTree,
       ]
     );
 
-  // =====================================================
-  // CLEAR CANVAS
-  // =====================================================
+
+  /* =======================================================
+     CLEAR CANVAS
+  ======================================================= */
 
   const clearCanvas =
     useCallback(
       () => {
 
-        setElements([]);
+        setElements(
+          []
+        );
 
-        syncTree([]);
+
+        syncTree(
+          [],
+          {
+            markDirty:
+              true,
+          }
+        );
 
       },
       [
-        syncTree
+        syncTree,
       ]
     );
 
-  // =====================================================
-  // LOAD ELEMENTS
-  // =====================================================
+
+  /* =======================================================
+     LOAD ELEMENTS
+  ======================================================= */
 
   const loadElements =
     useCallback(
-      (saved) => {
+      saved => {
 
         const normalized =
-          normalizeElements(
-            saved
+          repairCircularHierarchy(
+            validateHierarchy(
+              normalizeElements(
+                saved
+              )
+            )
           );
+
+
+        console.log(
+          "[Canvas] LOAD ELEMENTS",
+          {
+            count:
+              normalized.length,
+
+            elements:
+              normalized,
+          }
+        );
+
 
         setElements(
           normalized
         );
 
+
+        /*
+         * loadElements is an explicit editor operation, so
+         * it represents a user change and marks the project
+         * as unsaved.
+         */
+
         syncTree(
-          normalized
+          normalized,
+          {
+            markDirty:
+              true,
+          }
         );
 
       },
       [
-        syncTree
+        syncTree,
       ]
     );
 
-  // =====================================================
-  // CONTEXT
-  // =====================================================
+
+  /* =======================================================
+     CONTEXT VALUE
+  ======================================================= */
 
   return (
 
@@ -930,7 +1701,9 @@ export function CanvasProvider({
       }}
     >
 
-      {children}
+      {
+        children
+      }
 
     </CanvasContext.Provider>
 
@@ -938,18 +1711,20 @@ export function CanvasProvider({
 
 }
 
-// =====================================================
-// HOOK
-// =====================================================
+
+/* =========================================================
+   HOOK
+========================================================= */
 
 export function useCanvasState() {
 
-  const ctx =
+  const context =
     useContext(
       CanvasContext
     );
 
-  if (!ctx) {
+
+  if (!context) {
 
     throw new Error(
       "useCanvasState must be used inside CanvasProvider"
@@ -957,6 +1732,7 @@ export function useCanvasState() {
 
   }
 
-  return ctx;
+
+  return context;
 
 }

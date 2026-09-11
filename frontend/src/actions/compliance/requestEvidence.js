@@ -2,6 +2,17 @@ import api from "../../services/api";
 
 export default async function requestEvidence(ctx, params = {}) {
   try {
+    /*
+     * Project ID comes from the runtime project state.
+     *
+     * Allow an explicit param as an override, but normally
+     * Confo actions should obtain this from runtime state.
+     */
+    const projectId =
+      params?.projectId ||
+      ctx?.projectId ||
+      ctx?.get?.("project.id");
+
     const {
       controlId,
       name = "Evidence required",
@@ -11,6 +22,17 @@ export default async function requestEvidence(ctx, params = {}) {
       requestedFor = null,
     } = params;
 
+    if (!projectId) {
+      console.error(
+        "[compliance.requestEvidence] Missing projectId"
+      );
+
+      return {
+        ok: false,
+        error: "projectId is required",
+      };
+    }
+
     if (!controlId) {
       return {
         ok: false,
@@ -18,18 +40,26 @@ export default async function requestEvidence(ctx, params = {}) {
       };
     }
 
-    console.log("[compliance.requestEvidence] Requesting evidence", {
-      controlId,
-      name,
-      description,
-      type,
-      dueDate,
-      requestedFor,
-    });
+    console.log(
+      "[compliance.requestEvidence] Requesting evidence",
+      {
+        projectId,
+        controlId,
+        name,
+        description,
+        type,
+        dueDate,
+        requestedFor,
+      }
+    );
 
+    /*
+     * Create the persistent evidence request.
+     */
     const { data } = await api.post(
       "/compliance/evidence/request",
       {
+        projectId,
         controlId,
         name,
         description,
@@ -44,17 +74,41 @@ export default async function requestEvidence(ctx, params = {}) {
     if (!evidence) {
       return {
         ok: false,
-        error: "Evidence request was not returned by the API",
+        error:
+          "Evidence request was not returned by the API",
       };
     }
 
     /*
-    * Store the newly created evidence ID as the
-    * currently selected evidence in runtime state.
-    */
+     * Compliance evidence uses evidenceId as its
+     * persistent identifier.
+     *
+     * Keep a fallback to id for compatibility with
+     * any older API response.
+     */
+    const evidenceId =
+      evidence.evidenceId ||
+      evidence.id;
+
+    if (!evidenceId) {
+      console.error(
+        "[compliance.requestEvidence] Evidence returned without ID",
+        { evidence }
+      );
+
+      return {
+        ok: false,
+        error: "Evidence ID was not returned by the API",
+      };
+    }
+
+    /*
+     * Store the newly created evidence ID as the
+     * currently selected evidence in runtime state.
+     */
     ctx.set?.(
       "compliance.selectedEvidenceId",
-      evidence.id
+      evidenceId
     );
 
     /*
@@ -65,32 +119,58 @@ export default async function requestEvidence(ctx, params = {}) {
 
     ctx.set?.(
       "compliance.evidence",
-      [...currentEvidence, evidence]
+      [
+        ...currentEvidence,
+        evidence,
+      ]
     );
 
     /*
-     * Update the associated control.
+     * Update the associated control in runtime state.
+     *
+     * Compliance controls use controlId in the
+     * persistent model. Keep id as a compatibility
+     * fallback for older runtime data.
      */
     const controls =
       ctx.get?.("compliance.controls") || [];
 
-    const updatedControls = controls.map((control) => {
-      if (control.id !== controlId) {
-        return control;
+    const updatedControls = controls.map(
+      (control) => {
+        const existingControlId =
+          control.controlId ||
+          control.id;
+
+        if (
+          existingControlId !== controlId
+        ) {
+          return control;
+        }
+
+        const evidenceIds =
+          Array.isArray(control.evidenceIds)
+            ? control.evidenceIds
+            : [];
+
+        return {
+          ...control,
+
+          evidenceIds:
+            evidenceIds.includes(evidenceId)
+              ? evidenceIds
+              : [
+                  ...evidenceIds,
+                  evidenceId,
+                ],
+
+          status:
+            "evidence_requested",
+
+          evidenceStatus:
+            "requested",
+        };
       }
-
-      const evidenceIds = Array.isArray(control.evidenceIds)
-        ? control.evidenceIds
-        : [];
-
-      return {
-        ...control,
-        evidenceIds: evidenceIds.includes(evidence.id)
-          ? evidenceIds
-          : [...evidenceIds, evidence.id],
-        status: "evidence_requested",
-      };
-    });
+    );
 
     ctx.set?.(
       "compliance.controls",
@@ -100,9 +180,11 @@ export default async function requestEvidence(ctx, params = {}) {
     console.log(
       "[compliance.requestEvidence] Runtime state updated",
       {
-        evidenceId: evidence.id,
+        projectId,
+        evidenceId,
         controlId,
-        evidenceCount: currentEvidence.length + 1,
+        evidenceCount:
+          currentEvidence.length + 1,
       }
     );
 
@@ -110,7 +192,9 @@ export default async function requestEvidence(ctx, params = {}) {
       ok: true,
       result: {
         evidence,
+        evidenceId,
         controlId,
+        projectId,
       },
     };
   } catch (err) {

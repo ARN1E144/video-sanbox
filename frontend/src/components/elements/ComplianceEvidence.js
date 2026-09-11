@@ -22,42 +22,76 @@ import {
 // Responsibilities:
 //
 // 1. Read compliance evidence from runtime state.
-// 2. Optionally filter by controlId.
-// 3. Display evidence status.
-// 4. Display AI assessment.
-// 5. Allow authorised human review.
-// 6. Execute accept/reject through the runtime action layer.
+// 2. Resolve the CURRENT evidence item.
+// 3. Optionally filter by controlId.
+// 4. Display evidence status.
+// 5. Display AI assessment.
+// 6. Allow authorised human review.
+// 7. Execute accept/reject through the runtime action layer.
 //
 // NOT responsible for:
 //
-// - Direct runtime-state mutation.
-// - Uploading files.
-// - Calling the compliance API directly.
-// - Performing AI analysis.
+// - Direct API calls.
+// - File upload.
+// - AI analysis.
+// - Mutating compliance business state.
 // - Deciding whether evidence is sufficient.
-// - Updating control status.
-// - Creating corrective actions.
 //
-// Workflow:
+// IMPORTANT:
 //
-// compliance.evidence
-//       ↓
-// ComplianceEvidence
-//       ↓
-// review_required
-//       ↓
-// Human decision
-//       ↓
-// compliance.acceptEvidence
-//       OR
-// compliance.rejectEvidence
-//       ↓
-// Runtime domain event
+// This component intentionally renders ONE current
+// evidence record rather than every historical evidence
+// record.
 //
+// Selection priority:
+//
+//   1. compliance.selectedEvidenceId
+//   2. controlId filter
+//   3. most recent evidence
+//
+// Historical evidence remains in runtime state and can
+// later be displayed by a dedicated Evidence History
+// component.
 // =========================================================
 
 
-export default function ComplianceEvidence(props) {
+// =========================================================
+// ID HELPERS
+// =========================================================
+
+function getEvidenceId(
+  evidence
+) {
+
+  return (
+    evidence?.evidenceId ||
+    evidence?.id ||
+    null
+  );
+
+}
+
+
+function getControlId(
+  control
+) {
+
+  return (
+    control?.controlId ||
+    control?.id ||
+    null
+  );
+
+}
+
+
+// =========================================================
+// COMPONENT
+// =========================================================
+
+export default function ComplianceEvidence(
+  props
+) {
 
   // =======================================================
   // PROPS
@@ -66,9 +100,11 @@ export default function ComplianceEvidence(props) {
   const {
     id,
 
-    meta = {},
+    meta =
+      {},
 
-    style = {},
+    style =
+      {},
 
     controlId:
       _controlId,
@@ -95,11 +131,13 @@ export default function ComplianceEvidence(props) {
   // =======================================================
 
   const actionCtx =
-    useActionContext() || {};
+    useActionContext() ||
+    {};
 
   const {
     runAction,
-  } = actionCtx;
+  } =
+    actionCtx;
 
 
   // =======================================================
@@ -119,6 +157,11 @@ export default function ComplianceEvidence(props) {
   const runtimeFramework =
     useRuntimeValue(
       "compliance.framework"
+    );
+
+  const selectedEvidenceId =
+    useRuntimeValue(
+      "compliance.selectedEvidenceId"
     );
 
 
@@ -166,42 +209,159 @@ export default function ComplianceEvidence(props) {
   // =======================================================
 
   const evidenceList =
-    Array.isArray(runtimeEvidence)
+    Array.isArray(
+      runtimeEvidence
+    )
       ? runtimeEvidence
       : [];
 
   const controls =
-    Array.isArray(runtimeControls)
+    Array.isArray(
+      runtimeControls
+    )
       ? runtimeControls
       : [];
 
 
   // =======================================================
-  // FILTER EVIDENCE
+  // RESOLVE CURRENT EVIDENCE
+  // =======================================================
+  //
+  // IMPORTANT:
+  //
+  // Do NOT render the complete compliance.evidence array.
+  //
+  // We want one current evidence item.
+  //
+  // Priority:
+  //
+  //   selectedEvidenceId
+  //   ↓
+  //   controlId
+  //   ↓
+  //   latest evidence
+  //
   // =======================================================
 
-  const visibleEvidence =
+  const currentEvidence =
     useMemo(
       () => {
 
-        if (!controlId) {
-          return evidenceList;
+        let candidates =
+          evidenceList;
+
+
+        // -------------------------------------------------
+        // Optional control filter
+        // -------------------------------------------------
+
+        if (
+          controlId
+        ) {
+
+          candidates =
+            candidates.filter(
+              evidence =>
+                String(
+                  evidence?.controlId
+                ) ===
+                String(
+                  controlId
+                )
+            );
+
         }
 
-        return evidenceList.filter(
-          evidence =>
-            String(
-              evidence?.controlId
-            ) ===
-            String(
-              controlId
-            )
+
+        // -------------------------------------------------
+        // Explicit runtime selection
+        // -------------------------------------------------
+
+        if (
+          selectedEvidenceId
+        ) {
+
+          const selected =
+            candidates.find(
+              evidence =>
+                String(
+                  getEvidenceId(
+                    evidence
+                  )
+                ) ===
+                String(
+                  selectedEvidenceId
+                )
+            );
+
+
+          if (
+            selected
+          ) {
+
+            return selected;
+
+          }
+
+        }
+
+
+        // -------------------------------------------------
+        // No explicit selection
+        //
+        // Use the most recent evidence item.
+        // -------------------------------------------------
+
+        if (
+          candidates.length ===
+          0
+        ) {
+
+          return null;
+
+        }
+
+
+        const sorted =
+          [
+            ...candidates,
+          ].sort(
+            (
+              a,
+              b
+            ) => {
+
+              const aTime =
+                new Date(
+                  a?.createdAt ||
+                  0
+                ).getTime();
+
+              const bTime =
+                new Date(
+                  b?.createdAt ||
+                  0
+                ).getTime();
+
+              return (
+                bTime -
+                aTime
+              );
+
+            }
+          );
+
+
+        return (
+          sorted[0] ||
+          null
         );
 
       },
       [
-        controlId,
         evidenceList,
+        controlId,
+        selectedEvidenceId,
       ]
     );
 
@@ -214,7 +374,9 @@ export default function ComplianceEvidence(props) {
     busyEvidence,
     setBusyEvidence,
   ] =
-    useState(null);
+    useState(
+      null
+    );
 
 
   // =======================================================
@@ -225,7 +387,19 @@ export default function ComplianceEvidence(props) {
     rejectConfirmation,
     setRejectConfirmation,
   ] =
-    useState(null);
+    useState(
+      null
+    );
+
+
+  // =======================================================
+  // CURRENT EVIDENCE ID
+  // =======================================================
+
+  const currentEvidenceId =
+    getEvidenceId(
+      currentEvidence
+    );
 
 
   // =======================================================
@@ -238,20 +412,40 @@ export default function ComplianceEvidence(props) {
       console.log(
         "[ComplianceEvidence] Runtime state",
         {
+
           id,
 
           controlId,
 
+          selectedEvidenceId,
+
           evidenceCount:
             evidenceList.length,
 
-          visibleCount:
-            visibleEvidence.length,
+          currentEvidenceId,
+
+          currentStatus:
+            currentEvidence?.status ||
+            null,
+
+          currentFileName:
+            currentEvidence?.fileName ||
+            null,
+
+          hasAssessment:
+            Boolean(
+              currentEvidence?.aiAssessment
+            ),
+
+          assessment:
+            currentEvidence?.aiAssessment ||
+            null,
 
           framework:
             runtimeFramework?.id ||
             runtimeFramework?.name ||
             null,
+
         }
       );
 
@@ -259,9 +453,131 @@ export default function ComplianceEvidence(props) {
     [
       id,
       controlId,
+      selectedEvidenceId,
       evidenceList.length,
-      visibleEvidence.length,
+      currentEvidenceId,
+      currentEvidence?.status,
+      currentEvidence?.fileName,
+      currentEvidence?.aiAssessment,
       runtimeFramework,
+    ]
+  );
+
+
+  // =======================================================
+  // CLEAR STALE BUSY STATE
+  // =======================================================
+
+  useEffect(
+    () => {
+
+      if (
+        !busyEvidence
+      ) {
+
+        return;
+
+      }
+
+
+      const currentId =
+        currentEvidence
+          ? getEvidenceId(
+              currentEvidence
+            )
+          : null;
+
+
+      if (
+        currentId !==
+        busyEvidence.evidenceId
+      ) {
+
+        setBusyEvidence(
+          null
+        );
+
+      }
+
+    },
+    [
+      currentEvidence,
+      busyEvidence,
+    ]
+  );
+
+
+  // =======================================================
+  // CLEAR STALE REJECTION CONFIRMATION
+  // =======================================================
+
+  useEffect(
+    () => {
+
+      if (
+        !rejectConfirmation
+      ) {
+
+        return;
+
+      }
+
+
+      const confirmationId =
+        getEvidenceId(
+          rejectConfirmation
+        );
+
+
+      const currentId =
+        getEvidenceId(
+          currentEvidence
+        );
+
+
+      const stillValid =
+        confirmationId &&
+        currentId &&
+        String(
+          confirmationId
+        ) ===
+        String(
+          currentId
+        ) &&
+        currentEvidence?.status ===
+          "review_required";
+
+
+      if (
+        !stillValid
+      ) {
+
+        console.log(
+          "[ComplianceEvidence] Clearing stale reject confirmation",
+          {
+            evidenceId:
+              confirmationId,
+
+            currentEvidenceId:
+              currentId,
+
+            currentStatus:
+              currentEvidence?.status ||
+              null,
+          }
+        );
+
+
+        setRejectConfirmation(
+          null
+        );
+
+      }
+
+    },
+    [
+      rejectConfirmation,
+      currentEvidence,
     ]
   );
 
@@ -270,26 +586,40 @@ export default function ComplianceEvidence(props) {
   // CONTROL LOOKUP
   // =======================================================
 
-  const getControl =
-    evidence => {
+  const control =
+    useMemo(
+      () => {
 
-      if (
-        !evidence?.controlId
-      ) {
-        return null;
-      }
+        if (
+          !currentEvidence?.controlId
+        ) {
 
-      return controls.find(
-        control =>
-          String(
-            control?.id
-          ) ===
-          String(
-            evidence.controlId
-          )
-      ) || null;
+          return null;
 
-    };
+        }
+
+
+        return (
+          controls.find(
+            item =>
+              String(
+                getControlId(
+                  item
+                )
+              ) ===
+              String(
+                currentEvidence.controlId
+              )
+          ) ||
+          null
+        );
+
+      },
+      [
+        controls,
+        currentEvidence,
+      ]
+    );
 
 
   // =======================================================
@@ -303,14 +633,18 @@ export default function ComplianceEvidence(props) {
     ) => {
 
       const evidenceId =
-        evidence?.id;
+        getEvidenceId(
+          evidence
+        );
 
 
-      // -----------------------------------------------------
-      // Validate evidence
-      // -----------------------------------------------------
+      // -------------------------------------------------
+      // Validate ID
+      // -------------------------------------------------
 
-      if (!evidenceId) {
+      if (
+        !evidenceId
+      ) {
 
         console.warn(
           "[ComplianceEvidence] Missing evidence ID",
@@ -324,9 +658,9 @@ export default function ComplianceEvidence(props) {
       }
 
 
-      // -----------------------------------------------------
-      // Validate current state
-      // -----------------------------------------------------
+      // -------------------------------------------------
+      // Validate state
+      // -------------------------------------------------
 
       if (
         evidence?.status !==
@@ -336,10 +670,12 @@ export default function ComplianceEvidence(props) {
         console.warn(
           "[ComplianceEvidence] Evidence is not awaiting review",
           {
+
             evidenceId,
 
             status:
               evidence?.status,
+
           }
         );
 
@@ -348,11 +684,12 @@ export default function ComplianceEvidence(props) {
       }
 
 
-      // -----------------------------------------------------
-      // Validate decision
-      // -----------------------------------------------------
+      // -------------------------------------------------
+      // Resolve action
+      // -------------------------------------------------
 
       let action;
+
 
       if (
         decision ===
@@ -387,9 +724,9 @@ export default function ComplianceEvidence(props) {
       }
 
 
-      // -----------------------------------------------------
-      // Validate runtime executor
-      // -----------------------------------------------------
+      // -------------------------------------------------
+      // Runtime executor
+      // -------------------------------------------------
 
       if (
         typeof runAction !==
@@ -405,12 +742,12 @@ export default function ComplianceEvidence(props) {
       }
 
 
-      // -----------------------------------------------------
-      // Prevent duplicate clicks
-      // -----------------------------------------------------
+      // -------------------------------------------------
+      // Prevent duplicate actions
+      // -------------------------------------------------
 
       if (
-        busyEvidence?.id ===
+        busyEvidence?.evidenceId ===
         evidenceId
       ) {
 
@@ -419,33 +756,32 @@ export default function ComplianceEvidence(props) {
       }
 
 
-      // -----------------------------------------------------
+      // -------------------------------------------------
       // Busy state
-      // -----------------------------------------------------
+      // -------------------------------------------------
 
-      setBusyEvidence({
-        id:
+      setBusyEvidence(
+        {
           evidenceId,
 
-        decision,
-      });
+          decision,
+        }
+      );
 
 
       console.log(
         "[ComplianceEvidence] Human review",
         {
+
           evidenceId,
 
           decision,
 
           action,
+
         }
       );
 
-
-      // -----------------------------------------------------
-      // Execute runtime action
-      // -----------------------------------------------------
 
       try {
 
@@ -461,13 +797,31 @@ export default function ComplianceEvidence(props) {
         console.log(
           "[ComplianceEvidence] Review result",
           {
+
             evidenceId,
 
             decision,
 
             result,
+
           }
         );
+
+
+        if (
+          !result?.ok
+        ) {
+
+          console.warn(
+            "[ComplianceEvidence] Review action returned failure",
+            {
+              evidenceId,
+              decision,
+              result,
+            }
+          );
+
+        }
 
       }
       catch (
@@ -477,11 +831,13 @@ export default function ComplianceEvidence(props) {
         console.error(
           "[ComplianceEvidence] Review action failed",
           {
+
             evidenceId,
 
             decision,
 
             error,
+
           }
         );
 
@@ -504,11 +860,42 @@ export default function ComplianceEvidence(props) {
   const requestReject =
     evidence => {
 
+      const evidenceId =
+        getEvidenceId(
+          evidence
+        );
+
+
       if (
-        !evidence?.id
+        !evidenceId
       ) {
+
         return;
+
       }
+
+
+      if (
+        evidence?.status !==
+        "review_required"
+      ) {
+
+        console.warn(
+          "[ComplianceEvidence] Cannot reject non-reviewable evidence",
+          {
+
+            evidenceId,
+
+            status:
+              evidence?.status,
+
+          }
+        );
+
+        return;
+
+      }
+
 
       setRejectConfirmation(
         evidence
@@ -542,9 +929,19 @@ export default function ComplianceEvidence(props) {
         rejectConfirmation;
 
 
-      if (!evidence) {
+      if (
+        !evidence
+      ) {
+
         return;
+
       }
+
+
+      const evidenceId =
+        getEvidenceId(
+          evidence
+        );
 
 
       setRejectConfirmation(
@@ -552,8 +949,50 @@ export default function ComplianceEvidence(props) {
       );
 
 
+      if (
+        !evidenceId
+      ) {
+
+        return;
+
+      }
+
+
+      // Re-resolve from runtime state so we don't submit
+      // an obsolete object captured before a state change.
+
+      const latestEvidence =
+        evidenceList.find(
+          item =>
+            String(
+              getEvidenceId(
+                item
+              )
+            ) ===
+            String(
+              evidenceId
+            )
+        );
+
+
+      if (
+        !latestEvidence
+      ) {
+
+        console.warn(
+          "[ComplianceEvidence] Evidence no longer exists",
+          {
+            evidenceId,
+          }
+        );
+
+        return;
+
+      }
+
+
       await handleReview(
-        evidence,
+        latestEvidence,
         "rejected"
       );
 
@@ -565,8 +1004,7 @@ export default function ComplianceEvidence(props) {
   // =======================================================
 
   if (
-    visibleEvidence.length ===
-    0
+    !currentEvidence
   ) {
 
     return (
@@ -641,6 +1079,64 @@ export default function ComplianceEvidence(props) {
 
 
   // =======================================================
+  // CURRENT EVIDENCE DATA
+  // =======================================================
+
+  const evidence =
+    currentEvidence;
+
+
+  const assessment =
+    evidence?.aiAssessment ||
+    null;
+
+
+  const isReviewRequired =
+    evidence?.status ===
+    "review_required";
+
+
+  const isAccepted =
+    evidence?.status ===
+    "accepted";
+
+
+  const isRejected =
+    evidence?.status ===
+    "rejected";
+
+
+  const isBusy =
+    busyEvidence?.evidenceId ===
+    currentEvidenceId;
+
+
+  const busyDecision =
+    isBusy
+      ? busyEvidence?.decision
+      : null;
+
+
+  const isRejectConfirmation =
+    getEvidenceId(
+      rejectConfirmation
+    ) ===
+    currentEvidenceId;
+
+
+  const confidence =
+    typeof assessment?.confidence ===
+    "number"
+
+      ? Math.round(
+          assessment.confidence *
+          100
+        )
+
+      : null;
+
+
+  // =======================================================
   // RENDER
   // =======================================================
 
@@ -671,283 +1167,421 @@ export default function ComplianceEvidence(props) {
       }}
     >
 
-      {
-        visibleEvidence.map(
-          evidence => {
+      <div
+        key={
+          currentEvidenceId ||
+          `${evidence?.createdAt || ""}-${evidence?.controlId || ""}`
+        }
 
-            const control =
-              getControl(
-                evidence
-              );
+        style={{
+          border:
+            "1px solid #e5e7eb",
+
+          borderRadius:
+            10,
+
+          padding:
+            compact
+              ? 12
+              : 16,
+
+          background:
+            "#fff",
+
+          boxShadow:
+            "0 1px 2px rgba(0,0,0,.04)",
+
+          boxSizing:
+            "border-box",
+        }}
+      >
+
+        {/* ===============================================
+            HEADER
+        =============================================== */}
+
+        <div
+          style={{
+            display:
+              "flex",
+
+            justifyContent:
+              "space-between",
+
+            alignItems:
+              "flex-start",
+
+            gap:
+              12,
+          }}
+        >
+
+          <div
+            style={{
+              minWidth:
+                0,
+
+              flex:
+                1,
+            }}
+          >
+
+            <div
+              style={{
+                fontWeight:
+                  600,
+
+                fontSize:
+                  compact
+                    ? 14
+                    : 15,
+
+                wordBreak:
+                  "break-word",
+              }}
+            >
+
+              {
+                evidence?.fileName ||
+                evidence?.name ||
+                "Evidence"
+              }
+
+            </div>
 
 
-            const assessment =
-              evidence?.aiAssessment;
+            <div
+              style={{
+                marginTop:
+                  4,
+
+                fontSize:
+                  12,
+
+                color:
+                  "#6b7280",
+
+                lineHeight:
+                  1.45,
+              }}
+            >
+
+              {
+                control?.reference ||
+                evidence?.controlId ||
+                "Unassigned control"
+              }
+
+              {
+                control?.title
+                  ? ` — ${control.title}`
+                  : ""
+              }
+
+            </div>
+
+          </div>
 
 
-            const isReviewRequired =
-              evidence?.status ===
-              "review_required";
+          {
+            showStatus && (
 
-
-            const isAccepted =
-              evidence?.status ===
-              "accepted";
-
-
-            const isRejected =
-              evidence?.status ===
-              "rejected";
-
-
-            const isBusy =
-              busyEvidence?.id ===
-              evidence?.id;
-
-
-            const busyDecision =
-              isBusy
-                ? busyEvidence?.decision
-                : null;
-
-
-            const confidence =
-              typeof assessment?.confidence ===
-              "number"
-
-                ? Math.round(
-                    assessment.confidence *
-                    100
-                  )
-
-                : null;
-
-
-            return (
-
-              <div
-                key={
-                  evidence?.id ||
-                  `${evidence?.fileName || "evidence"}-${evidence?.controlId || "unknown"}`
-                }
-
+              <span
                 style={{
-                  border:
-                    "1px solid #e5e7eb",
-
-                  borderRadius:
-                    10,
-
-                  padding:
-                    compact
-                      ? 12
-                      : 16,
-
-                  background:
-                    "#fff",
-
-                  boxShadow:
-                    "0 1px 2px rgba(0,0,0,.04)",
-
-                  boxSizing:
-                    "border-box",
+                  ...getStatusStyle(
+                    evidence?.status
+                  ),
                 }}
               >
 
-                {/* =========================================
-                    HEADER
-                ========================================= */}
+                {
+                  formatStatus(
+                    evidence?.status
+                  )
+                }
 
-                <div
-                  style={{
-                    display:
-                      "flex",
+              </span>
 
-                    justifyContent:
-                      "space-between",
+            )
+          }
 
-                    alignItems:
-                      "flex-start",
+        </div>
 
-                    gap:
-                      12,
-                  }}
+
+        {/* ===============================================
+            PROCESSING
+        =============================================== */}
+
+        {
+          evidence?.status ===
+            "processing" && (
+
+            <div
+              style={{
+                marginTop:
+                  14,
+
+                padding:
+                  compact
+                    ? 10
+                    : 12,
+
+                border:
+                  "1px solid #bfdbfe",
+
+                borderRadius:
+                  8,
+
+                background:
+                  "#eff6ff",
+
+                color:
+                  "#1e40af",
+
+                fontSize:
+                  12,
+
+                lineHeight:
+                  1.5,
+              }}
+            >
+
+              <strong>
+                Processing evidence
+              </strong>
+
+              <div
+                style={{
+                  marginTop:
+                    4,
+                }}
+              >
+
+                The evidence has been uploaded and is being
+                analysed.
+
+              </div>
+
+            </div>
+
+          )
+        }
+
+
+        {/* ===============================================
+            HUMAN REVIEW REQUIRED
+        =============================================== */}
+
+        {
+          isReviewRequired && (
+
+            <div
+              style={{
+                marginTop:
+                  14,
+
+                padding:
+                  compact
+                    ? 10
+                    : 12,
+
+                border:
+                  "1px solid #f59e0b",
+
+                borderRadius:
+                  8,
+
+                background:
+                  "#fffbeb",
+
+                boxSizing:
+                  "border-box",
+              }}
+            >
+
+              <div
+                style={{
+                  display:
+                    "flex",
+
+                  alignItems:
+                    "center",
+
+                  gap:
+                    8,
+
+                  fontWeight:
+                    700,
+
+                  fontSize:
+                    13,
+
+                  color:
+                    "#92400e",
+                }}
+              >
+
+                <span
+                  aria-hidden="true"
                 >
+                  ⚠
+                </span>
 
-                  <div
-                    style={{
-                      minWidth:
-                        0,
+                Human review required
 
-                      flex:
-                        1,
-                    }}
-                  >
+              </div>
+
+
+              <div
+                style={{
+                  marginTop:
+                    5,
+
+                  fontSize:
+                    12,
+
+                  lineHeight:
+                    1.5,
+
+                  color:
+                    "#78350f",
+                }}
+              >
+
+                AI has analysed this evidence.
+                Review the assessment below before
+                accepting or rejecting the evidence.
+
+              </div>
+
+            </div>
+
+          )
+        }
+
+
+        {/* ===============================================
+            AI ASSESSMENT
+        =============================================== */}
+
+        {
+          showAssessment &&
+          assessment && (
+
+            <div
+              style={{
+                marginTop:
+                  14,
+
+                padding:
+                  compact
+                    ? 10
+                    : 14,
+
+                borderRadius:
+                  8,
+
+                background:
+                  "#f9fafb",
+
+                border:
+                  "1px solid #e5e7eb",
+
+                boxSizing:
+                  "border-box",
+              }}
+            >
+
+              <div
+                style={{
+                  fontSize:
+                    11,
+
+                  fontWeight:
+                    700,
+
+                  textTransform:
+                    "uppercase",
+
+                  letterSpacing:
+                    ".05em",
+
+                  color:
+                    "#6b7280",
+
+                  marginBottom:
+                    10,
+                }}
+              >
+
+                AI Assessment
+
+              </div>
+
+
+              <div
+                style={{
+                  display:
+                    "flex",
+
+                  alignItems:
+                    "center",
+
+                  justifyContent:
+                    "space-between",
+
+                  gap:
+                    12,
+
+                  flexWrap:
+                    "wrap",
+                }}
+              >
+
+                {
+                  assessment.decision && (
 
                     <div
                       style={{
+                        display:
+                          "inline-flex",
+
+                        alignItems:
+                          "center",
+
+                        gap:
+                          7,
+
                         fontWeight:
-                          600,
+                          700,
 
                         fontSize:
                           compact
                             ? 14
                             : 15,
 
-                        wordBreak:
-                          "break-word",
-                      }}
-                    >
-
-                      {
-                        evidence?.fileName ||
-                        "Evidence"
-                      }
-
-                    </div>
-
-
-                    <div
-                      style={{
-                        marginTop:
-                          4,
-
-                        fontSize:
-                          12,
-
                         color:
-                          "#6b7280",
-
-                        lineHeight:
-                          1.45,
+                          getDecisionColour(
+                            assessment.decision
+                          ),
                       }}
                     >
 
-                      {
-                        control?.reference ||
-                        evidence?.controlId ||
-                        "Unassigned control"
-                      }
-
-                      {
-                        control?.title
-                          ? ` — ${control.title}`
-                          : ""
-                      }
-
-                    </div>
-
-                  </div>
-
-
-                  {showStatus && (
-
-                    <span
-                      style={{
-                        ...getStatusStyle(
-                          evidence?.status
-                        ),
-                      }}
-                    >
-
-                      {
-                        formatStatus(
-                          evidence?.status
-                        )
-                      }
-
-                    </span>
-
-                  )}
-
-                </div>
-
-
-                {/* =========================================
-                    HUMAN REVIEW REQUIRED
-                ========================================= */}
-
-                {
-                  isReviewRequired && (
-
-                    <div
-                      style={{
-                        marginTop:
-                          14,
-
-                        padding:
-                          compact
-                            ? 10
-                            : 12,
-
-                        border:
-                          "1px solid #f59e0b",
-
-                        borderRadius:
-                          8,
-
-                        background:
-                          "#fffbeb",
-
-                        boxSizing:
-                          "border-box",
-                      }}
-                    >
-
-                      <div
+                      <span
                         style={{
-                          display:
-                            "flex",
-
-                          alignItems:
-                            "center",
-
-                          gap:
-                            8,
-
-                          fontWeight:
-                            700,
-
-                          fontSize:
-                            13,
-
-                          color:
-                            "#92400e",
+                          ...getDecisionBadgeStyle(
+                            assessment.decision
+                          ),
                         }}
                       >
 
-                        <span
-                          aria-hidden="true"
-                        >
-                          ⚠
-                        </span>
+                        {
+                          formatDecision(
+                            assessment.decision
+                          )
+                        }
 
-                        Human review required
-
-                      </div>
-
-
-                      <div
-                        style={{
-                          marginTop:
-                            5,
-
-                          fontSize:
-                            12,
-
-                          lineHeight:
-                            1.5,
-
-                          color:
-                            "#78350f",
-                        }}
-                      >
-
-                        AI has analysed this evidence.
-                        Review the assessment below before
-                        accepting or rejecting the evidence.
-
-                      </div>
+                      </span>
 
                     </div>
 
@@ -955,953 +1589,55 @@ export default function ComplianceEvidence(props) {
                 }
 
 
-                {/* =========================================
-                    AI ASSESSMENT
-                ========================================= */}
-
                 {
-                  showAssessment &&
-                  assessment && (
+                  confidence !== null && (
 
                     <div
                       style={{
-                        marginTop:
-                          14,
+                        display:
+                          "flex",
 
-                        padding:
-                          compact
-                            ? 10
-                            : 14,
+                        flexDirection:
+                          "column",
 
-                        borderRadius:
-                          8,
+                        alignItems:
+                          "flex-end",
 
-                        background:
-                          "#f9fafb",
-
-                        border:
-                          "1px solid #e5e7eb",
-
-                        boxSizing:
-                          "border-box",
+                        gap:
+                          2,
                       }}
                     >
 
-                      {/* AI LABEL */}
-
-                      <div
+                      <span
                         style={{
                           fontSize:
                             11,
 
-                          fontWeight:
-                            700,
-
-                          textTransform:
-                            "uppercase",
-
-                          letterSpacing:
-                            ".05em",
-
                           color:
                             "#6b7280",
-
-                          marginBottom:
-                            10,
                         }}
                       >
 
-                        AI Assessment
+                        AI confidence
 
-                      </div>
+                      </span>
 
 
-                      {/* DECISION + CONFIDENCE */}
-
-                      <div
+                      <strong
                         style={{
-                          display:
-                            "flex",
-
-                          alignItems:
-                            "center",
-
-                          justifyContent:
-                            "space-between",
-
-                          gap:
-                            12,
-
-                          flexWrap:
-                            "wrap",
-                        }}
-                      >
-
-                        {
-                          assessment.decision && (
-
-                            <div
-                              style={{
-                                display:
-                                  "inline-flex",
-
-                                alignItems:
-                                  "center",
-
-                                gap:
-                                  7,
-
-                                fontWeight:
-                                  700,
-
-                                fontSize:
-                                  compact
-                                    ? 14
-                                    : 15,
-
-                                color:
-                                  getDecisionColour(
-                                    assessment.decision
-                                  ),
-                              }}
-                            >
-
-                              <span
-                                style={{
-                                  ...getDecisionBadgeStyle(
-                                    assessment.decision
-                                  ),
-                                }}
-                              >
-
-                                {
-                                  formatDecision(
-                                    assessment.decision
-                                  )
-                                }
-
-                              </span>
-
-                            </div>
-
-                          )
-                        }
-
-
-                        {
-                          confidence !== null && (
-
-                            <div
-                              style={{
-                                display:
-                                  "flex",
-
-                                flexDirection:
-                                  "column",
-
-                                alignItems:
-                                  "flex-end",
-
-                                gap:
-                                  2,
-                              }}
-                            >
-
-                              <span
-                                style={{
-                                  fontSize:
-                                    11,
-
-                                  color:
-                                    "#6b7280",
-                                }}
-                              >
-
-                                AI confidence
-
-                              </span>
-
-
-                              <strong
-                                style={{
-                                  fontSize:
-                                    14,
-
-                                  color:
-                                    "#374151",
-                                }}
-                              >
-
-                                {
-                                  confidence
-                                }%
-
-                              </strong>
-
-                            </div>
-
-                          )
-                        }
-
-                      </div>
-
-
-                      {/* CONFIDENCE BAR */}
-
-                      {
-                        confidence !== null && (
-
-                          <div
-                            style={{
-                              marginTop:
-                                10,
-
-                              width:
-                                "100%",
-
-                              height:
-                                6,
-
-                              borderRadius:
-                                999,
-
-                              background:
-                                "#e5e7eb",
-
-                              overflow:
-                                "hidden",
-                            }}
-                          >
-
-                            <div
-                              style={{
-                                width:
-                                  `${Math.max(
-                                    0,
-                                    Math.min(
-                                      100,
-                                      confidence
-                                    )
-                                  )}%`,
-
-                                height:
-                                  "100%",
-
-                                borderRadius:
-                                  999,
-
-                                background:
-                                  getConfidenceColour(
-                                    confidence
-                                  ),
-
-                                transition:
-                                  "width 200ms ease",
-                              }}
-                            />
-
-                          </div>
-
-                        )
-                      }
-
-
-                      {/* SUMMARY */}
-
-                      {
-                        assessment.summary && (
-
-                          <div
-                            style={{
-                              marginTop:
-                                14,
-                            }}
-                          >
-
-                            <div
-                              style={{
-                                fontSize:
-                                  11,
-
-                                fontWeight:
-                                  700,
-
-                                textTransform:
-                                  "uppercase",
-
-                                letterSpacing:
-                                  ".04em",
-
-                                color:
-                                  "#6b7280",
-
-                                marginBottom:
-                                  5,
-                              }}
-                            >
-
-                              Summary
-
-                            </div>
-
-
-                            <div
-                              style={{
-                                fontSize:
-                                  13,
-
-                                lineHeight:
-                                  1.55,
-
-                                color:
-                                  "#374151",
-                              }}
-                            >
-
-                              {
-                                assessment.summary
-                              }
-
-                            </div>
-
-                          </div>
-
-                        )
-                      }
-
-
-                      {/* FINDINGS */}
-
-                      {
-                        Array.isArray(
-                          assessment.findings
-                        ) &&
-                        assessment.findings.length >
-                          0 && (
-
-                          <div
-                            style={{
-                              marginTop:
-                                14,
-                            }}
-                          >
-
-                            <div
-                              style={{
-                                fontSize:
-                                  11,
-
-                                fontWeight:
-                                  700,
-
-                                textTransform:
-                                  "uppercase",
-
-                                letterSpacing:
-                                  ".04em",
-
-                                color:
-                                  "#6b7280",
-
-                                marginBottom:
-                                  7,
-                              }}
-                            >
-
-                              Findings
-
-                            </div>
-
-
-                            <div
-                              style={{
-                                display:
-                                  "flex",
-
-                                flexDirection:
-                                  "column",
-
-                                gap:
-                                  6,
-                              }}
-                            >
-
-                              {
-                                assessment.findings.map(
-                                  (
-                                    finding,
-                                    index
-                                  ) => (
-
-                                    <div
-                                      key={
-                                        finding?.id ||
-                                        `${evidence?.id}-finding-${index}`
-                                      }
-
-                                      style={{
-                                        display:
-                                          "flex",
-
-                                        alignItems:
-                                          "flex-start",
-
-                                        gap:
-                                          7,
-
-                                        fontSize:
-                                          12,
-
-                                        lineHeight:
-                                          1.5,
-
-                                        color:
-                                          "#4b5563",
-                                      }}
-                                    >
-
-                                      <span
-                                        aria-hidden="true"
-                                        style={{
-                                          flex:
-                                            "0 0 auto",
-
-                                          marginTop:
-                                            1,
-                                        }}
-                                      >
-
-                                        {getFindingIcon(
-                                          finding
-                                        )}
-
-                                      </span>
-
-
-                                      <span>
-
-                                        {
-                                          typeof finding ===
-                                          "string"
-
-                                            ? finding
-
-                                            : finding?.text ||
-                                              finding?.description ||
-                                              JSON.stringify(
-                                                finding
-                                              )
-                                        }
-
-                                      </span>
-
-                                    </div>
-
-                                  )
-                                )
-                              }
-
-                            </div>
-
-                          </div>
-
-                        )
-                      }
-
-
-                      {/* AI DISCLAIMER */}
-
-                      <div
-                        style={{
-                          marginTop:
+                          fontSize:
                             14,
-
-                          paddingTop:
-                            10,
-
-                          borderTop:
-                            "1px solid #e5e7eb",
-
-                          fontSize:
-                            11,
-
-                          lineHeight:
-                            1.45,
-
-                          color:
-                            "#6b7280",
-                        }}
-                      >
-
-                        AI assessment is advisory only.
-                        A human reviewer must make the final
-                        evidence decision.
-
-                      </div>
-
-                    </div>
-
-                  )
-                }
-
-
-                {/* =========================================
-                    COMPLETED HUMAN DECISION
-                ========================================= */}
-
-                {
-                  (
-                    isAccepted ||
-                    isRejected
-                  ) &&
-                  evidence?.reviewDecision && (
-
-                    <div
-                      style={{
-                        marginTop:
-                          12,
-
-                        padding:
-                          compact
-                            ? 9
-                            : 11,
-
-                        border:
-                          `1px solid ${
-                            isAccepted
-                              ? "#bbf7d0"
-                              : "#fecaca"
-                          }`,
-
-                        borderRadius:
-                          8,
-
-                        background:
-                          isAccepted
-                            ? "#f0fdf4"
-                            : "#fef2f2",
-
-                        color:
-                          isAccepted
-                            ? "#166534"
-                            : "#991b1b",
-
-                        fontSize:
-                          12,
-
-                        lineHeight:
-                          1.45,
-                      }}
-                    >
-
-                      <strong>
-
-                        Human decision:{" "}
-
-                        {
-                          formatStatus(
-                            evidence.reviewDecision
-                          )
-                        }
-
-                      </strong>
-
-
-                      {
-                        evidence.reviewedAt && (
-
-                          <span
-                            style={{
-                              color:
-                                isAccepted
-                                  ? "#4b7a5a"
-                                  : "#7f4a4a",
-                            }}
-                          >
-
-                            {" · "}
-
-                            {
-                              formatDate(
-                                evidence.reviewedAt
-                              )
-                            }
-
-                          </span>
-
-                        )
-                      }
-
-                    </div>
-
-                  )
-                }
-
-
-                {/* =========================================
-                    REVIEW ACTIONS
-                ========================================= */}
-
-                {
-                  showActions &&
-                  isReviewRequired && (
-
-                    <div
-                      style={{
-                        marginTop:
-                          14,
-
-                        paddingTop:
-                          14,
-
-                        borderTop:
-                          "1px solid #e5e7eb",
-                      }}
-                    >
-
-                      <div
-                        style={{
-                          fontSize:
-                            12,
-
-                          fontWeight:
-                            600,
 
                           color:
                             "#374151",
-
-                          marginBottom:
-                            8,
                         }}
                       >
 
-                        Human decision
-
-                      </div>
-
-
-                      <div
-                        style={{
-                          display:
-                            "flex",
-
-                          gap:
-                            8,
-
-                          flexDirection:
-                            compact
-                              ? "column"
-                              : "row",
-                        }}
-                      >
-
-                        {/* ACCEPT */}
-
-                        <button
-                          type="button"
-
-                          disabled={
-                            isBusy
-                          }
-
-                          onClick={
-                            () =>
-                              handleReview(
-                                evidence,
-                                "accepted"
-                              )
-                          }
-
-                          style={{
-                            flex:
-                              1,
-
-                            minHeight:
-                              40,
-
-                            padding:
-                              "9px 12px",
-
-                            border:
-                              "1px solid #16a34a",
-
-                            borderRadius:
-                              6,
-
-                            background:
-                              isBusy
-                                ? "#f3f4f6"
-                                : "#16a34a",
-
-                            color:
-                              isBusy
-                                ? "#6b7280"
-                                : "#fff",
-
-                            fontWeight:
-                              600,
-
-                            cursor:
-                              isBusy
-                                ? "not-allowed"
-                                : "pointer",
-
-                            transition:
-                              "opacity 150ms ease",
-                          }}
-                        >
-
-                          {
-                            busyDecision ===
-                            "accepted"
-
-                              ? "Accepting…"
-
-                              : "Accept Evidence"
-                          }
-
-                        </button>
-
-
-                        {/* REJECT */}
-
-                        <button
-                          type="button"
-
-                          disabled={
-                            isBusy
-                          }
-
-                          onClick={
-                            () =>
-                              requestReject(
-                                evidence
-                              )
-                          }
-
-                          style={{
-                            flex:
-                              1,
-
-                            minHeight:
-                              40,
-
-                            padding:
-                              "9px 12px",
-
-                            border:
-                              "1px solid #dc2626",
-
-                            borderRadius:
-                              6,
-
-                            background:
-                              isBusy
-                                ? "#f3f4f6"
-                                : "#fff",
-
-                            color:
-                              isBusy
-                                ? "#6b7280"
-                                : "#dc2626",
-
-                            fontWeight:
-                              600,
-
-                            cursor:
-                              isBusy
-                                ? "not-allowed"
-                                : "pointer",
-
-                            transition:
-                              "opacity 150ms ease",
-                          }}
-                        >
-
-                          {
-                            busyDecision ===
-                            "rejected"
-
-                              ? "Rejecting…"
-
-                              : "Reject Evidence"
-                          }
-
-                        </button>
-
-                      </div>
-
-                    </div>
-
-                  )
-                }
-
-
-                {/* =========================================
-                    REJECTION CONFIRMATION
-                ========================================= */}
-
-                {
-                  rejectConfirmation?.id ===
-                  evidence?.id && (
-
-                    <div
-                      role="dialog"
-                      aria-modal="false"
-
-                      style={{
-                        marginTop:
-                          12,
-
-                        padding:
-                          compact
-                            ? 11
-                            : 14,
-
-                        border:
-                          "1px solid #fecaca",
-
-                        borderRadius:
-                          8,
-
-                        background:
-                          "#fff7f7",
-
-                        boxSizing:
-                          "border-box",
-                      }}
-                    >
-
-                      <div
-                        style={{
-                          fontWeight:
-                            700,
-
-                          fontSize:
-                            13,
-
-                          color:
-                            "#991b1b",
-                        }}
-                      >
-
-                        Reject this evidence?
-
-                      </div>
-
-
-                      <div
-                        style={{
-                          marginTop:
-                            5,
-
-                          fontSize:
-                            12,
-
-                          lineHeight:
-                            1.5,
-
-                          color:
-                            "#7f1d1d",
-                        }}
-                      >
-
-                        This will mark the evidence as
-                        rejected. The compliance workflow can
-                        then determine whether corrective
-                        action is required.
-
-                      </div>
-
-
-                      <div
-                        style={{
-                          display:
-                            "flex",
-
-                          justifyContent:
-                            "flex-end",
-
-                          gap:
-                            8,
-
-                          marginTop:
-                            12,
-                        }}
-                      >
-
-                        <button
-                          type="button"
-
-                          onClick={
-                            cancelReject
-                          }
-
-                          style={{
-                            padding:
-                              "8px 12px",
-
-                            border:
-                              "1px solid #d1d5db",
-
-                            borderRadius:
-                              6,
-
-                            background:
-                              "#fff",
-
-                            color:
-                              "#374151",
-
-                            fontWeight:
-                              600,
-
-                            cursor:
-                              "pointer",
-                          }}
-                        >
-
-                          Cancel
-
-                        </button>
-
-
-                        <button
-                          type="button"
-
-                          onClick={
-                            confirmReject
-                          }
-
-                          style={{
-                            padding:
-                              "8px 12px",
-
-                            border:
-                              "1px solid #dc2626",
-
-                            borderRadius:
-                              6,
-
-                            background:
-                              "#dc2626",
-
-                            color:
-                              "#fff",
-
-                            fontWeight:
-                              600,
-
-                            cursor:
-                              "pointer",
-                          }}
-                        >
-
-                          Reject Evidence
-
-                        </button>
-
-                      </div>
+                        {
+                          confidence
+                        }%
+
+                      </strong>
 
                     </div>
 
@@ -1910,11 +1646,768 @@ export default function ComplianceEvidence(props) {
 
               </div>
 
-            );
 
-          }
-        )
-      }
+              {
+                confidence !== null && (
+
+                  <div
+                    style={{
+                      marginTop:
+                        10,
+
+                      width:
+                        "100%",
+
+                      height:
+                        6,
+
+                      borderRadius:
+                        999,
+
+                      background:
+                        "#e5e7eb",
+
+                      overflow:
+                        "hidden",
+                    }}
+                  >
+
+                    <div
+                      style={{
+                        width:
+                          `${Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              confidence
+                            )
+                          )}%`,
+
+                        height:
+                          "100%",
+
+                        borderRadius:
+                          999,
+
+                        background:
+                          getConfidenceColour(
+                            confidence
+                          ),
+
+                        transition:
+                          "width 200ms ease",
+                      }}
+                    />
+
+                  </div>
+
+                )
+              }
+
+
+              {
+                assessment.summary && (
+
+                  <div
+                    style={{
+                      marginTop:
+                        14,
+                    }}
+                  >
+
+                    <div
+                      style={{
+                        fontSize:
+                          11,
+
+                        fontWeight:
+                          700,
+
+                        textTransform:
+                          "uppercase",
+
+                        letterSpacing:
+                          ".04em",
+
+                        color:
+                          "#6b7280",
+
+                        marginBottom:
+                          5,
+                      }}
+                    >
+
+                      Summary
+
+                    </div>
+
+
+                    <div
+                      style={{
+                        fontSize:
+                          13,
+
+                        lineHeight:
+                          1.55,
+
+                        color:
+                          "#374151",
+                      }}
+                    >
+
+                      {
+                        assessment.summary
+                      }
+
+                    </div>
+
+                  </div>
+
+                )
+              }
+
+
+              {
+                Array.isArray(
+                  assessment.findings
+                ) &&
+                assessment.findings.length >
+                  0 && (
+
+                  <div
+                    style={{
+                      marginTop:
+                        14,
+                    }}
+                  >
+
+                    <div
+                      style={{
+                        fontSize:
+                          11,
+
+                        fontWeight:
+                          700,
+
+                        textTransform:
+                          "uppercase",
+
+                        letterSpacing:
+                          ".04em",
+
+                        color:
+                          "#6b7280",
+
+                        marginBottom:
+                          7,
+                      }}
+                    >
+
+                      Findings
+
+                    </div>
+
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+
+                        flexDirection:
+                          "column",
+
+                        gap:
+                          6,
+                      }}
+                    >
+
+                      {
+                        assessment.findings.map(
+                          (
+                            finding,
+                            index
+                          ) => (
+
+                            <div
+                              key={
+                                finding?.id ||
+                                `${currentEvidenceId}-finding-${index}`
+                              }
+
+                              style={{
+                                display:
+                                  "flex",
+
+                                alignItems:
+                                  "flex-start",
+
+                                gap:
+                                  7,
+
+                                fontSize:
+                                  12,
+
+                                lineHeight:
+                                  1.5,
+
+                                color:
+                                  "#4b5563",
+                              }}
+                            >
+
+                              <span
+                                aria-hidden="true"
+                                style={{
+                                  flex:
+                                    "0 0 auto",
+
+                                  marginTop:
+                                    1,
+                                }}
+                              >
+
+                                {
+                                  getFindingIcon(
+                                    finding
+                                  )
+                                }
+
+                              </span>
+
+
+                              <span>
+
+                                {
+                                  typeof finding ===
+                                  "string"
+
+                                    ? finding
+
+                                    : finding?.text ||
+                                      finding?.description ||
+                                      JSON.stringify(
+                                        finding
+                                      )
+                                }
+
+                              </span>
+
+                            </div>
+
+                          )
+                        )
+                      }
+
+                    </div>
+
+                  </div>
+
+                )
+              }
+
+
+              <div
+                style={{
+                  marginTop:
+                    14,
+
+                  paddingTop:
+                    10,
+
+                  borderTop:
+                    "1px solid #e5e7eb",
+
+                  fontSize:
+                    11,
+
+                  lineHeight:
+                    1.45,
+
+                  color:
+                    "#6b7280",
+                }}
+              >
+
+                AI assessment is advisory only.
+                A human reviewer must make the final
+                evidence decision.
+
+              </div>
+
+            </div>
+
+          )
+        }
+
+
+        {/* ===============================================
+            COMPLETED HUMAN DECISION
+        =============================================== */}
+
+        {
+          (
+            isAccepted ||
+            isRejected
+          ) &&
+          evidence?.reviewDecision && (
+
+            <div
+              style={{
+                marginTop:
+                  12,
+
+                padding:
+                  compact
+                    ? 9
+                    : 11,
+
+                border:
+                  `1px solid ${
+                    isAccepted
+                      ? "#bbf7d0"
+                      : "#fecaca"
+                  }`,
+
+                borderRadius:
+                  8,
+
+                background:
+                  isAccepted
+                    ? "#f0fdf4"
+                    : "#fef2f2",
+
+                color:
+                  isAccepted
+                    ? "#166534"
+                    : "#991b1b",
+
+                fontSize:
+                  12,
+
+                lineHeight:
+                  1.45,
+              }}
+            >
+
+              <strong>
+
+                Human decision:{" "}
+
+                {
+                  formatStatus(
+                    evidence.reviewDecision
+                  )
+                }
+
+              </strong>
+
+
+              {
+                evidence.reviewedAt && (
+
+                  <span
+                    style={{
+                      color:
+                        isAccepted
+                          ? "#4b7a5a"
+                          : "#7f4a4a",
+                    }}
+                  >
+
+                    {" · "}
+
+                    {
+                      formatDate(
+                        evidence.reviewedAt
+                      )
+                    }
+
+                  </span>
+
+                )
+              }
+
+            </div>
+
+          )
+        }
+
+
+        {/* ===============================================
+            REVIEW ACTIONS
+        =============================================== */}
+
+        {
+          showActions &&
+          isReviewRequired && (
+
+            <div
+              style={{
+                marginTop:
+                  14,
+
+                paddingTop:
+                  14,
+
+                borderTop:
+                  "1px solid #e5e7eb",
+              }}
+            >
+
+              <div
+                style={{
+                  fontSize:
+                    12,
+
+                  fontWeight:
+                    600,
+
+                  color:
+                    "#374151",
+
+                  marginBottom:
+                    8,
+                }}
+              >
+
+                Human decision
+
+              </div>
+
+
+              <div
+                style={{
+                  display:
+                    "flex",
+
+                  gap:
+                    8,
+
+                  flexDirection:
+                    compact
+                      ? "column"
+                      : "row",
+                }}
+              >
+
+                {/* ACCEPT */}
+
+                <button
+                  type="button"
+
+                  disabled={
+                    isBusy
+                  }
+
+                  onClick={
+                    () =>
+                      handleReview(
+                        evidence,
+                        "accepted"
+                      )
+                  }
+
+                  style={{
+                    flex:
+                      1,
+
+                    minHeight:
+                      40,
+
+                    padding:
+                      "9px 12px",
+
+                    border:
+                      "1px solid #16a34a",
+
+                    borderRadius:
+                      6,
+
+                    background:
+                      isBusy
+                        ? "#f3f4f6"
+                        : "#16a34a",
+
+                    color:
+                      isBusy
+                        ? "#6b7280"
+                        : "#fff",
+
+                    fontWeight:
+                      600,
+
+                    cursor:
+                      isBusy
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+
+                  {
+                    busyDecision ===
+                    "accepted"
+
+                      ? "Accepting…"
+
+                      : "Accept Evidence"
+                  }
+
+                </button>
+
+
+                {/* REJECT */}
+
+                <button
+                  type="button"
+
+                  disabled={
+                    isBusy
+                  }
+
+                  onClick={
+                    () =>
+                      requestReject(
+                        evidence
+                      )
+                  }
+
+                  style={{
+                    flex:
+                      1,
+
+                    minHeight:
+                      40,
+
+                    padding:
+                      "9px 12px",
+
+                    border:
+                      "1px solid #dc2626",
+
+                    borderRadius:
+                      6,
+
+                    background:
+                      isBusy
+                        ? "#f3f4f6"
+                        : "#fff",
+
+                    color:
+                      isBusy
+                        ? "#6b7280"
+                        : "#dc2626",
+
+                    fontWeight:
+                      600,
+
+                    cursor:
+                      isBusy
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+
+                  {
+                    busyDecision ===
+                    "rejected"
+
+                      ? "Rejecting…"
+
+                      : "Reject Evidence"
+                  }
+
+                </button>
+
+              </div>
+
+            </div>
+
+          )
+        }
+
+
+        {/* ===============================================
+            REJECTION CONFIRMATION
+        =============================================== */}
+
+        {
+          isRejectConfirmation &&
+          isReviewRequired && (
+
+            <div
+              role="dialog"
+              aria-modal="false"
+
+              style={{
+                marginTop:
+                  12,
+
+                padding:
+                  compact
+                    ? 11
+                    : 14,
+
+                border:
+                  "1px solid #fecaca",
+
+                borderRadius:
+                  8,
+
+                background:
+                  "#fff7f7",
+
+                boxSizing:
+                  "border-box",
+              }}
+            >
+
+              <div
+                style={{
+                  fontWeight:
+                    700,
+
+                  fontSize:
+                    13,
+
+                  color:
+                    "#991b1b",
+                }}
+              >
+
+                Reject this evidence?
+
+              </div>
+
+
+              <div
+                style={{
+                  marginTop:
+                    5,
+
+                  fontSize:
+                    12,
+
+                  lineHeight:
+                    1.5,
+
+                  color:
+                    "#7f1d1d",
+                }}
+              >
+
+                This will mark the evidence as
+                rejected. The compliance workflow can
+                then determine whether corrective action
+                is required.
+
+              </div>
+
+
+              <div
+                style={{
+                  display:
+                    "flex",
+
+                  justifyContent:
+                    "flex-end",
+
+                  gap:
+                    8,
+
+                  marginTop:
+                    12,
+                }}
+              >
+
+                <button
+                  type="button"
+
+                  onClick={
+                    cancelReject
+                  }
+
+                  style={{
+                    padding:
+                      "8px 12px",
+
+                    border:
+                      "1px solid #d1d5db",
+
+                    borderRadius:
+                      6,
+
+                    background:
+                      "#fff",
+
+                    color:
+                      "#374151",
+
+                    fontWeight:
+                      600,
+
+                    cursor:
+                      "pointer",
+                  }}
+                >
+
+                  Cancel
+
+                </button>
+
+
+                <button
+                  type="button"
+
+                  onClick={
+                    confirmReject
+                  }
+
+                  disabled={
+                    isBusy
+                  }
+
+                  style={{
+                    padding:
+                      "8px 12px",
+
+                    border:
+                      "1px solid #dc2626",
+
+                    borderRadius:
+                      6,
+
+                    background:
+                      isBusy
+                        ? "#f3f4f6"
+                        : "#dc2626",
+
+                    color:
+                      isBusy
+                        ? "#6b7280"
+                        : "#fff",
+
+                    fontWeight:
+                      600,
+
+                    cursor:
+                      isBusy
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+
+                  Reject Evidence
+
+                </button>
+
+              </div>
+
+            </div>
+
+          )
+        }
+
+      </div>
 
     </div>
 
@@ -1924,16 +2417,21 @@ export default function ComplianceEvidence(props) {
 
 
 // =========================================================
-// STATUS HELPERS
+// STATUS FORMATTER
 // =========================================================
 
 function formatStatus(
   status
 ) {
 
-  if (!status) {
+  if (
+    !status
+  ) {
+
     return "Unknown";
+
   }
+
 
   return String(
     status
@@ -1959,9 +2457,14 @@ function formatDecision(
   decision
 ) {
 
-  if (!decision) {
+  if (
+    !decision
+  ) {
+
     return "";
+
   }
+
 
   return String(
     decision
@@ -1994,6 +2497,7 @@ function formatDate(
         value
       );
 
+
     if (
       Number.isNaN(
         date.getTime()
@@ -2005,6 +2509,7 @@ function formatDate(
       );
 
     }
+
 
     return date.toLocaleString();
 
@@ -2050,6 +2555,7 @@ function getStatusStyle(
 
     whiteSpace:
       "nowrap",
+
   };
 
 
@@ -2060,6 +2566,7 @@ function getStatusStyle(
     case "accepted":
 
       return {
+
         ...base,
 
         background:
@@ -2067,12 +2574,14 @@ function getStatusStyle(
 
         color:
           "#166534",
+
       };
 
 
     case "rejected":
 
       return {
+
         ...base,
 
         background:
@@ -2080,12 +2589,14 @@ function getStatusStyle(
 
         color:
           "#991b1b",
+
       };
 
 
     case "review_required":
 
       return {
+
         ...base,
 
         background:
@@ -2093,12 +2604,14 @@ function getStatusStyle(
 
         color:
           "#92400e",
+
       };
 
 
     case "processing":
 
       return {
+
         ...base,
 
         background:
@@ -2106,12 +2619,14 @@ function getStatusStyle(
 
         color:
           "#1e40af",
+
       };
 
 
     case "uploaded":
 
       return {
+
         ...base,
 
         background:
@@ -2119,12 +2634,16 @@ function getStatusStyle(
 
         color:
           "#166534",
+
       };
 
+
+    case "requested":
 
     case "evidence_requested":
 
       return {
+
         ...base,
 
         background:
@@ -2132,12 +2651,14 @@ function getStatusStyle(
 
         color:
           "#3730a3",
+
       };
 
 
     default:
 
       return {
+
         ...base,
 
         background:
@@ -2145,6 +2666,7 @@ function getStatusStyle(
 
         color:
           "#374151",
+
       };
 
   }
@@ -2179,6 +2701,7 @@ function getDecisionBadgeStyle(
 
     fontWeight:
       700,
+
   };
 
 
@@ -2189,6 +2712,7 @@ function getDecisionBadgeStyle(
     case "likely_sufficient":
 
       return {
+
         ...base,
 
         background:
@@ -2196,12 +2720,14 @@ function getDecisionBadgeStyle(
 
         color:
           "#166534",
+
       };
 
 
     case "likely_insufficient":
 
       return {
+
         ...base,
 
         background:
@@ -2209,12 +2735,14 @@ function getDecisionBadgeStyle(
 
         color:
           "#991b1b",
+
       };
 
 
     case "needs_review":
 
       return {
+
         ...base,
 
         background:
@@ -2222,12 +2750,14 @@ function getDecisionBadgeStyle(
 
         color:
           "#92400e",
+
       };
 
 
     default:
 
       return {
+
         ...base,
 
         background:
@@ -2235,6 +2765,7 @@ function getDecisionBadgeStyle(
 
         color:
           "#374151",
+
       };
 
   }
@@ -2255,15 +2786,22 @@ function getDecisionColour(
   ) {
 
     case "likely_sufficient":
+
       return "#166534";
 
+
     case "likely_insufficient":
+
       return "#991b1b";
 
+
     case "needs_review":
+
       return "#92400e";
 
+
     default:
+
       return "#374151";
 
   }
@@ -2288,6 +2826,7 @@ function getConfidenceColour(
 
   }
 
+
   if (
     confidence >=
     60
@@ -2296,6 +2835,7 @@ function getConfidenceColour(
     return "#d97706";
 
   }
+
 
   return "#dc2626";
 

@@ -1,220 +1,171 @@
 import api from "../../services/api";
 
-export default async function acceptEvidence(ctx, params = {}) {
-  const evidenceId = params?.evidenceId;
+export default async function acceptEvidence(
+  ctx,
+  params = {}
+) {
+  try {
 
-  if (!evidenceId) {
-    console.warn(
-      "[compliance.acceptEvidence] Missing evidence ID"
-    );
+    const evidenceId =
+      params?.evidenceId ||
+      params?.id ||
+      null;
 
-    return {
-      ok: false,
-      error: "MISSING_EVIDENCE_ID",
-    };
-  }
+    const projectId =
+      params?.projectId ||
+      ctx?.projectId ||
+      ctx?.get?.("project.id") ||
+      null;
 
-  const evidenceList =
-    ctx?.get?.("compliance.evidence") || [];
-
-  if (!Array.isArray(evidenceList)) {
-    console.warn(
-      "[compliance.acceptEvidence] Evidence state is not an array"
-    );
-
-    return {
-      ok: false,
-      error: "INVALID_EVIDENCE_STATE",
-    };
-  }
-
-  const evidence = evidenceList.find(
-    (item) =>
-      String(item?.id) === String(evidenceId)
-  );
-
-  if (!evidence) {
-    console.warn(
-      "[compliance.acceptEvidence] Evidence not found",
+    console.log(
+      "[compliance.acceptEvidence] Accepting evidence",
       {
+        projectId,
         evidenceId,
       }
     );
 
-    return {
-      ok: false,
-      error: "EVIDENCE_NOT_FOUND",
-    };
-  }
-
-  if (
-    evidence.status !==
-    "review_required"
-  ) {
-    console.warn(
-      "[compliance.acceptEvidence] Evidence is not awaiting review",
-      {
-        evidenceId,
-        status: evidence.status,
-      }
-    );
-
-    return {
-      ok: false,
-      error: "EVIDENCE_NOT_REVIEWABLE",
-      status: evidence.status,
-    };
-  }
-
-  const reviewedAt =
-    new Date().toISOString();
-
-  // =====================================================
-  // UPDATE EVIDENCE
-  // =====================================================
-
-  const updatedEvidence =
-    evidenceList.map((item) => {
-
-      if (
-        String(item?.id) !==
-        String(evidenceId)
-      ) {
-        return item;
-      }
-
+    if (!projectId) {
       return {
-        ...item,
-
-        status:
-          "accepted",
-
-        reviewDecision:
-          "accepted",
-
-        reviewedAt,
+        ok: false,
+        error: "projectId is required",
       };
-    });
+    }
 
-  ctx.set(
-    "compliance.evidence",
-    updatedEvidence
-  );
+    if (!evidenceId) {
+      return {
+        ok: false,
+        error: "evidenceId is required",
+      };
+    }
 
+    const currentEvidence =
+      Array.isArray(
+        ctx?.get?.("compliance.evidence")
+      )
+        ? ctx.get("compliance.evidence")
+        : [];
 
-  // =====================================================
-  // UPDATE CONTROL
-  // =====================================================
+    const evidence =
+      currentEvidence.find(
+        item =>
+          (
+            item?.evidenceId ||
+            item?.id
+          ) === evidenceId
+      );
 
-  const controlId =
-    evidence?.controlId;
+    if (!evidence) {
+      return {
+        ok: false,
+        error: "Evidence not found in runtime state",
+      };
+    }
 
-  const controls =
-    ctx?.get?.(
-      "compliance.controls"
-    ) || [];
+    if (
+      evidence.status !==
+      "review_required"
+    ) {
+      return {
+        ok: false,
+        error:
+          "Evidence is not awaiting review",
+      };
+    }
 
-  let updatedControls =
-    controls;
-
-  if (
-    controlId &&
-    Array.isArray(controls)
-  ) {
-
-    updatedControls =
-      controls.map(
-        (control) => {
-
-          if (
-            String(control?.id) !==
-            String(controlId)
-          ) {
-            return control;
-          }
-
-          return {
-            ...control,
-
-            status:
-              "compliant",
-
-            evidenceStatus:
-              "verified",
-
-            evidenceVerified:
-              true,
-
-            evidenceVerifiedAt:
-              reviewedAt,
-
-            lastEvidenceId:
-              evidenceId,
-          };
+    const { data } =
+      await api.post(
+        "/compliance/evidence/accept",
+        {
+          projectId,
+          evidenceId,
         }
       );
 
-    ctx.set(
-      "compliance.controls",
-      updatedControls
+    if (!data?.evidence) {
+      return {
+        ok: false,
+        error:
+          "Accepted evidence was not returned by the API",
+      };
+    }
+
+    const acceptedEvidence =
+      data.evidence;
+
+    const updatedEvidence =
+      currentEvidence.map(
+        item => {
+
+          const itemId =
+            item?.evidenceId ||
+            item?.id;
+
+          return itemId === evidenceId
+            ? {
+                ...item,
+                ...acceptedEvidence,
+                evidenceId:
+                  acceptedEvidence.evidenceId ||
+                  evidenceId,
+              }
+            : item;
+
+        }
+      );
+
+    ctx?.set?.(
+      "compliance.evidence",
+      updatedEvidence
     );
+
+    console.log(
+      "[compliance.acceptEvidence] Runtime state updated",
+      {
+        projectId,
+        evidenceId,
+        status:
+          acceptedEvidence.status,
+      }
+    );
+
+    ctx?.emit?.(
+      "compliance.evidenceAccepted",
+      {
+        projectId,
+        evidenceId,
+        evidence:
+          acceptedEvidence,
+      }
+    );
+
+    return {
+      ok: true,
+
+      result: {
+        projectId,
+        evidenceId,
+        evidence:
+          acceptedEvidence,
+      },
+    };
+
   }
+  catch (err) {
 
-
-  // =====================================================
-  // GET UPDATED EVIDENCE
-  // =====================================================
-
-  const acceptedEvidence =
-    updatedEvidence.find(
-      (item) =>
-        String(item?.id) ===
-        String(evidenceId)
+    console.error(
+      "[compliance.acceptEvidence]",
+      err
     );
 
+    return {
+      ok: false,
 
-  // =====================================================
-  // DOMAIN EVENT
-  // =====================================================
+      error:
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to accept evidence",
+    };
 
-  console.log(
-    "[compliance.acceptEvidence] Evidence accepted",
-    {
-      evidenceId,
-      controlId,
-    }
-  );
-
-  ctx.emit?.(
-    "compliance.evidenceAccepted",
-    {
-      evidenceId,
-
-      controlId,
-
-      evidence:
-        acceptedEvidence,
-    }
-  );
-
-
-  // =====================================================
-  // RESULT
-  // =====================================================
-
-  return {
-    ok: true,
-
-    evidenceId,
-
-    controlId,
-
-    status:
-      "accepted",
-
-    reviewDecision:
-      "accepted",
-
-    reviewedAt,
-  };
+  }
 }

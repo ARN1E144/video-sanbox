@@ -6,6 +6,26 @@ export default async function analyseEvidence(ctx, params = {}) {
       evidenceId,
     } = params;
 
+    const projectId =
+      params?.projectId ||
+      ctx?.projectId ||
+      ctx?.get?.("project.id");
+
+    console.log(
+      "[compliance.analyseEvidence] START",
+      {
+        evidenceId,
+        projectId,
+      }
+    );
+
+    if (!projectId) {
+      return {
+        ok: false,
+        error: "projectId is required",
+      };
+    }
+
     if (!evidenceId) {
       return {
         ok: false,
@@ -13,11 +33,27 @@ export default async function analyseEvidence(ctx, params = {}) {
       };
     }
 
+    const currentEvidence =
+      ctx?.get?.("compliance.evidence") || [];
+
     const evidence =
-      (ctx.get?.("compliance.evidence") || [])
-        .find((item) => item.id === evidenceId);
+      currentEvidence.find((item) => {
+        const itemId =
+          item?.evidenceId ||
+          item?.id;
+
+        return itemId === evidenceId;
+      });
 
     if (!evidence) {
+      console.error(
+        "[compliance.analyseEvidence] Evidence not found in runtime state",
+        {
+          evidenceId,
+          evidenceCount: currentEvidence.length,
+        }
+      );
+
       return {
         ok: false,
         error: "Evidence not found in runtime state",
@@ -27,35 +63,42 @@ export default async function analyseEvidence(ctx, params = {}) {
     console.log(
       "[compliance.analyseEvidence] Analysing evidence",
       {
+        projectId,
         evidenceId,
         fileName: evidence.fileName,
+        controlId: evidence.controlId,
+        status: evidence.status,
       }
     );
 
     const { data } = await api.post(
       "/compliance/evidence/analyse",
       {
+        projectId,
         evidenceId,
         fileName: evidence.fileName,
         controlId: evidence.controlId,
       }
     );
 
-    const assessment = data?.assessment;
+    const assessment =
+      data?.assessment;
 
     if (!assessment) {
       return {
         ok: false,
-        error: "AI assessment was not returned by the API",
+        error:
+          "AI assessment was not returned by the API",
       };
     }
 
-    const currentEvidence =
-      ctx.get?.("compliance.evidence") || [];
-
     const updatedEvidence =
       currentEvidence.map((item) => {
-        if (item.id !== evidenceId) {
+        const itemId =
+          item?.evidenceId ||
+          item?.id;
+
+        if (itemId !== evidenceId) {
           return item;
         }
 
@@ -66,7 +109,7 @@ export default async function analyseEvidence(ctx, params = {}) {
         };
       });
 
-    ctx.set?.(
+    ctx?.set?.(
       "compliance.evidence",
       updatedEvidence
     );
@@ -74,6 +117,7 @@ export default async function analyseEvidence(ctx, params = {}) {
     console.log(
       "[compliance.analyseEvidence] Runtime state updated",
       {
+        projectId,
         evidenceId,
         status: "review_required",
         assessment,
@@ -81,14 +125,15 @@ export default async function analyseEvidence(ctx, params = {}) {
     );
 
     console.log(
-    "[compliance.analyseEvidence] EMITTING DOMAIN EVENT",
-    {
-        event: "compliance.evidenceReviewRequired",
+      "[compliance.analyseEvidence] EMITTING DOMAIN EVENT",
+      {
+        event:
+          "compliance.evidenceReviewRequired",
         evidenceId,
-    }
+      }
     );
 
-    ctx.emit?.(
+    ctx?.emit?.(
       "compliance.evidenceReviewRequired",
       {
         evidenceId,
@@ -99,10 +144,12 @@ export default async function analyseEvidence(ctx, params = {}) {
     return {
       ok: true,
       result: {
+        projectId,
         evidenceId,
         assessment,
       },
     };
+
   } catch (err) {
     console.error(
       "[compliance.analyseEvidence]",

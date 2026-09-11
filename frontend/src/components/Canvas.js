@@ -1,4 +1,3 @@
-
 // src/components/Canvas.js
 
 import React, {
@@ -6,6 +5,7 @@ import React, {
   useEffect,
   useRef,
   useContext,
+  useMemo,
 } from "react";
 
 import { Rnd } from "react-rnd";
@@ -26,6 +26,7 @@ import { useRuntimeAuth } from "../context/RuntimeAuthContext";
 
 import CanvasElementRenderer from "./CanvasElementRenderer";
 import componentRegistry from "../actions/componentRegistry";
+
 
 // =====================================================
 // DEVICE SIZES
@@ -48,6 +49,7 @@ const DEVICE_SIZES = {
   },
 };
 
+
 // =====================================================
 // DEFAULT EXTRACTION
 // =====================================================
@@ -55,21 +57,17 @@ const DEVICE_SIZES = {
 // Contract editableProps describe the property's
 // definition, not its runtime value.
 //
-// Example contract:
+// Example:
 //
 // source: {
 //   type: "string"
 // }
 //
-// must become:
+// becomes:
 //
 // source: ""
 //
-// If a contract explicitly provides:
-//
-// default: "https://..."
-//
-// that value wins.
+// Explicit default values always win.
 //
 // =====================================================
 
@@ -79,16 +77,13 @@ const extractDefaults = (
 
   const result = {};
 
-
   Object.entries(
     editableProps
   ).forEach(
-    (
-      [
-        key,
-        definition,
-      ]
-    ) => {
+    ([
+      key,
+      definition,
+    ]) => {
 
       // =================================================
       // EXPLICIT DEFAULT
@@ -232,12 +227,7 @@ const extractDefaults = (
 
 
       // =================================================
-      // UNKNOWN TYPE
-      // =================================================
-      //
-      // Never pass the contract definition itself
-      // into a runtime component prop.
-      //
+      // UNKNOWN
       // =================================================
 
       result[key] =
@@ -246,48 +236,66 @@ const extractDefaults = (
     }
   );
 
-
   return result;
 
 };
+
 
 // =====================================================
 // SYSTEM LOCKED PROPERTIES
 // =====================================================
 
-const SYSTEM_LOCKED_KEYS = new Set([
-  "controls",
-  "action",
-  "bindings",
-]);
+const SYSTEM_LOCKED_KEYS =
+  new Set([
+    "controls",
+    "action",
+    "bindings",
+  ]);
+
 
 // =====================================================
 // CONTAINER TYPES
 // =====================================================
 
-const isContainerType = (type) => {
+const isContainerType = (
+  type
+) => {
+
   return [
     "ControlPanel",
     "Container",
-  ].includes(type);
+  ].includes(
+    type
+  );
+
 };
+
 
 // =====================================================
 // SELECTION STYLE
 // =====================================================
 
-const getSelectionStyle = (isSelected) => {
+const getSelectionStyle = (
+  isSelected
+) => {
+
   if (!isSelected) {
     return {};
   }
 
   return {
-    outline: "2px solid #6366f1",
-    outlineOffset: "2px",
+    outline:
+      "2px solid #6366f1",
+
+    outlineOffset:
+      "2px",
+
     boxShadow:
       "0 0 0 4px rgba(99, 102, 241, 0.18)",
   };
+
 };
+
 
 // =====================================================
 // PARENT / CHILD COMPATIBILITY
@@ -297,69 +305,157 @@ const canDropIntoParent = (
   childType,
   parentType
 ) => {
-  // ControlPanel accepts registered control elements
+
   if (
-    parentType === "ControlPanel" &&
+    parentType ===
+      "ControlPanel" &&
     [
       "ControlButton",
       "Select",
       "Input",
       "TextBox",
-    ].includes(childType)
+    ].includes(
+      childType
+    )
   ) {
+
     return true;
+
   }
 
-  // Generic Container accepts anything
+
   if (
-    parentType === "Container"
+    parentType ===
+    "Container"
   ) {
+
     return true;
+
   }
+
 
   return false;
+
 };
+
+
+// =====================================================
+// ID NORMALISATION
+// =====================================================
+
+const normaliseElementId = (
+  value
+) => {
+
+  if (
+    value ===
+      null ||
+    value ===
+      undefined
+  ) {
+
+    return null;
+
+  }
+
+  const id =
+    String(
+      value
+    ).trim();
+
+  return id || null;
+
+};
+
 
 // =====================================================
 // DEFAULT PROPS
 // =====================================================
 
 const DEFAULT_PROPS_BY_TYPE = {
+
   ControlButton: {
-    label: "Button",
-    action: "",
-    targetId: "",
-    apiUrl: "",
+
+    label:
+      "Button",
+
+    action:
+      "",
+
+    targetId:
+      "",
+
+    apiUrl:
+      "",
+
   },
+
 
   ControlPanel: {
-    layout: "vertical",
-    position: "left",
-    controls: [],
+
+    layout:
+      "vertical",
+
+    position:
+      "left",
+
+    controls:
+      [],
+
   },
+
 
   MicButton: {
-    label: "Mic",
-    action: "ToggleMic",
+
+    label:
+      "Mic",
+
+    action:
+      "ToggleMic",
+
   },
+
 
   VideoFeed: {
-    label: "Video",
-    mode: "local",
-    src: "",
-    playing: true,
-    enabled: true,
-    muted: false,
+
+    label:
+      "Video",
+
+    mode:
+      "local",
+
+    src:
+      "",
+
+    playing:
+      true,
+
+    enabled:
+      true,
+
+    muted:
+      false,
+
   },
+
 
   Text: {
-    label: "Text",
+
+    label:
+      "Text",
+
   },
 
+
   ChatPanel: {
-    label: "Chat",
+
+    label:
+      "Chat",
+
   },
+
 };
+
 
 // =====================================================
 // PROP SANITISATION
@@ -369,18 +465,31 @@ const sanitizeProps = (
   systemProps = {},
   metaProps = {}
 ) => {
+
   const clean = {
     ...metaProps,
   };
 
-  SYSTEM_LOCKED_KEYS.forEach((key) => {
-    if (systemProps[key] !== undefined) {
-      clean[key] = systemProps[key];
+  SYSTEM_LOCKED_KEYS.forEach(
+    key => {
+
+      if (
+        systemProps[key] !==
+        undefined
+      ) {
+
+        clean[key] =
+          systemProps[key];
+
+      }
+
     }
-  });
+  );
 
   return clean;
+
 };
+
 
 // =====================================================
 // CANVAS
@@ -391,6 +500,7 @@ export default function Canvas({
   onSelectedIdChange,
   forcePreview,
 }) {
+
   // ===================================================
   // CONTEXT
   // ===================================================
@@ -398,76 +508,122 @@ export default function Canvas({
   const {
     isPreviewMode,
     previewView,
-  } = usePreviewMode();
+  } =
+    usePreviewMode();
+
 
   const {
     elements,
     addElement,
     updateElement,
-  } = useCanvasState();
+  } =
+    useCanvasState();
+
 
   const {
     projectType,
     backgroundConfigs,
-  } = useProjectContext();
+  } =
+    useProjectContext();
+
 
   const {
-    collapsed: sidebarCollapsed,
-  } = useContext(ProjectContext);
+    collapsed:
+      sidebarCollapsed,
+  } =
+    useContext(
+      ProjectContext
+    );
+
 
   const {
     bindings,
     cameraOn,
-  } = useActionContext();
+  } =
+    useActionContext();
+
 
   const {
     canBuild,
-  } = useAuth();
+  } =
+    useAuth();
+
 
   const {
     allowedElements,
     runtimeRole,
-  } = useRuntimeAuth();
+  } =
+    useRuntimeAuth();
+
 
   // ===================================================
   // BASIC STATE
   // ===================================================
 
   const isBuilderEditable =
-  !isPreviewMode &&
-  !!canBuild &&
-  !forcePreview;
+    !isPreviewMode &&
+    !!canBuild &&
+    !forcePreview;
 
-    console.log("🔥 CANVAS EDITABILITY", {
+
+  console.log(
+    "🔥 CANVAS EDITABILITY",
+    {
       isPreviewMode,
       canBuild,
       forcePreview,
       isBuilderEditable,
-    });
+    }
+  );
 
-  const [device] =
-    useState("desktop");
 
-  const [scale] =
-    useState(0.75);
+  const [
+    device,
+  ] =
+    useState(
+      "desktop"
+    );
+
+
+  const [
+    scale,
+  ] =
+    useState(
+      0.75
+    );
+
 
   const [
     selectedId,
     setSelectedId,
-  ] = useState(null);
+  ] =
+    useState(
+      null
+    );
+
 
   const [
     activeTab,
     setActiveTab,
-  ] = useState("Elements");
+  ] =
+    useState(
+      "Elements"
+    );
+
 
   const [
     availableElements,
     setAvailableElements,
-  ] = useState([]);
+  ] =
+    useState(
+      []
+    );
+
 
   const currentRoleKey =
-    role || "null";
+    role ||
+    "null";
+
 
   // ===================================================
   // INSPECTOR STATE
@@ -476,120 +632,197 @@ export default function Canvas({
   const [
     inspectorOpen,
     setInspectorOpen,
-  ] = useState({
-    host: true,
-    client: true,
-    null: true,
-  });
+  ] =
+    useState({
+
+      host:
+        true,
+
+      client:
+        true,
+
+      null:
+        true,
+
+    });
+
 
   const [
     inspectorLayout,
     setInspectorLayout,
-  ] = useState({
-    host: "right",
-    client: "right",
-    null: "right",
-  });
+  ] =
+    useState({
+
+      host:
+        "right",
+
+      client:
+        "right",
+
+      null:
+        "right",
+
+    });
+
 
   const [
     pinInspector,
     setPinInspector,
-  ] = useState({
-    host: false,
-    client: false,
-    null: false,
-  });
+  ] =
+    useState({
+
+      host:
+        false,
+
+      client:
+        false,
+
+      null:
+        false,
+
+    });
+
 
   const [
     floatingPos,
     setFloatingPos,
-  ] = useState({
-    x: 240,
-    y: 160,
-  });
+  ] =
+    useState({
+
+      x:
+        240,
+
+      y:
+        160,
+
+    });
+
 
   // ===================================================
   // PROJECT VIEW
   // ===================================================
 
   const isMultiProject =
-    projectType === "multi";
+    projectType ===
+    "multi";
+
 
   const isSplitView =
     isMultiProject &&
-    previewView === "split";
+    previewView ===
+      "split";
+
 
   const requestedLayout =
     inspectorLayout[
       currentRoleKey
     ];
 
+
   const effectiveLayout =
-    requestedLayout === "floating"
+    requestedLayout ===
+      "floating"
+
       ? "floating"
+
       : isSplitView
+
       ? "bottom"
+
       : "right";
+
 
   const isInspectorVisible =
     isSplitView
+
       ? true
+
       : inspectorOpen[
           currentRoleKey
         ];
+
 
   // ===================================================
   // CANVAS REFS
   // ===================================================
 
   const canvasRef =
-    useRef(null);
+    useRef(
+      null
+    );
+
+
+  // ===================================================
+  // CANVAS SIZE
+  // ===================================================
+
+  const canvasSize =
+    DEVICE_SIZES[
+      device
+    ];
+
 
   // ===================================================
   // ELEMENT PERMISSIONS
   // ===================================================
 
-  useEffect(() => {
-    const all =
-      Object.values(componentRegistry)
-        .map(
-          (entry) =>
-            entry.contract
-        )
-        .filter(Boolean);
+  useEffect(
+    () => {
 
-    const permitted =
-      all.filter((contract) =>
-        allowedElements.includes(
-          contract.name
+      const all =
+        Object.values(
+          componentRegistry
         )
+          .map(
+            entry =>
+              entry.contract
+          )
+          .filter(
+            Boolean
+          );
+
+
+      const permitted =
+        all.filter(
+          contract =>
+            allowedElements.includes(
+              contract.name
+            )
+        );
+
+
+      console.log(
+        "[CANVAS ELEMENT PERMISSIONS]",
+        {
+          runtimeRole,
+          allowedElements,
+
+          available:
+            all.map(
+              c =>
+                c.name
+            ),
+
+          permitted:
+            permitted.map(
+              c =>
+                c.name
+            ),
+        }
       );
 
-    console.log(
-      "[CANVAS ELEMENT PERMISSIONS]",
-      {
-        runtimeRole,
-        allowedElements,
 
-        available:
-          all.map(
-            (c) => c.name
-          ),
+      setAvailableElements(
+        permitted
+      );
 
-        permitted:
-          permitted.map(
-            (c) => c.name
-          ),
-      }
-    );
+    },
+    [
+      allowedElements,
+      runtimeRole,
+    ]
+  );
 
-    setAvailableElements(
-      permitted
-    );
-  }, [
-    allowedElements,
-    runtimeRole,
-  ]);
 
   // ===================================================
   // BACKGROUND
@@ -599,64 +832,443 @@ export default function Canvas({
     backgroundConfigs?.[
       device
     ] || {
-      kind: "color",
-      color: "#020617",
+
+      kind:
+        "color",
+
+      color:
+        "#020617",
+
     };
 
+
   const canvasBackgroundStyle =
-    bg.kind === "image" &&
+    bg.kind ===
+      "image" &&
     bg.imageUrl
+
       ? {
+
           backgroundImage:
             `url(${bg.imageUrl})`,
+
           backgroundSize:
-            bg.size || "cover",
+            bg.size ||
+            "cover",
+
           backgroundRepeat:
             "no-repeat",
+
           backgroundPosition:
             "center",
+
         }
+
       : {
+
           backgroundColor:
             bg.color ||
             "#020617",
+
         };
 
+
   // ===================================================
-  // VISIBLE ELEMENTS
+  // VISIBLE / CANONICAL ELEMENTS
+  // ===================================================
+  //
+  // This is the single collection used by the Canvas.
+  //
+  // We:
+  //
+  // 1. apply role visibility
+  // 2. reject missing IDs
+  // 3. suppress duplicate IDs
+  // 4. normalise parent IDs
+  //
+  // This prevents duplicate persisted elements from
+  // producing multiple Rnd instances at the same position.
+  //
   // ===================================================
 
   const visibleElements =
-    elements.filter((el) => {
-      if (!el.role) {
-        return true;
+    useMemo(
+      () => {
+
+        const roleVisible =
+          Array.isArray(
+            elements
+          )
+
+            ? elements.filter(
+                el => {
+
+                  if (
+                    !el?.role
+                  ) {
+
+                    return true;
+
+                  }
+
+                  return (
+                    el.role ===
+                    role
+                  );
+
+                }
+              )
+
+            : [];
+
+
+        const seenIds =
+          new Set();
+
+
+        const duplicates =
+          [];
+
+
+        const canonical =
+          roleVisible.filter(
+            el => {
+
+              const id =
+                normaliseElementId(
+                  el?.id
+                );
+
+
+              if (
+                !id
+              ) {
+
+                console.warn(
+                  "[CANVAS] Ignoring element without ID",
+                  {
+                    element:
+                      el,
+                  }
+                );
+
+
+                return false;
+
+              }
+
+
+              if (
+                seenIds.has(
+                  id
+                )
+              ) {
+
+                duplicates.push(
+                  el
+                );
+
+                return false;
+
+              }
+
+
+              seenIds.add(
+                id
+              );
+
+              return true;
+
+            }
+          )
+          .map(
+            el => ({
+
+              ...el,
+
+              id:
+                normaliseElementId(
+                  el.id
+                ),
+
+              parentId:
+                normaliseElementId(
+                  el.parentId
+                ),
+
+              props:
+                el.props &&
+                typeof el.props ===
+                  "object"
+                  ? el.props
+                  : {},
+
+              x:
+                Number.isFinite(
+                  Number(
+                    el.x
+                  )
+                )
+                  ? Number(
+                      el.x
+                    )
+                  : 0,
+
+              y:
+                Number.isFinite(
+                  Number(
+                    el.y
+                  )
+                )
+                  ? Number(
+                      el.y
+                    )
+                  : 0,
+
+              width:
+                Number.isFinite(
+                  Number(
+                    el.width
+                  )
+                )
+                  ? Math.max(
+                      1,
+                      Number(
+                        el.width
+                      )
+                    )
+                  : 300,
+
+              height:
+                Number.isFinite(
+                  Number(
+                    el.height
+                  )
+                )
+                  ? Math.max(
+                      1,
+                      Number(
+                        el.height
+                      )
+                    )
+                  : 150,
+
+            })
+          );
+
+
+        if (
+          duplicates.length >
+          0
+        ) {
+
+          console.warn(
+            "[CANVAS] DUPLICATE ELEMENT IDS DETECTED",
+            {
+              duplicates:
+                duplicates.map(
+                  el => ({
+
+                    id:
+                      el.id,
+
+                    type:
+                      el.type,
+
+                    parentId:
+                      el.parentId ||
+                      null,
+
+                    x:
+                      el.x,
+
+                    y:
+                      el.y,
+
+                    width:
+                      el.width,
+
+                    height:
+                      el.height,
+
+                  })
+                ),
+
+            }
+          );
+
+        }
+
+
+        return canonical;
+
+      },
+      [
+        elements,
+        role,
+      ]
+    );
+
+
+  // ===================================================
+  // ELEMENT MAP
+  // ===================================================
+  //
+  // O(1) lookup for hierarchy calculations.
+  //
+  // ===================================================
+
+  const elementMap =
+    useMemo(
+      () => {
+
+        const map =
+          new Map();
+
+
+        visibleElements.forEach(
+          element => {
+
+            map.set(
+              element.id,
+              element
+            );
+
+          }
+        );
+
+
+        return map;
+
+      },
+      [
+        visibleElements,
+      ]
+    );
+
+
+  // ===================================================
+  // CANVAS ELEMENT INTEGRITY
+  // ===================================================
+
+  useEffect(
+    () => {
+
+      const orphaned = [];
+
+
+      visibleElements.forEach(
+        element => {
+
+          const parentId =
+            normaliseElementId(
+              element.parentId
+            );
+
+
+          if (
+            parentId &&
+            !elementMap.has(
+              parentId
+            )
+          ) {
+
+            orphaned.push(
+              {
+                id:
+                  element.id,
+
+                type:
+                  element.type,
+
+                parentId,
+
+              }
+            );
+
+          }
+
+        }
+      );
+
+
+      console.log(
+        "[CANVAS ELEMENT INTEGRITY]",
+        {
+          elementCount:
+            visibleElements.length,
+
+          duplicateIds:
+            [],
+
+          orphaned,
+        }
+      );
+
+
+      if (
+        orphaned.length
+      ) {
+
+        console.warn(
+          "[CANVAS] Orphaned elements will be rendered top-level",
+          orphaned
+        );
+
       }
 
-      return el.role === role;
-    });
+    },
+    [
+      visibleElements,
+      elementMap,
+    ]
+  );
+
 
   // ===================================================
   // HIERARCHY DEBUG
   // ===================================================
 
-  useEffect(() => {
-    console.log(
-      "[CANVAS HIERARCHY]",
-      visibleElements.map(
-        (el) => ({
-          id: el.id,
-          type: el.type,
-          parentId:
-            el.parentId ||
-            null,
-          x: el.x,
-          y: el.y,
-          width: el.width,
-          height: el.height,
-        })
-      )
-    );
-  }, [visibleElements]);
+  useEffect(
+    () => {
+
+      console.log(
+        "[CANVAS HIERARCHY]",
+        visibleElements.map(
+          el => ({
+
+            id:
+              el.id,
+
+            type:
+              el.type,
+
+            parentId:
+              el.parentId ||
+              null,
+
+            x:
+              el.x,
+
+            y:
+              el.y,
+
+            width:
+              el.width,
+
+            height:
+              el.height,
+
+          })
+        )
+      );
+
+    },
+    [
+      visibleElements,
+    ]
+  );
+
 
   // ===================================================
   // SELECTED ELEMENT
@@ -664,9 +1276,12 @@ export default function Canvas({
 
   const selectedElement =
     visibleElements.find(
-      (el) =>
-        el.id === selectedId
-    ) || null;
+      el =>
+        el.id ===
+        selectedId
+    ) ||
+    null;
+
 
   const selectedMeta =
     selectedElement
@@ -675,596 +1290,889 @@ export default function Canvas({
         ]?.contract
       : null;
 
+
   // ===================================================
   // SELECT ELEMENT
   // ===================================================
 
-  const selectElement = (id) => {
-    setSelectedId(id);
+  const selectElement =
+    id => {
 
-    onSelectedIdChange?.(id);
-
-    if (
-      !pinInspector[
-        currentRoleKey
-      ]
-    ) {
-      setInspectorOpen(
-        (prev) => ({
-          ...prev,
-          [currentRoleKey]:
-            true,
-        })
+      setSelectedId(
+        id
       );
-    }
-  };
+
+
+      onSelectedIdChange?.(
+        id
+      );
+
+
+      if (
+        !pinInspector[
+          currentRoleKey
+        ]
+      ) {
+
+        setInspectorOpen(
+          prev => ({
+
+            ...prev,
+
+            [currentRoleKey]:
+              true,
+
+          })
+        );
+
+      }
+
+    };
+
 
   // ===================================================
   // GET ELEMENT BY ID
   // ===================================================
 
-  const getElementById = (id) => {
-    return (
-      visibleElements.find(
-        (el) =>
-          el.id === id
-      ) || null
-    );
-  };
+  const getElementById =
+    id => {
+
+      const normalisedId =
+        normaliseElementId(
+          id
+        );
+
+
+      if (
+        !normalisedId
+      ) {
+
+        return null;
+
+      }
+
+
+      return (
+        elementMap.get(
+          normalisedId
+        ) ||
+        null
+      );
+
+    };
+
 
   // ===================================================
   // GET CHILDREN
   // ===================================================
 
-  const getChildren = (
-    parentId
-  ) => {
-    return visibleElements.filter(
-      (el) =>
-        el.parentId ===
-        parentId
-    );
-  };
+  const getChildren =
+    parentId => {
+
+      const normalisedParentId =
+        normaliseElementId(
+          parentId
+        );
+
+
+      if (
+        !normalisedParentId
+      ) {
+
+        return [];
+
+      }
+
+
+      return visibleElements.filter(
+        element =>
+          normaliseElementId(
+            element.parentId
+          ) ===
+          normalisedParentId
+      );
+
+    };
+
 
   // ===================================================
   // GET ABSOLUTE POSITION
   // ===================================================
 
-  const getAbsolutePosition = (
-    element
-  ) => {
-    let x =
-      Number(
-        element?.x || 0
-      );
+  const getAbsolutePosition =
+    element => {
 
-    let y =
-      Number(
-        element?.y || 0
-      );
+      let x =
+        Number(
+          element?.x
+        ) || 0;
 
-    let parentId =
-      element?.parentId ||
-      null;
 
-    const visited =
-      new Set();
+      let y =
+        Number(
+          element?.y
+        ) || 0;
 
-    while (parentId) {
-      if (
-        visited.has(
-          parentId
-        )
-      ) {
-        console.warn(
-          "[CANVAS] Circular hierarchy detected",
-          parentId
+
+      let parentId =
+        normaliseElementId(
+          element?.parentId
         );
 
-        break;
-      }
 
-      visited.add(
+      const visited =
+        new Set();
+
+
+      while (
         parentId
-      );
+      ) {
 
-      const parent =
-        getElementById(
+        if (
+          visited.has(
+            parentId
+          )
+        ) {
+
+          console.warn(
+            "[CANVAS] Circular hierarchy detected",
+            parentId
+          );
+
+
+          break;
+
+        }
+
+
+        visited.add(
           parentId
         );
 
-      if (!parent) {
-        break;
+
+        const parent =
+          getElementById(
+            parentId
+          );
+
+
+        if (!parent) {
+
+          break;
+
+        }
+
+
+        x +=
+          Number(
+            parent.x
+          ) || 0;
+
+
+        y +=
+          Number(
+            parent.y
+          ) || 0;
+
+
+        parentId =
+          normaliseElementId(
+            parent.parentId
+          );
+
       }
 
-      x += Number(
-        parent.x || 0
-      );
 
-      y += Number(
-        parent.y || 0
-      );
+      return {
 
-      parentId =
-        parent.parentId ||
-        null;
-    }
+        x,
+        y,
 
-    return {
-      x,
-      y,
+      };
+
     };
-  };
+
+
+  // ===================================================
+  // CLAMP TOP-LEVEL ELEMENT
+  // ===================================================
+  //
+  // Top-level elements live directly on the stage.
+  //
+  // Children are positioned relative to their parent and
+  // therefore are intentionally NOT clamped here.
+  //
+  // ===================================================
+
+  const clampTopLevelElement =
+    element => {
+
+      const width =
+        Math.min(
+          Math.max(
+            1,
+            Number(
+              element?.width
+            ) || 300
+          ),
+          canvasSize.width
+        );
+
+
+      const height =
+        Math.min(
+          Math.max(
+            1,
+            Number(
+              element?.height
+            ) || 150
+          ),
+          canvasSize.height
+        );
+
+
+      const x =
+        Math.min(
+          Math.max(
+            0,
+            Number(
+              element?.x
+            ) || 0
+          ),
+          Math.max(
+            0,
+            canvasSize.width -
+              width
+          )
+        );
+
+
+      const y =
+        Math.min(
+          Math.max(
+            0,
+            Number(
+              element?.y
+            ) || 0
+          ),
+          Math.max(
+            0,
+            canvasSize.height -
+              height
+          )
+        );
+
+
+      return {
+
+        ...element,
+
+        x,
+        y,
+
+        width,
+        height,
+
+      };
+
+    };
+
 
   // ===================================================
   // FIND DOM DROP TARGET
   // ===================================================
 
-  const findDomDropTarget = (
-    clientX,
-    clientY,
-    draggedType
-  ) => {
-    if (
-      !canvasRef.current
-    ) {
-      return null;
-    }
+  const findDomDropTarget =
+    (
+      clientX,
+      clientY,
+      draggedType
+    ) => {
 
-    const domTarget =
-      document.elementFromPoint(
-        clientX,
-        clientY
-      );
+      if (
+        !canvasRef.current
+      ) {
 
-    if (!domTarget) {
-      return null;
-    }
+        return null;
 
-    let node =
-      domTarget;
-
-    while (
-      node &&
-      node !==
-        canvasRef.current
-    ) {
-      const elementId =
-        node.getAttribute?.(
-          "data-canvas-element-id"
-        );
-
-      if (elementId) {
-        const candidate =
-          getElementById(
-            elementId
-          );
-
-        if (
-          candidate &&
-          isContainerType(
-            candidate.type
-          ) &&
-          canDropIntoParent(
-            draggedType,
-            candidate.type
-          )
-        ) {
-          console.log(
-            "[CANVAS DOM DROP TARGET]",
-            {
-              draggedType,
-
-              targetId:
-                candidate.id,
-
-              targetType:
-                candidate.type,
-            }
-          );
-
-          return candidate;
-        }
       }
 
-      node =
-        node.parentElement;
-    }
 
-    return null;
-  };
+      const domTarget =
+        document.elementFromPoint(
+          clientX,
+          clientY
+        );
+
+
+      if (!domTarget) {
+
+        return null;
+
+      }
+
+
+      let node =
+        domTarget;
+
+
+      while (
+        node &&
+        node !==
+          canvasRef.current
+      ) {
+
+        const elementId =
+          node.getAttribute?.(
+            "data-canvas-element-id"
+          );
+
+
+        if (
+          elementId
+        ) {
+
+          const candidate =
+            getElementById(
+              elementId
+            );
+
+
+          if (
+            candidate &&
+            isContainerType(
+              candidate.type
+            ) &&
+            canDropIntoParent(
+              draggedType,
+              candidate.type
+            )
+          ) {
+
+            console.log(
+              "[CANVAS DOM DROP TARGET]",
+              {
+
+                draggedType,
+
+                targetId:
+                  candidate.id,
+
+                targetType:
+                  candidate.type,
+
+              }
+            );
+
+
+            return candidate;
+
+          }
+
+        }
+
+
+        node =
+          node.parentElement;
+
+      }
+
+
+      return null;
+
+    };
+
 
   // ===================================================
   // FIND GEOMETRIC DROP TARGET
   // ===================================================
 
-  const findGeometricDropTarget = (
-    canvasX,
-    canvasY,
-    draggedType
-  ) => {
-    const candidates =
-      visibleElements
-        .filter((el) => {
-          if (
-            !isContainerType(
-              el.type
-            )
-          ) {
-            return false;
-          }
+  const findGeometricDropTarget =
+    (
+      canvasX,
+      canvasY,
+      draggedType
+    ) => {
 
-          return canDropIntoParent(
-            draggedType,
-            el.type
+      const candidates =
+        visibleElements
+
+          .filter(
+            el => {
+
+              if (
+                !isContainerType(
+                  el.type
+                )
+              ) {
+
+                return false;
+
+              }
+
+
+              return canDropIntoParent(
+                draggedType,
+                el.type
+              );
+
+            }
+          )
+
+          .map(
+            el => {
+
+              const absolute =
+                getAbsolutePosition(
+                  el
+                );
+
+
+              const width =
+                Number(
+                  el.width
+                ) || 0;
+
+
+              const height =
+                Number(
+                  el.height
+                ) || 0;
+
+
+              const inside =
+                canvasX >=
+                  absolute.x &&
+                canvasX <=
+                  absolute.x +
+                    width &&
+                canvasY >=
+                  absolute.y &&
+                canvasY <=
+                  absolute.y +
+                    height;
+
+
+              return {
+
+                element:
+                  el,
+
+                absolute,
+
+                width,
+
+                height,
+
+                inside,
+
+              };
+
+            }
+          )
+
+          .filter(
+            item =>
+              item.inside
           );
-        })
-        .map((el) => {
-          const absolute =
-            getAbsolutePosition(
-              el
-            );
 
-          const width =
-            Number(
-              el.width || 0
-            );
 
-          const height =
-            Number(
-              el.height || 0
-            );
+      if (
+        !candidates.length
+      ) {
 
-          const inside =
-            canvasX >=
-              absolute.x &&
-            canvasX <=
-              absolute.x +
-                width &&
-            canvasY >=
-              absolute.y &&
-            canvasY <=
-              absolute.y +
-                height;
+        return null;
 
-          return {
-            element: el,
-            absolute,
-            width,
-            height,
-            inside,
-          };
-        })
-        .filter(
-          (item) =>
-            item.inside
-        );
-
-    if (
-      !candidates.length
-    ) {
-      return null;
-    }
-
-    candidates.sort(
-      (a, b) => {
-        const areaA =
-          a.width *
-          a.height;
-
-        const areaB =
-          b.width *
-          b.height;
-
-        return (
-          areaA - areaB
-        );
       }
-    );
 
-    const target =
-      candidates[0];
 
-    console.log(
-      "[CANVAS GEOMETRIC DROP TARGET]",
-      {
-        draggedType,
+      candidates.sort(
+        (
+          a,
+          b
+        ) => {
 
-        targetId:
-          target.element.id,
+          const areaA =
+            a.width *
+            a.height;
 
-        targetType:
-          target.element.type,
 
-        absolute:
-          target.absolute,
-      }
-    );
+          const areaB =
+            b.width *
+            b.height;
 
-    return target.element;
-  };
+
+          return (
+            areaA -
+            areaB
+          );
+
+        }
+      );
+
+
+      const target =
+        candidates[0];
+
+
+      console.log(
+        "[CANVAS GEOMETRIC DROP TARGET]",
+        {
+
+          draggedType,
+
+          targetId:
+            target.element.id,
+
+          targetType:
+            target.element.type,
+
+          absolute:
+            target.absolute,
+
+        }
+      );
+
+
+      return target.element;
+
+    };
+
 
   // ===================================================
   // DROP HANDLER
   // ===================================================
 
-  const handleDrop = (e) => {
-    if (
-      !isBuilderEditable
-    ) {
-      return;
-    }
+  const handleDrop =
+    e => {
 
-    e.preventDefault();
+      if (
+        !isBuilderEditable
+      ) {
 
-    // -----------------------------------------------
-    // READ DRAG DATA
-    // -----------------------------------------------
+        return;
 
-    let meta = {};
-
-    try {
-      meta =
-        JSON.parse(
-          e.dataTransfer.getData(
-            "application/json"
-          ) || "{}"
-        );
-    } catch (error) {
-      console.error(
-        "[CANVAS DROP] Invalid drag data",
-        error
-      );
-
-      return;
-    }
-
-    if (
-      !meta?.name ||
-      !canvasRef.current
-    ) {
-      return;
-    }
-
-    const draggedType =
-      meta.name;
-
-    // -----------------------------------------------
-    // CANVAS COORDINATES
-    // -----------------------------------------------
-
-    const rect =
-      canvasRef.current.getBoundingClientRect();
-
-    const canvasX =
-      (
-        e.clientX -
-        rect.left
-      ) / scale;
-
-    const canvasY =
-      (
-        e.clientY -
-        rect.top
-      ) / scale;
-
-    console.log(
-      "[CANVAS DROP]",
-      {
-        draggedType,
-
-        clientX:
-          e.clientX,
-
-        clientY:
-          e.clientY,
-
-        canvasX,
-        canvasY,
       }
-    );
 
-    // -----------------------------------------------
-    // FIND PARENT
-    // -----------------------------------------------
 
-    let potentialParent =
-      findDomDropTarget(
-        e.clientX,
-        e.clientY,
-        draggedType
-      );
+      e.preventDefault();
 
-    if (
-      !potentialParent
-    ) {
-      potentialParent =
-        findGeometricDropTarget(
+
+      let meta = {};
+
+
+      try {
+
+        meta =
+          JSON.parse(
+            e.dataTransfer.getData(
+              "application/json"
+            ) ||
+            "{}"
+          );
+
+      }
+      catch (
+        error
+      ) {
+
+        console.error(
+          "[CANVAS DROP] Invalid drag data",
+          error
+        );
+
+
+        return;
+
+      }
+
+
+      if (
+        !meta?.name ||
+        !canvasRef.current
+      ) {
+
+        return;
+
+      }
+
+
+      const draggedType =
+        meta.name;
+
+
+      const rect =
+        canvasRef.current.getBoundingClientRect();
+
+
+      const canvasX =
+        (
+          e.clientX -
+          rect.left
+        ) /
+        scale;
+
+
+      const canvasY =
+        (
+          e.clientY -
+          rect.top
+        ) /
+        scale;
+
+
+      console.log(
+        "[CANVAS DROP]",
+        {
+
+          draggedType,
+
+          clientX:
+            e.clientX,
+
+          clientY:
+            e.clientY,
+
           canvasX,
           canvasY,
+
+        }
+      );
+
+
+      let potentialParent =
+        findDomDropTarget(
+          e.clientX,
+          e.clientY,
           draggedType
         );
-    }
 
-    // -----------------------------------------------
-    // PARENT ID
-    // -----------------------------------------------
 
-    const parentId =
-      potentialParent?.id ||
-      null;
+      if (
+        !potentialParent
+      ) {
 
-    // -----------------------------------------------
-    // POSITION
-    // -----------------------------------------------
+        potentialParent =
+          findGeometricDropTarget(
+            canvasX,
+            canvasY,
+            draggedType
+          );
 
-    let elementX =
-      canvasX - 150;
+      }
 
-    let elementY =
-      canvasY - 75;
 
-    if (
-      potentialParent
-    ) {
-      const parentAbsolute =
-        getAbsolutePosition(
-          potentialParent
-        );
+      const parentId =
+        potentialParent?.id ||
+        null;
 
-      elementX =
+
+      let elementX =
         canvasX -
-        parentAbsolute.x -
         150;
 
-      elementY =
+
+      let elementY =
         canvasY -
-        parentAbsolute.y -
         75;
-    }
 
-    // -----------------------------------------------
-    // CONTROL PANEL CHILDREN
-    // -----------------------------------------------
 
-    if (
-      potentialParent?.type ===
-      "ControlPanel"
-    ) {
-      elementX = 0;
-      elementY = 0;
-    }
+      if (
+        potentialParent
+      ) {
 
-    // -----------------------------------------------
-    // DEFAULT PROPS
-    // -----------------------------------------------
+        const parentAbsolute =
+          getAbsolutePosition(
+            potentialParent
+          );
 
-    const system =
-      DEFAULT_PROPS_BY_TYPE[
-        draggedType
-      ] || {};
 
-    const metaDefaults =
-      extractDefaults(
-        meta.editableProps
-      ) || {};
+        elementX =
+          canvasX -
+          parentAbsolute.x -
+          150;
 
-    // -----------------------------------------------
-    // NEW ELEMENT
-    // -----------------------------------------------
 
-    const newId =
-      uuid();
+        elementY =
+          canvasY -
+          parentAbsolute.y -
+          75;
 
-    // -----------------------------------------------
-    // DEFAULT SIZE
-    // -----------------------------------------------
+      }
 
-    let width = 300;
-    let height = 150;
 
-    if (
-      draggedType ===
-      "ControlButton"
-    ) {
-      width = 140;
-      height = 44;
-    }
+      if (
+        potentialParent?.type ===
+        "ControlPanel"
+      ) {
 
-    if (
-      draggedType ===
-      "ControlPanel"
-    ) {
-      width = 300;
-      height = 150;
-    }
+        elementX =
+          0;
 
-    if (
-      draggedType ===
-      "Text"
-    ) {
-      width = 200;
-      height = 50;
-    }
 
-    // -----------------------------------------------
-    // NEW ELEMENT
-    // -----------------------------------------------
+        elementY =
+          0;
 
-    const newElement = {
-      id: newId,
+      }
 
-      type:
-        draggedType,
 
-      role:
-        role || null,
+      const system =
+        DEFAULT_PROPS_BY_TYPE[
+          draggedType
+        ] ||
+        {};
 
-      x:
-        elementX,
 
-      y:
-        elementY,
+      const metaDefaults =
+        extractDefaults(
+          meta.editableProps
+        ) ||
+        {};
 
-      width,
-      height,
 
-      parentId,
+      const newId =
+        uuid();
 
-      props:
-        sanitizeProps(
-          system,
-          metaDefaults
-        ),
+
+      let width =
+        300;
+
+
+      let height =
+        150;
+
+
+      if (
+        draggedType ===
+        "ControlButton"
+      ) {
+
+        width =
+          140;
+
+        height =
+          44;
+
+      }
+
+
+      if (
+        draggedType ===
+        "ControlPanel"
+      ) {
+
+        width =
+          300;
+
+        height =
+          150;
+
+      }
+
+
+      if (
+        draggedType ===
+        "Text"
+      ) {
+
+        width =
+          200;
+
+        height =
+          50;
+
+      }
+
+
+      const newElement = {
+
+        id:
+          newId,
+
+        type:
+          draggedType,
+
+        role:
+          role ||
+          null,
+
+        x:
+          elementX,
+
+        y:
+          elementY,
+
+        width,
+        height,
+
+        parentId,
+
+        props:
+          sanitizeProps(
+            system,
+            metaDefaults
+          ),
+
+      };
+
+
+      console.log(
+        "[CANVAS DROP CREATED]",
+        {
+
+          ...newElement,
+
+          hierarchy:
+            parentId
+              ? "CHILD"
+              : "TOP_LEVEL",
+
+        }
+      );
+
+
+      console.log(
+        "🔥🔥 BEFORE ADD ELEMENT",
+        {
+
+          id:
+            newElement.id,
+
+          type:
+            newElement.type,
+
+          draggedType,
+
+          metaName:
+            meta.name,
+
+          meta,
+
+          newElement,
+
+        }
+      );
+
+
+      addElement(
+        newElement
+      );
+
+
+      if (
+        draggedType ===
+          "VideoFeed" &&
+        cameraOn
+      ) {
+
+        cameraOn(
+          newId
+        );
+
+      }
+
     };
 
-    console.log(
-      "[CANVAS DROP CREATED]",
-      {
-        ...newElement,
-
-        hierarchy:
-          parentId
-            ? "CHILD"
-            : "TOP_LEVEL",
-      }
-    );
-
-        console.log(
-      "🔥🔥 BEFORE ADD ELEMENT",
-      {
-        id: newElement.id,
-        type: newElement.type,
-        draggedType,
-        metaName: meta.name,
-        meta,
-        newElement,
-      }
-    );
-
-    // -----------------------------------------------
-    // ADD
-    // -----------------------------------------------
-
-    addElement(
-      newElement
-    );
-
-
-    // -----------------------------------------------
-    // VIDEO FEED
-    // -----------------------------------------------
-
-    if (
-      draggedType ===
-        "VideoFeed" &&
-      cameraOn
-    ) {
-      cameraOn(
-        newId
-      );
-    }
-  };
 
   // ===================================================
   // INSPECTOR CONTROLS
@@ -1272,442 +2180,607 @@ export default function Canvas({
 
   const toggleInspector =
     () => {
+
       setInspectorOpen(
-        (prev) => ({
+        prev => ({
+
           ...prev,
 
           [currentRoleKey]:
             !prev[
               currentRoleKey
             ],
+
         })
       );
+
     };
+
 
   const toggleDock =
     () => {
+
       if (
         isMultiProject &&
         !role
       ) {
+
         return;
+
       }
 
+
       setInspectorLayout(
-        (prev) => ({
+        prev => ({
+
           ...prev,
 
           [currentRoleKey]:
             prev[
               currentRoleKey
-            ] === "floating"
+            ] ===
+              "floating"
+
               ? "right"
+
               : "floating",
+
         })
       );
+
     };
+
 
   const togglePin =
     () => {
+
       setPinInspector(
-        (prev) => ({
+        prev => ({
+
           ...prev,
 
           [currentRoleKey]:
             !prev[
               currentRoleKey
             ],
+
         })
       );
+
     };
+
 
   // ===================================================
   // RECURSIVE CANVAS CHILD RENDERER
   // ===================================================
 
-  const renderChildren = (
-    parentId
-  ) => {
-    const parent =
-      getElementById(
-        parentId
-      );
+  const renderChildren =
+    (
+      parentId,
+      ancestry = new Set()
+    ) => {
 
-    const children =
-      getChildren(
-        parentId
-      );
-
-    if (
-      !children.length
-    ) {
-      return null;
-    }
-
-    // =================================================
-    // CONTROL PANEL
-    // =================================================
-
-    if (
-      parent?.type ===
-        "ControlPanel"
-          ) {
-            const panelChildren =
-        children.filter(
-          (child) =>
-            [
-              "ControlButton",
-              "Select",
-              "Input",
-              "TextBox",
-            ].includes(
-              child.type
-            )
+      const normalisedParentId =
+        normaliseElementId(
+          parentId
         );
 
-      return (
-        <React.Fragment>
-          {panelChildren.map(
-            (child) => {
-              const childEntry =
-                componentRegistry[
-                  child.type
-                ];
 
-              if (
-                !childEntry?.component
-              ) {
-                console.warn(
-                  "[CANVAS] Missing ControlPanel child:",
-                  child.type
-                );
+      if (
+        !normalisedParentId
+      ) {
 
-                return null;
-              }
+        return null;
 
-              const ChildComponent =
-                childEntry.component;
+      }
 
-              const childBinding =
-                bindings[
-                  child.id
-                ] || {};
 
-              const isSelected =
-                selectedId ===
-                child.id;
+      if (
+        ancestry.has(
+          normalisedParentId
+        )
+      ) {
 
-              return (
-                <div
-                  key={
-                    child.id
-                  }
+        console.warn(
+          "[CANVAS] Recursive child rendering stopped",
+          {
+            parentId:
+              normalisedParentId,
+          }
+        );
 
-                  data-canvas-element-id={
-                    child.id
-                  }
 
-                  onClick={(
-                    event
-                  ) => {
-                    event.stopPropagation();
+        return null;
 
-                    selectElement(
-                      child.id
-                    );
-                  }}
+      }
 
-                  style={{
-                    position:
-                      "relative",
 
-                    width:
-                      "100%",
+      const parent =
+        getElementById(
+          normalisedParentId
+        );
 
-                    boxSizing:
-                      "border-box",
 
-                    zIndex:
-                      isSelected
-                        ? 100
-                        : 1,
+      const children =
+        getChildren(
+          normalisedParentId
+        );
 
-                    outline:
-                      isSelected
-                        ? "2px solid #6366f1"
-                        : "none",
 
-                    outlineOffset:
-                      isSelected
-                        ? "2px"
-                        : "0",
+      if (
+        !children.length
+      ) {
 
-                    boxShadow:
-                      isSelected
-                        ? "0 0 0 4px rgba(99, 102, 241, 0.18)"
-                        : "none",
+        return null;
 
-                    borderRadius:
-                      isSelected
-                        ? "4px"
-                        : "0",
-                  }}
-                >
-                  <CanvasElementRenderer
-                    Component={
-                      ChildComponent
-                    }
+      }
 
-                    element={
-                      child
-                    }
 
-                    binding={
-                      childBinding
-                    }
-                  />
-                </div>
-              );
-            }
-          )}
-        </React.Fragment>
+      const nextAncestry =
+        new Set(
+          ancestry
+        );
+
+
+      nextAncestry.add(
+        normalisedParentId
       );
-    }
 
-    // =================================================
-    // NORMAL CONTAINER
-    // =================================================
 
-    return children.map(
-      (child) => {
-        const childEntry =
-          componentRegistry[
-            child.type
-          ];
+      // =================================================
+      // CONTROL PANEL
+      // =================================================
 
-        if (
-          !childEntry?.component
-        ) {
-          console.warn(
-            "[CANVAS] Missing child component:",
-            child.type
+      if (
+        parent?.type ===
+        "ControlPanel"
+      ) {
+
+        const panelChildren =
+          children.filter(
+            child =>
+              [
+                "ControlButton",
+                "Select",
+                "Input",
+                "TextBox",
+              ].includes(
+                child.type
+              )
           );
 
-          return null;
-        }
-
-        const ChildComponent =
-          childEntry.component;
-
-        const childBinding =
-          bindings[
-            child.id
-          ] || {};
-
-        const childX =
-          Number.isFinite(
-            child.x
-          )
-            ? child.x
-            : 0;
-
-        const childY =
-          Number.isFinite(
-            child.y
-          )
-            ? child.y
-            : 0;
-
-        const childWidth =
-          Number.isFinite(
-            child.width
-          )
-            ? child.width
-            : 100;
-
-        const childHeight =
-          Number.isFinite(
-            child.height
-          )
-            ? child.height
-            : 40;
-
-        const isSelected =
-          selectedId ===
-          child.id;
 
         return (
-          <div
-            key={
-              child.id
+          <React.Fragment>
+
+            {
+              panelChildren.map(
+                child => {
+
+                  const childEntry =
+                    componentRegistry[
+                      child.type
+                    ];
+
+
+                  if (
+                    !childEntry?.component
+                  ) {
+
+                    console.warn(
+                      "[CANVAS] Missing ControlPanel child:",
+                      child.type
+                    );
+
+
+                    return null;
+
+                  }
+
+
+                  const ChildComponent =
+                    childEntry.component;
+
+
+                  const childBinding =
+                    bindings[
+                      child.id
+                    ] ||
+                    {};
+
+
+                  const isSelected =
+                    selectedId ===
+                    child.id;
+
+
+                  return (
+                    <div
+                      key={
+                        child.id
+                      }
+
+                      data-canvas-element-id={
+                        child.id
+                      }
+
+                      onClick={
+                        event => {
+
+                          event.stopPropagation();
+
+                          selectElement(
+                            child.id
+                          );
+
+                        }
+                      }
+
+                      style={{
+
+                        position:
+                          "relative",
+
+                        width:
+                          "100%",
+
+                        boxSizing:
+                          "border-box",
+
+                        zIndex:
+                          isSelected
+                            ? 100
+                            : 1,
+
+                        outline:
+                          isSelected
+                            ? "2px solid #6366f1"
+                            : "none",
+
+                        outlineOffset:
+                          isSelected
+                            ? "2px"
+                            : "0",
+
+                        boxShadow:
+                          isSelected
+                            ? "0 0 0 4px rgba(99, 102, 241, 0.18)"
+                            : "none",
+
+                        borderRadius:
+                          isSelected
+                            ? "4px"
+                            : "0",
+
+                      }}
+                    >
+
+                      <CanvasElementRenderer
+                        Component={
+                          ChildComponent
+                        }
+
+                        element={
+                          child
+                        }
+
+                        binding={
+                          childBinding
+                        }
+
+                      />
+
+                    </div>
+                  );
+
+                }
+              )
             }
 
-            data-canvas-element-id={
+          </React.Fragment>
+        );
+
+      }
+
+
+      // =================================================
+      // NORMAL CONTAINER
+      // =================================================
+
+      return children.map(
+        child => {
+
+          const childEntry =
+            componentRegistry[
+              child.type
+            ];
+
+
+          if (
+            !childEntry?.component
+          ) {
+
+            console.warn(
+              "[CANVAS] Missing child component:",
+              child.type
+            );
+
+
+            return null;
+
+          }
+
+
+          const ChildComponent =
+            childEntry.component;
+
+
+          const childBinding =
+            bindings[
               child.id
-            }
+            ] ||
+            {};
 
-            style={{
-              position:
-                "absolute",
 
-              left:
-                childX,
+          const childX =
+            Number.isFinite(
+              Number(
+                child.x
+              )
+            )
+              ? Number(
+                  child.x
+                )
+              : 0;
 
-              top:
-                childY,
 
-              width:
-                childWidth,
+          const childY =
+            Number.isFinite(
+              Number(
+                child.y
+              )
+            )
+              ? Number(
+                  child.y
+                )
+              : 0;
 
-              height:
-                childHeight,
 
-              boxSizing:
-                "border-box",
+          const childWidth =
+            Number.isFinite(
+              Number(
+                child.width
+              )
+            )
+              ? Number(
+                  child.width
+                )
+              : 100;
 
-              margin: 0,
-              padding: 0,
 
-              zIndex:
-                isSelected
-                  ? 100
-                  : 1,
+          const childHeight =
+            Number.isFinite(
+              Number(
+                child.height
+              )
+            )
+              ? Number(
+                  child.height
+                )
+              : 40;
 
-              overflow:
-                "visible",
 
-              ...getSelectionStyle(
-                isSelected
-              ),
-            }}
+          const isSelected =
+            selectedId ===
+            child.id;
 
-            onClick={(
-              event
-            ) => {
-              event.stopPropagation();
 
-              selectElement(
-                child.id
-              );
-            }}
-          >
+          return (
             <div
+              key={
+                child.id
+              }
+
+              data-canvas-element-id={
+                child.id
+              }
+
               style={{
+
                 position:
-                  "relative",
+                  "absolute",
+
+                left:
+                  childX,
+
+                top:
+                  childY,
 
                 width:
-                  "100%",
+                  childWidth,
 
                 height:
-                  "100%",
+                  childHeight,
 
                 boxSizing:
                   "border-box",
+
+                margin:
+                  0,
+
+                padding:
+                  0,
+
+                zIndex:
+                  isSelected
+                    ? 100
+                    : 1,
+
+                overflow:
+                  "visible",
+
+                ...getSelectionStyle(
+                  isSelected
+                ),
+
               }}
+
+              onClick={
+                event => {
+
+                  event.stopPropagation();
+
+                  selectElement(
+                    child.id
+                  );
+
+                }
+              }
+
             >
-              <CanvasElementRenderer
-                Component={
-                  ChildComponent
-                }
 
-                element={
-                  child
-                }
+              <div
+                style={{
 
-                binding={
-                  childBinding
-                }
-              />
+                  position:
+                    "relative",
+
+                  width:
+                    "100%",
+
+                  height:
+                    "100%",
+
+                  boxSizing:
+                    "border-box",
+
+                }}
+              >
+
+                <CanvasElementRenderer
+                  Component={
+                    ChildComponent
+                  }
+
+                  element={
+                    child
+                  }
+
+                  binding={
+                    childBinding
+                  }
+
+                />
+
+              </div>
+
+
+              {
+                renderChildren(
+                  child.id,
+                  nextAncestry
+                )
+              }
+
             </div>
+          );
 
-            {renderChildren(
-              child.id
-            )}
-          </div>
-        );
-      }
-    );
-  };
+        }
+      );
+
+    };
+
 
   // ===================================================
   // TOP LEVEL ELEMENT RENDERER
   // ===================================================
 
   const renderTopLevelElement =
-    (el) => {
+    rawElement => {
+
+      const el =
+        clampTopLevelElement(
+          rawElement
+        );
+
 
       console.log(
-      "🔥 TOP LEVEL ELEMENT BEFORE RESOLVE",
-      {
-        id: el.id,
-        type: el.type,
-        props: el.props,
-        parentId: el.parentId,
-      }
-    );
+        "🔥 TOP LEVEL ELEMENT BEFORE RESOLVE",
+        {
+
+          id:
+            el.id,
+
+          type:
+            el.type,
+
+          props:
+            el.props,
+
+          parentId:
+            el.parentId,
+
+          x:
+            el.x,
+
+          y:
+            el.y,
+
+          width:
+            el.width,
+
+          height:
+            el.height,
+
+        }
+      );
+
+
       const entry =
         componentRegistry[
           el.type
         ];
 
+
       if (
         !entry?.component
       ) {
+
         console.warn(
           "[CANVAS] Missing component:",
           el.type
         );
 
+
         return null;
+
       }
+
 
       const Comp =
         entry.component;
 
+
       const binding =
         bindings[
           el.id
-        ] || {};
+        ] ||
+        {};
 
-      const width =
-        Number.isFinite(
-          el.width
-        )
-          ? el.width
-          : 300;
-
-      const height =
-        Number.isFinite(
-          el.height
-        )
-          ? el.height
-          : 150;
-
-      const x =
-        Number.isFinite(
-          el.x
-        )
-          ? el.x
-          : 0;
-
-      const y =
-        Number.isFinite(
-          el.y
-        )
-          ? el.y
-          : 0;
 
       const isControlPanel =
         el.type ===
         "ControlPanel";
 
+
       const controlPanelChildren =
         isControlPanel
           ? renderChildren(
-              el.id
+              el.id,
+              new Set()
             )
           : null;
+
 
       return (
         <Rnd
@@ -1718,16 +2791,28 @@ export default function Canvas({
           bounds="parent"
 
           size={{
-            width,
-            height,
+
+            width:
+              el.width,
+
+            height:
+              el.height,
+
           }}
 
           position={{
-            x,
-            y,
+
+            x:
+              el.x,
+
+            y:
+              el.y,
+
           }}
 
-          scale={scale}
+          scale={
+            scale
+          }
 
           enableResizing={
             isBuilderEditable
@@ -1738,118 +2823,209 @@ export default function Canvas({
           }
 
           style={{
+
             zIndex:
               selectedId ===
               el.id
+
                 ? 100
+
                 : 1,
 
             ...getSelectionStyle(
               selectedId ===
                 el.id
             ),
+
           }}
 
           data-canvas-element-id={
             el.id
           }
 
-          onClick={(
-            event
-          ) => {
-            event.stopPropagation();
+          onClick={
+            event => {
 
-            selectElement(
-              el.id
-            );
-          }}
+              event.stopPropagation();
 
-          onDragStop={(
-            event,
-            data
-          ) => {
-            const newX =
-              Math.round(
+              selectElement(
+                el.id
+              );
+
+            }
+          }
+
+          onDragStop={
+            (
+              event,
+              data
+            ) => {
+
+              const newWidth =
+                el.width;
+
+
+              const newHeight =
+                el.height;
+
+
+              const maxX =
                 Math.max(
                   0,
-                  data.x
-                )
-              );
+                  canvasSize.width -
+                    newWidth
+                );
 
-            const newY =
-              Math.round(
+
+              const maxY =
                 Math.max(
                   0,
-                  data.y
-                )
+                  canvasSize.height -
+                    newHeight
+                );
+
+
+              const newX =
+                Math.round(
+                  Math.min(
+                    maxX,
+                    Math.max(
+                      0,
+                      data.x
+                    )
+                  )
+                );
+
+
+              const newY =
+                Math.round(
+                  Math.min(
+                    maxY,
+                    Math.max(
+                      0,
+                      data.y
+                    )
+                  )
+                );
+
+
+              updateElement(
+                el.id,
+                {
+
+                  x:
+                    newX,
+
+                  y:
+                    newY,
+
+                }
               );
 
-            updateElement(
-              el.id,
-              {
-                x: newX,
-                y: newY,
-              }
-            );
-          }}
+            }
+          }
 
-          onResizeStop={(
-            event,
-            direction,
-            ref,
-            delta,
-            position
-          ) => {
-            const newWidth =
-              Math.round(
-                parseFloat(
-                  ref.style.width
-                )
+          onResizeStop={
+            (
+              event,
+              direction,
+              ref,
+              delta,
+              position
+            ) => {
+
+              const newWidth =
+                Math.round(
+                  parseFloat(
+                    ref.style.width
+                  )
+                );
+
+
+              const newHeight =
+                Math.round(
+                  parseFloat(
+                    ref.style.height
+                  )
+                );
+
+
+              const maxX =
+                Math.max(
+                  0,
+                  canvasSize.width -
+                    newWidth
+                );
+
+
+              const maxY =
+                Math.max(
+                  0,
+                  canvasSize.height -
+                    newHeight
+                );
+
+
+              const newX =
+                Math.round(
+                  Math.min(
+                    maxX,
+                    Math.max(
+                      0,
+                      position.x
+                    )
+                  )
+                );
+
+
+              const newY =
+                Math.round(
+                  Math.min(
+                    maxY,
+                    Math.max(
+                      0,
+                      position.y
+                    )
+                  )
+                );
+
+
+              updateElement(
+                el.id,
+                {
+
+                  width:
+                    newWidth,
+
+                  height:
+                    newHeight,
+
+                  x:
+                    newX,
+
+                  y:
+                    newY,
+
+                }
               );
 
-            const newHeight =
-              Math.round(
-                parseFloat(
-                  ref.style.height
-                )
-              );
+            }
+          }
 
-            const newX =
-              Math.round(
-                position.x
-              );
-
-            const newY =
-              Math.round(
-                position.y
-              );
-
-            updateElement(
-              el.id,
-              {
-                width:
-                  newWidth,
-
-                height:
-                  newHeight,
-
-                x:
-                  newX,
-
-                y:
-                  newY,
-              }
-            );
-          }}
         >
+
           <div
             data-canvas-element-id={
               el.id
             }
 
-            className="w-full h-full"
+            className="
+              w-full
+              h-full
+            "
 
             style={{
+
               position:
                 "relative",
 
@@ -1866,54 +3042,137 @@ export default function Canvas({
                 "visible",
 
               ...canvasBackgroundStyle,
+
             }}
           >
-            {/* CONTROL PANEL */}
 
-            {isControlPanel ? (
-              <CanvasElementRenderer
-                Component={
-                  Comp
-                }
+            {/* =========================================
+                CONTROL PANEL
+            ========================================= */}
 
-                element={
-                  el
-                }
+            {
+              isControlPanel
 
-                binding={
-                  binding
-                }
+                ? (
 
-                children={
-                  controlPanelChildren
-                }
-              />
-            ) : (
-              <CanvasElementRenderer
-                Component={
-                  Comp
-                }
+                    <CanvasElementRenderer
+                      Component={
+                        Comp
+                      }
 
-                element={
-                  el
-                }
+                      element={
+                        el
+                      }
 
-                binding={
-                  binding
-                }
-              />
-            )}
+                      binding={
+                        binding
+                      }
 
-            {/* NORMAL CONTAINER CHILDREN */}
+                      children={
+                        controlPanelChildren
+                      }
 
-            {!isControlPanel &&
+                    />
+
+                  )
+
+                : (
+
+                    <CanvasElementRenderer
+                      Component={
+                        Comp
+                      }
+
+                      element={
+                        el
+                      }
+
+                      binding={
+                        binding
+                      }
+
+                    />
+
+                  )
+            }
+
+
+            {/* =========================================
+                NORMAL CONTAINER CHILDREN
+            ========================================= */}
+
+            {
+              !isControlPanel &&
               renderChildren(
-                el.id
-              )}
+                el.id,
+                new Set()
+              )
+            }
+
           </div>
+
         </Rnd>
       );
+
     };
+
+
+  // ===================================================
+  // ROOT ELEMENTS
+  // ===================================================
+  //
+  // Only elements with no parent OR with a missing parent
+  // are mounted as top-level Rnd instances.
+  //
+  // Real children are mounted by renderChildren().
+  //
+  // ===================================================
+
+  const topLevelElements =
+    useMemo(
+      () => {
+
+        return visibleElements.filter(
+          element => {
+
+            const parentId =
+              normaliseElementId(
+                element.parentId
+              );
+
+
+            if (
+              !parentId
+            ) {
+
+              return true;
+
+            }
+
+
+            if (
+              !elementMap.has(
+                parentId
+              )
+            ) {
+
+              return true;
+
+            }
+
+
+            return false;
+
+          }
+        );
+
+      },
+      [
+        visibleElements,
+        elementMap,
+      ]
+    );
+
 
   // ===================================================
   // LAYERS TREE
@@ -1922,38 +3181,87 @@ export default function Canvas({
   const renderLayerTree =
     (
       parentId = null,
-      depth = 0
+      depth = 0,
+      ancestry = new Set()
     ) => {
+
+      const normalisedParentId =
+        normaliseElementId(
+          parentId
+        );
+
+
+      if (
+        ancestry.has(
+          normalisedParentId
+        )
+      ) {
+
+        console.warn(
+          "[CANVAS] Layer tree circular reference detected",
+          {
+            parentId:
+              normalisedParentId,
+          }
+        );
+
+
+        return null;
+
+      }
+
+
       const children =
         visibleElements.filter(
-          (el) => {
+          el => {
+
             const elementParent =
-              el.parentId ||
-              null;
+              normaliseElementId(
+                el.parentId
+              );
+
 
             return (
               elementParent ===
-              parentId
+              normalisedParentId
             );
+
           }
         );
+
 
       if (
         !children.length
       ) {
+
         return null;
+
       }
 
+
+      const nextAncestry =
+        new Set(
+          ancestry
+        );
+
+
+      nextAncestry.add(
+        normalisedParentId
+      );
+
+
       return children.map(
-        (el) => {
+        el => {
+
           const hasChildren =
             visibleElements.some(
-              (child) =>
-                (
-                  child.parentId ||
-                  null
-                ) === el.id
+              child =>
+                normaliseElementId(
+                  child.parentId
+                ) ===
+                el.id
             );
+
 
           return (
             <React.Fragment
@@ -1961,14 +3269,16 @@ export default function Canvas({
                 el.id
               }
             >
+
               <div
-                onClick={() =>
-                  selectElement(
-                    el.id
-                  )
+                onClick={
+                  () =>
+                    selectElement(
+                      el.id
+                    )
                 }
 
-                className={`
+                className="
                   px-2
                   py-1
                   rounded
@@ -1976,87 +3286,145 @@ export default function Canvas({
                   flex
                   items-center
                   gap-1
-                  ${
-                    selectedId ===
-                    el.id
-                      ? "bg-accent/20"
-                      : "hover:bg-accent/10"
-                  }
-                `}
+                  hover:bg-accent/10
+                "
 
                 style={{
+
                   paddingLeft:
                     8 +
                     depth *
                       16,
+
+                  background:
+                    selectedId ===
+                    el.id
+
+                      ? "rgba(99, 102, 241, 0.12)"
+
+                      : undefined,
+
                 }}
               >
-                {depth > 0 && (
-                  <span
-                    className="opacity-60"
-                  >
-                    ↳
-                  </span>
-                )}
+
+                {
+                  depth > 0 && (
+
+                    <span
+                      className="opacity-60"
+                    >
+
+                      ↳
+
+                    </span>
+
+                  )
+                }
+
 
                 <span>
-                  {el.type}
+
+                  {
+                    el.type
+                  }
+
                 </span>
+
               </div>
 
-              {hasChildren &&
+
+              {
+                hasChildren &&
                 renderLayerTree(
                   el.id,
-                  depth + 1
-                )}
+                  depth + 1,
+                  nextAncestry
+                )
+              }
+
             </React.Fragment>
           );
+
         }
       );
+
     };
+
 
   // ===================================================
   // RENDER
   // ===================================================
 
   return (
+
     <div
       style={{
-        width: "100%",
-        height: "100%",
 
-        minWidth: 0,
-        minHeight: 0,
+        width:
+          "100%",
 
-        display: "flex",
-        flexDirection: "row",
+        height:
+          "100%",
 
-        overflow: "hidden",
+        minWidth:
+          0,
 
-        boxSizing: "border-box",
+        minHeight:
+          0,
+
+        display:
+          "flex",
+
+        flexDirection:
+          "row",
+
+        overflow:
+          "hidden",
+
+        boxSizing:
+          "border-box",
+
       }}
     >
+
       {/* =================================================
           LEFT ELEMENTS / LAYERS SIDEBAR
       ================================================= */}
 
       <div
-        className="bg-panel border-r border-border p-3"
+        className="
+          bg-panel
+          border-r
+          border-border
+          p-3
+        "
+
         style={{
-          width: 250,
 
-          flexShrink: 0,
+          width:
+            250,
 
-          minWidth: 0,
-          minHeight: 0,
+          flexShrink:
+            0,
 
-          overflowY: "auto",
-          overflowX: "hidden",
+          minWidth:
+            0,
+
+          minHeight:
+            0,
+
+          overflowY:
+            "auto",
+
+          overflowX:
+            "hidden",
 
           boxSizing:
             "border-box",
+
         }}
       >
+
         <Tabs
           activeTab={
             activeTab
@@ -2072,12 +3440,18 @@ export default function Canvas({
           ]}
         />
 
-        {/* ELEMENTS */}
 
-        {activeTab ===
-          "Elements" &&
+        {/* =================================================
+            ELEMENTS
+        ================================================= */}
+
+        {
+          activeTab ===
+            "Elements" &&
+
           availableElements.map(
-            (meta) => (
+            meta => (
+
               <div
                 key={
                   meta.name
@@ -2087,38 +3461,81 @@ export default function Canvas({
                   isBuilderEditable
                 }
 
-                onDragStart={(event) => {
-                  console.log("🔥 DRAG START FIRED", meta.name);
+                onDragStart={
+                  event => {
 
-                  event.dataTransfer.effectAllowed = "copy";
+                    console.log(
+                      "🔥 DRAG START FIRED",
+                      meta.name
+                    );
 
-                  event.dataTransfer.setData(
-                    "application/json",
-                    JSON.stringify(meta)
-                  );
 
-                  console.log(
-                    "🔥 DRAG DATA SET",
-                    event.dataTransfer.getData("application/json")
-                  );
-                }}
+                    event.dataTransfer.effectAllowed =
+                      "copy";
 
-                className="px-3 py-2 text-sm rounded hover:bg-accent/10 cursor-grab"
+
+                    event.dataTransfer.setData(
+                      "application/json",
+                      JSON.stringify(
+                        meta
+                      )
+                    );
+
+
+                    console.log(
+                      "🔥 DRAG DATA SET",
+                      event.dataTransfer.getData(
+                        "application/json"
+                      )
+                    );
+
+                  }
+                }
+
+                className="
+                  px-3
+                  py-2
+                  text-sm
+                  rounded
+                  hover:bg-accent/10
+                  cursor-grab
+                "
               >
-                {meta.icon}{" "}
-                {meta.name}
+
+                {
+                  meta.icon
+                }{" "}
+
+                {
+                  meta.name
+                }
+
               </div>
+
             )
-          )}
+          )
+        }
 
-        {/* LAYERS */}
 
-        {activeTab ===
-          "Layers" && (
-          <div>
-            {renderLayerTree()}
-          </div>
-        )}
+        {/* =================================================
+            LAYERS
+        ================================================= */}
+
+        {
+          activeTab ===
+            "Layers" && (
+
+            <div>
+
+              {
+                renderLayerTree()
+              }
+
+            </div>
+
+          )
+        }
+
       </div>
 
 
@@ -2128,29 +3545,46 @@ export default function Canvas({
 
       <div
         style={{
-          flex: 1,
 
-          minWidth: 0,
-          minHeight: 0,
+          flex:
+            1,
 
-          display: "flex",
-          flexDirection: "column",
+          minWidth:
+            0,
 
-          overflow: "hidden",
+          minHeight:
+            0,
 
-          position: "relative",
+          display:
+            "flex",
+
+          flexDirection:
+            "column",
+
+          overflow:
+            "hidden",
+
+          position:
+            "relative",
+
         }}
       >
+
         {/* =================================================
             CANVAS VIEWPORT
         ================================================= */}
 
         <div
           style={{
-            flex: 1,
 
-            minWidth: 0,
-            minHeight: 0,
+            flex:
+              1,
+
+            minWidth:
+              0,
+
+            minHeight:
+              0,
 
             position:
               "relative",
@@ -2163,49 +3597,82 @@ export default function Canvas({
 
             background:
               "#0a0a0a",
+
           }}
         >
+
           {/* =============================================
-              DESIGN CANVAS / STAGE
+              CANVAS STAGE
           ============================================= */}
 
           <div
-              ref={canvasRef}
+            ref={
+              canvasRef
+            }
 
-  onDragEnter={(event) => {
-    console.log("🔥 CANVAS DRAG ENTER");
-  }}
+            onDragEnter={
+              event => {
 
-      onDragOver={(event) => {
-        if (!isBuilderEditable) {
-          console.log(
-            "❌ DRAG OVER - builder not editable"
-          );
-          return;
-        }
+                console.log(
+                  "🔥 CANVAS DRAG ENTER"
+                );
 
-        console.log("🔥 CANVAS DRAG OVER");
+              }
+            }
 
-        event.preventDefault();
+            onDragOver={
+              event => {
 
-        event.dataTransfer.dropEffect = "copy";
-      }}
+                if (
+                  !isBuilderEditable
+                ) {
 
-      onDrop={(event) => {
-        console.log("🔥🔥🔥 CANVAS DROP FIRED");
-        handleDrop(event);
-      }}
+                  console.log(
+                    "❌ DRAG OVER - builder not editable"
+                  );
+
+
+                  return;
+
+                }
+
+
+                console.log(
+                  "🔥 CANVAS DRAG OVER"
+                );
+
+
+                event.preventDefault();
+
+
+                event.dataTransfer.dropEffect =
+                  "copy";
+
+              }
+            }
+
+            onDrop={
+              event => {
+
+                console.log(
+                  "🔥🔥🔥 CANVAS DROP FIRED"
+                );
+
+
+                handleDrop(
+                  event
+                );
+
+              }
+            }
 
             style={{
+
               width:
-                DEVICE_SIZES[
-                  device
-                ].width,
+                canvasSize.width,
 
               height:
-                DEVICE_SIZES[
-                  device
-                ].height,
+                canvasSize.height,
 
               transform:
                 `scale(${scale})`,
@@ -2223,21 +3690,22 @@ export default function Canvas({
                 "border-box",
 
               ...canvasBackgroundStyle,
+
             }}
           >
+
             {/* =========================================
                 TOP LEVEL ELEMENTS ONLY
             ========================================= */}
 
-            {visibleElements
-              .filter(
-                (el) =>
-                  !el.parentId
-              )
-              .map(
+            {
+              topLevelElements.map(
                 renderTopLevelElement
-              )}
+              )
+            }
+
           </div>
+
         </div>
 
 
@@ -2245,62 +3713,74 @@ export default function Canvas({
             BOTTOM INSPECTOR / SPLIT VIEW
         ================================================= */}
 
-        {isSplitView && (
-          <div
-            style={{
-              flexShrink: 0,
+        {
+          isSplitView && (
 
-              minWidth: 0,
+            <div
+              style={{
 
-              maxWidth:
-                "100%",
+                flexShrink:
+                  0,
 
-              overflow:
-                "hidden",
+                minWidth:
+                  0,
 
-              borderTop:
-                "1px solid #2a2a2a",
-            }}
-          >
-            <InspectorContent
-              layout="docked"
+                maxWidth:
+                  "100%",
 
-              selectedId={
-                selectedId
-              }
+                overflow:
+                  "hidden",
 
-              elements={
-                visibleElements
-              }
+                borderTop:
+                  "1px solid #2a2a2a",
 
-              updateElement={
-                updateElement
-              }
+              }}
+            >
 
-              selectedMeta={
-                selectedMeta
-              }
+              <InspectorContent
+                layout="docked"
 
-              toggleDock={
-                toggleDock
-              }
+                selectedId={
+                  selectedId
+                }
 
-              toggleOpen={
-                toggleInspector
-              }
+                elements={
+                  visibleElements
+                }
 
-              pinInspector={
-                pinInspector[
-                  currentRoleKey
-                ]
-              }
+                updateElement={
+                  updateElement
+                }
 
-              togglePin={
-                togglePin
-              }
-            />
-          </div>
-        )}
+                selectedMeta={
+                  selectedMeta
+                }
+
+                toggleDock={
+                  toggleDock
+                }
+
+                toggleOpen={
+                  toggleInspector
+                }
+
+                pinInspector={
+                  pinInspector[
+                    currentRoleKey
+                  ]
+                }
+
+                togglePin={
+                  togglePin
+                }
+
+              />
+
+            </div>
+
+          )
+        }
+
       </div>
 
 
@@ -2308,16 +3788,23 @@ export default function Canvas({
           RIGHT INSPECTOR
       ================================================= */}
 
-      {!isSplitView &&
+      {
+        !isSplitView &&
         isInspectorVisible &&
         effectiveLayout ===
           "right" && (
+
           <div
             style={{
-              flexShrink: 0,
 
-              minWidth: 0,
-              minHeight: 0,
+              flexShrink:
+                0,
+
+              minWidth:
+                0,
+
+              minHeight:
+                0,
 
               maxWidth:
                 "min(360px, 35vw)",
@@ -2330,8 +3817,10 @@ export default function Canvas({
 
               boxSizing:
                 "border-box",
+
             }}
           >
+
             <InspectorContent
               layout="right"
 
@@ -2368,19 +3857,25 @@ export default function Canvas({
               togglePin={
                 togglePin
               }
+
             />
+
           </div>
-        )}
+
+        )
+      }
 
 
       {/* =================================================
           FLOATING INSPECTOR
       ================================================= */}
 
-      {!isSplitView &&
+      {
+        !isSplitView &&
         isInspectorVisible &&
         effectiveLayout ===
           "floating" && (
+
           <InspectorContent
             layout="floating"
 
@@ -2429,8 +3924,14 @@ export default function Canvas({
             togglePin={
               togglePin
             }
+
           />
-        )}
+
+        )
+      }
+
     </div>
+
   );
+
 }

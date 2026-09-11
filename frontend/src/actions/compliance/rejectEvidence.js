@@ -1,219 +1,388 @@
-export default async function rejectEvidence(ctx, params = {}) {
-  const evidenceId = params?.evidenceId;
+import api from "../../services/api";
 
-  if (!evidenceId) {
-    console.warn(
-      "[compliance.rejectEvidence] Missing evidence ID"
-    );
+export default async function rejectEvidence(
+  ctx,
+  params = {}
+) {
+  try {
 
-    return {
-      ok: false,
-      error: "MISSING_EVIDENCE_ID",
-    };
-  }
+    // ===================================================
+    // IDENTIFIERS
+    // ===================================================
 
-  const evidenceList =
-    ctx?.get?.("compliance.evidence") || [];
+    const evidenceId =
+      params?.evidenceId ||
+      params?.id ||
+      null;
 
-  if (!Array.isArray(evidenceList)) {
-    console.warn(
-      "[compliance.rejectEvidence] Evidence state is not an array"
-    );
+    const projectId =
+      params?.projectId ||
+      ctx?.projectId ||
+      ctx?.get?.("project.id") ||
+      null;
 
-    return {
-      ok: false,
-      error: "INVALID_EVIDENCE_STATE",
-    };
-  }
 
-  const evidence = evidenceList.find(
-    (item) =>
-      String(item?.id) === String(evidenceId)
-  );
-
-  if (!evidence) {
-    console.warn(
-      "[compliance.rejectEvidence] Evidence not found",
+    console.log(
+      "[compliance.rejectEvidence] Rejecting evidence",
       {
+        projectId,
         evidenceId,
       }
     );
 
-    return {
-      ok: false,
-      error: "EVIDENCE_NOT_FOUND",
-    };
-  }
 
-  if (
-    evidence.status !==
-    "review_required"
-  ) {
-    console.warn(
-      "[compliance.rejectEvidence] Evidence is not awaiting review",
-      {
-        evidenceId,
-        status: evidence.status,
-      }
-    );
+    // ===================================================
+    // VALIDATION
+    // ===================================================
 
-    return {
-      ok: false,
-      error: "EVIDENCE_NOT_REVIEWABLE",
-      status: evidence.status,
-    };
-  }
-
-  const reviewedAt =
-    new Date().toISOString();
-
-
-  // =====================================================
-  // UPDATE EVIDENCE
-  // =====================================================
-
-  const updatedEvidence =
-    evidenceList.map((item) => {
-
-      if (
-        String(item?.id) !==
-        String(evidenceId)
-      ) {
-        return item;
-      }
+    if (!projectId) {
 
       return {
-        ...item,
-
-        status:
-          "rejected",
-
-        reviewDecision:
-          "rejected",
-
-        reviewedAt,
+        ok: false,
+        error: "projectId is required",
       };
-    });
 
-  ctx.set(
-    "compliance.evidence",
-    updatedEvidence
-  );
+    }
 
 
-  // =====================================================
-  // UPDATE CONTROL
-  // =====================================================
+    if (!evidenceId) {
 
-  const controlId =
-    evidence?.controlId;
+      return {
+        ok: false,
+        error: "evidenceId is required",
+      };
 
-  const controls =
-    ctx?.get?.(
-      "compliance.controls"
-    ) || [];
+    }
 
-  let updatedControls =
-    controls;
 
-  if (
-    controlId &&
-    Array.isArray(controls)
-  ) {
+    // ===================================================
+    // RUNTIME EVIDENCE
+    // ===================================================
 
-    updatedControls =
-      controls.map(
-        (control) => {
+    const currentEvidence =
+      Array.isArray(
+        ctx?.get?.("compliance.evidence")
+      )
+        ? ctx.get(
+            "compliance.evidence"
+          )
+        : [];
 
-          if (
-            String(control?.id) !==
-            String(controlId)
-          ) {
-            return control;
-          }
 
-          return {
-            ...control,
+    const evidence =
+      currentEvidence.find(
+        item =>
+          (
+            item?.evidenceId ||
+            item?.id
+          ) === evidenceId
+      );
 
-            status:
-              "remediation",
 
-            evidenceStatus:
-              "rejected",
+    if (!evidence) {
 
-            evidenceVerified:
-              false,
+      return {
+        ok: false,
+        error:
+          "Evidence not found in runtime state",
+      };
 
-            evidenceVerifiedAt:
-              null,
+    }
 
-            lastEvidenceId:
-              evidenceId,
-          };
+
+    // ===================================================
+    // VALIDATE REVIEW STATE
+    // ===================================================
+
+    if (
+      evidence.status !==
+      "review_required"
+    ) {
+
+      return {
+        ok: false,
+        error:
+          "Evidence is not awaiting review",
+      };
+
+    }
+
+
+    // ===================================================
+    // API
+    // ===================================================
+
+    const {
+      data,
+    } =
+      await api.post(
+        "/compliance/evidence/reject",
+        {
+          projectId,
+          evidenceId,
         }
       );
 
-    ctx.set(
-      "compliance.controls",
-      updatedControls
+
+    if (
+      !data?.evidence
+    ) {
+
+      return {
+        ok: false,
+        error:
+          "Rejected evidence was not returned by the API",
+      };
+
+    }
+
+
+    const rejectedEvidence =
+      data.evidence;
+
+
+    // ===================================================
+    // UPDATE EVIDENCE RUNTIME STATE
+    // ===================================================
+
+    const returnedEvidenceId =
+      rejectedEvidence?.evidenceId ||
+      rejectedEvidence?.id ||
+      evidenceId;
+
+
+    const updatedEvidence =
+      currentEvidence.map(
+        item => {
+
+          const itemId =
+            item?.evidenceId ||
+            item?.id;
+
+
+          if (
+            itemId !==
+            evidenceId
+          ) {
+
+            return item;
+
+          }
+
+
+          return {
+
+            ...item,
+
+            ...rejectedEvidence,
+
+            evidenceId:
+              returnedEvidenceId,
+
+            status:
+              rejectedEvidence?.status ||
+              "rejected",
+
+            reviewDecision:
+              rejectedEvidence?.reviewDecision ||
+              "rejected",
+
+          };
+
+        }
+      );
+
+
+    ctx?.set?.(
+      "compliance.evidence",
+      updatedEvidence
     );
+
+
+    // ===================================================
+    // UPDATE CONTROL RUNTIME STATE
+    // ===================================================
+    //
+    // Keep runtime aligned with the authoritative API
+    // response where possible.
+    //
+    // ===================================================
+
+    const currentControls =
+      Array.isArray(
+        ctx?.get?.("compliance.controls")
+      )
+        ? ctx.get(
+            "compliance.controls"
+          )
+        : [];
+
+
+    const controlId =
+      rejectedEvidence?.controlId ||
+      evidence?.controlId ||
+      null;
+
+
+    if (
+      controlId
+    ) {
+
+      const updatedControls =
+        currentControls.map(
+          control => {
+
+            const currentControlId =
+              control?.controlId ||
+              control?.id;
+
+
+            if (
+              String(
+                currentControlId
+              ) !==
+              String(
+                controlId
+              )
+            ) {
+
+              return control;
+
+            }
+
+
+            return {
+
+              ...control,
+
+              status:
+                "remediation",
+
+              evidenceStatus:
+                "rejected",
+
+              evidenceVerified:
+                false,
+
+              evidenceVerifiedAt:
+                null,
+
+              lastEvidenceId:
+                returnedEvidenceId,
+
+              lastReviewedAt:
+                rejectedEvidence?.reviewedAt ||
+                new Date(),
+
+            };
+
+          }
+        );
+
+
+      ctx?.set?.(
+        "compliance.controls",
+        updatedControls
+      );
+
+    }
+
+
+    console.log(
+      "[compliance.rejectEvidence] Runtime state updated",
+      {
+        projectId,
+        evidenceId:
+          returnedEvidenceId,
+        controlId,
+        status:
+          rejectedEvidence?.status ||
+          "rejected",
+      }
+    );
+
+
+    // ===================================================
+    // DOMAIN EVENT
+    // ===================================================
+
+    console.log(
+      "[compliance.rejectEvidence] EMITTING DOMAIN EVENT",
+      {
+        event:
+          "compliance.evidenceRejected",
+
+        evidenceId:
+          returnedEvidenceId,
+
+      }
+    );
+
+
+    ctx?.emit?.(
+      "compliance.evidenceRejected",
+      {
+        projectId,
+
+        evidenceId:
+          returnedEvidenceId,
+
+        controlId,
+
+        evidence:
+          rejectedEvidence,
+      }
+    );
+
+
+    // ===================================================
+    // RESULT
+    // ===================================================
+
+    return {
+
+      ok:
+        true,
+
+      result: {
+
+        projectId,
+
+        evidenceId:
+          returnedEvidenceId,
+
+        controlId,
+
+        evidence:
+          rejectedEvidence,
+
+      },
+
+    };
+
+  }
+  catch (
+    err
+  ) {
+
+    console.error(
+      "[compliance.rejectEvidence]",
+      err
+    );
+
+
+    return {
+
+      ok:
+        false,
+
+      error:
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to reject evidence",
+
+    };
+
   }
 
-
-  // =====================================================
-  // GET UPDATED EVIDENCE
-  // =====================================================
-
-  const rejectedEvidence =
-    updatedEvidence.find(
-      (item) =>
-        String(item?.id) ===
-        String(evidenceId)
-    );
-
-
-  // =====================================================
-  // DOMAIN EVENT
-  // =====================================================
-
-  console.log(
-    "[compliance.rejectEvidence] Evidence rejected",
-    {
-      evidenceId,
-      controlId,
-    }
-  );
-
-  ctx.emit?.(
-    "compliance.evidenceRejected",
-    {
-      evidenceId,
-
-      controlId,
-
-      evidence:
-        rejectedEvidence,
-    }
-  );
-
-
-  // =====================================================
-  // RESULT
-  // =====================================================
-
-  return {
-    ok: true,
-
-    evidenceId,
-
-    controlId,
-
-    status:
-      "rejected",
-
-    reviewDecision:
-      "rejected",
-
-    reviewedAt,
-  };
 }

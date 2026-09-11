@@ -1,5 +1,3 @@
-// src/context/ProjectContext.js
-
 import React, {
   createContext,
   useState,
@@ -39,24 +37,45 @@ const API_URL =
 export const DEFAULT_BACKGROUND_CONFIGS = {
 
   desktop: {
-    kind: "color",
-    color: "#020617",
-    imageUrl: "",
-    size: "cover",
+    kind:
+      "color",
+
+    color:
+      "#020617",
+
+    imageUrl:
+      "",
+
+    size:
+      "cover",
   },
 
   tablet: {
-    kind: "color",
-    color: "#020617",
-    imageUrl: "",
-    size: "cover",
+    kind:
+      "color",
+
+    color:
+      "#020617",
+
+    imageUrl:
+      "",
+
+    size:
+      "cover",
   },
 
   mobile: {
-    kind: "color",
-    color: "#020617",
-    imageUrl: "",
-    size: "cover",
+    kind:
+      "color",
+
+    color:
+      "#020617",
+
+    imageUrl:
+      "",
+
+    size:
+      "cover",
   },
 
 };
@@ -68,15 +87,20 @@ export const DEFAULT_BACKGROUND_CONFIGS = {
 
 export const DEFAULT_INTERVIEW_CONFIG = {
 
-  activeQuestionSetId: null,
+  activeQuestionSetId:
+    null,
 
-  questionSets: [],
+  questionSets:
+    [],
 
-  recordingEnabled: true,
+  recordingEnabled:
+    true,
 
-  transcriptionEnabled: true,
+  transcriptionEnabled:
+    true,
 
-  evaluationEnabled: true,
+  evaluationEnabled:
+    true,
 
 };
 
@@ -161,7 +185,8 @@ export function normaliseInterviewConfig(
 
   const safeConfig =
     config &&
-    typeof config === "object"
+    typeof config ===
+      "object"
 
       ? config
 
@@ -189,10 +214,6 @@ export function normaliseInterviewConfig(
     null;
 
 
-  // ---------------------------------------------------
-  // Validate active question set
-  // ---------------------------------------------------
-
   const activeExists =
     activeQuestionSetId &&
     questionSets.some(
@@ -206,7 +227,9 @@ export function normaliseInterviewConfig(
     );
 
 
-  if (!activeExists) {
+  if (
+    !activeExists
+  ) {
 
     activeQuestionSetId =
       questionSets[0]?.id ||
@@ -214,11 +237,6 @@ export function normaliseInterviewConfig(
 
   }
 
-
-  // ---------------------------------------------------
-  // Automatically select first question set when
-  // question sets exist but no active set is defined.
-  // ---------------------------------------------------
 
   if (
     !activeQuestionSetId &&
@@ -286,10 +304,6 @@ function getProjectName(
 
 // =====================================================
 // HYDRATE PROJECT
-// =====================================================
-//
-// Every project entering ProjectContext is normalised.
-//
 // =====================================================
 
 function hydrateProject(
@@ -376,7 +390,7 @@ export function ProjectProvider({
 
   const [
     projectSchema,
-    setProjectSchema,
+    setProjectSchemaState,
   ] =
     useState(
       makeEmptyProjectSchema()
@@ -385,7 +399,7 @@ export function ProjectProvider({
 
   const [
     viewMode,
-    setViewMode,
+    setViewModeState,
   ] =
     useState(
       "preview"
@@ -394,7 +408,7 @@ export function ProjectProvider({
 
   const [
     projectType,
-    setProjectType,
+    setProjectTypeState,
   ] =
     useState(
       "single"
@@ -412,7 +426,7 @@ export function ProjectProvider({
 
   const [
     backgroundConfigs,
-    setBackgroundConfigs,
+    setBackgroundConfigsState,
   ] =
     useState(
       DEFAULT_BACKGROUND_CONFIGS
@@ -444,14 +458,12 @@ export function ProjectProvider({
 
 
   /*
-  =====================================================
-  activeProject === null
-      → NEW UNSAVED PROJECT
-
-  activeProject !== null
-      → EXISTING SAVED PROJECT
-  =====================================================
-  */
+   * activeProject === null
+   *     → new / unsaved project
+   *
+   * activeProject !== null
+   *     → existing saved project
+   */
 
   const [
     activeProject,
@@ -468,14 +480,143 @@ export function ProjectProvider({
 
 
   // ===================================================
-  // CURRENT PROJECT
+  // DIRTY STATE
   // ===================================================
   //
-  // IMPORTANT:
+  // This represents unsaved PROJECT DEFINITION changes.
   //
-  // This MUST be declared before any callback dependency
-  // arrays that reference currentProject.
+  // It deliberately does NOT represent business/runtime
+  // data such as:
   //
+  // - compliance evidence
+  // - interview records
+  // - recordings
+  // - evaluations
+  // - runtime state
+  //
+  // Those are persisted independently.
+  //
+  // ===================================================
+
+  const [
+    hasUnsavedChanges,
+    setHasUnsavedChanges,
+  ] =
+    useState(false);
+
+
+  // ===================================================
+  // DIRTY HELPERS
+  // ===================================================
+
+  const markProjectDirty =
+    useCallback(
+      () => {
+
+        setHasUnsavedChanges(
+          true
+        );
+
+      },
+      []
+    );
+
+
+  const markProjectSaved =
+    useCallback(
+      () => {
+
+        setHasUnsavedChanges(
+          false
+        );
+
+      },
+      []
+    );
+
+
+  // ===================================================
+  // BROWSER CLOSE / REFRESH PROTECTION
+  // ===================================================
+
+  useEffect(
+    () => {
+
+      const handleBeforeUnload =
+        event => {
+
+          if (
+            !hasUnsavedChanges
+          ) {
+
+            return;
+
+          }
+
+
+          event.preventDefault();
+
+          event.returnValue =
+            "";
+
+        };
+
+
+      window.addEventListener(
+        "beforeunload",
+        handleBeforeUnload
+      );
+
+
+      return () => {
+
+        window.removeEventListener(
+          "beforeunload",
+          handleBeforeUnload
+        );
+
+      };
+
+    },
+    [
+      hasUnsavedChanges,
+    ]
+  );
+
+
+  // ===================================================
+  // DISCARD CONFIRMATION
+  // ===================================================
+
+  const confirmDiscardUnsavedChanges =
+    useCallback(
+      (
+        message =
+          "You have unsaved changes. Leave without saving?"
+      ) => {
+
+        if (
+          !hasUnsavedChanges
+        ) {
+
+          return true;
+
+        }
+
+
+        return window.confirm(
+          message
+        );
+
+      },
+      [
+        hasUnsavedChanges,
+      ]
+    );
+
+
+  // ===================================================
+  // CURRENT PROJECT
   // ===================================================
 
   const currentProject =
@@ -522,23 +663,119 @@ export function ProjectProvider({
     useCallback(
       () => {
 
-        setProjectSchema(
+        setProjectSchemaState(
           makeEmptyProjectSchema()
         );
 
 
-        setProjectType(
+        setProjectTypeState(
           "single"
         );
 
 
-        setBackgroundConfigs(
+        setBackgroundConfigsState(
           DEFAULT_BACKGROUND_CONFIGS
         );
 
 
         setInterviewConfigState(
           DEFAULT_INTERVIEW_CONFIG
+        );
+
+
+        setHasUnsavedChanges(
+          false
+        );
+
+      },
+      []
+    );
+
+
+  // ===================================================
+  // TRACKED PROJECT SCHEMA SETTER
+  // ===================================================
+  //
+  // CanvasContext uses this for real editor changes.
+  //
+  // API/project hydration uses the internal setter
+  // directly so hydration remains clean.
+  //
+  // ===================================================
+
+  const setProjectSchema =
+    useCallback(
+      updater => {
+
+        setProjectSchemaState(
+          updater
+        );
+
+        markProjectDirty();
+
+      },
+      [
+        markProjectDirty,
+      ]
+    );
+
+
+  // ===================================================
+  // TRACKED PROJECT TYPE SETTER
+  // ===================================================
+
+  const setProjectType =
+    useCallback(
+      updater => {
+
+        setProjectTypeState(
+          updater
+        );
+
+        markProjectDirty();
+
+      },
+      [
+        markProjectDirty,
+      ]
+    );
+
+
+  // ===================================================
+  // TRACKED BACKGROUND SETTER
+  // ===================================================
+
+  const setBackgroundConfigs =
+    useCallback(
+      updater => {
+
+        setBackgroundConfigsState(
+          updater
+        );
+
+        markProjectDirty();
+
+      },
+      [
+        markProjectDirty,
+      ]
+    );
+
+
+  // ===================================================
+  // VIEW MODE
+  // ===================================================
+  //
+  // UI navigation is not a project edit.
+  //
+  // ===================================================
+
+  const setViewMode =
+    useCallback(
+      updater => {
+
+        setViewModeState(
+          updater
         );
 
       },
@@ -564,7 +801,9 @@ export function ProjectProvider({
         // NEW / EMPTY PROJECT
         // ------------------------------------------------
 
-        if (!hydrated) {
+        if (
+          !hydrated
+        ) {
 
           runtime.patch(
             "project",
@@ -664,16 +903,27 @@ export function ProjectProvider({
     );
 
 
+    // ===================================================
+  // INITIALISE NEW PROJECT
   // ===================================================
-  // START NEW PROJECT
+  //
+  // Internal reset used by application startup.
+  //
+  // IMPORTANT:
+  //
+  // This MUST NOT depend on dirty-state confirmation.
+  // Otherwise loading the project list can become coupled
+  // to hasUnsavedChanges and re-run whenever the editor
+  // becomes dirty.
+  //
   // ===================================================
 
-  const startNewProject =
+  const initialiseNewProject =
     useCallback(
       () => {
 
         console.log(
-          "[Projects] Starting NEW unsaved project"
+          "[Projects] Initialising NEW unsaved project"
         );
 
 
@@ -725,7 +975,75 @@ export function ProjectProvider({
 
 
   // ===================================================
+  // START NEW PROJECT
+  // ===================================================
+  //
+  // User-initiated creation of a new project.
+  //
+  // This version is allowed to depend on the dirty-state
+  // confirmation because it is called by user actions.
+  //
+  // ===================================================
+
+  const startNewProject =
+    useCallback(
+      (
+        options = {}
+      ) => {
+
+        const {
+          skipConfirm =
+            false,
+        } = options;
+
+
+        if (
+          !skipConfirm
+        ) {
+
+          const allowed =
+            confirmDiscardUnsavedChanges(
+              "You have unsaved changes to this project. Start a new project without saving?"
+            );
+
+
+          if (
+            !allowed
+          ) {
+
+            console.log(
+              "[Projects] Starting new project cancelled"
+            );
+
+
+            return false;
+
+          }
+
+        }
+
+
+        initialiseNewProject();
+
+        return true;
+
+      },
+      [
+        confirmDiscardUnsavedChanges,
+        initialiseNewProject,
+      ]
+    );
+
+
+  // ===================================================
   // SET ACTIVE EXISTING PROJECT
+  // ===================================================
+  //
+  // Selecting a project from the sidebar should not by
+  // itself create dirty state.
+  //
+  // Actual project loading happens through loadProject.
+  //
   // ===================================================
 
   const setActiveProject =
@@ -800,6 +1118,12 @@ export function ProjectProvider({
   // ===================================================
   // APPLY HYDRATED PROJECT
   // ===================================================
+  //
+  // This is the clean API → editor boundary.
+  //
+  // Hydrated projects are always considered saved.
+  //
+  // ===================================================
 
   const applyProject =
     useCallback(
@@ -834,23 +1158,32 @@ export function ProjectProvider({
         // EDITOR STATE
         // ------------------------------------------------
 
-        setProjectSchema(
+        setProjectSchemaState(
           hydrated.schema
         );
 
 
-        setProjectType(
+        setProjectTypeState(
           hydrated.type
         );
 
 
-        setBackgroundConfigs(
+        setBackgroundConfigsState(
           hydrated.backgroundConfigs
         );
 
 
         setInterviewConfigState(
           config
+        );
+
+
+        // ------------------------------------------------
+        // CLEAN STATE
+        // ------------------------------------------------
+
+        setHasUnsavedChanges(
+          false
         );
 
 
@@ -906,11 +1239,8 @@ export function ProjectProvider({
 
 
             return [
-
               ...previous,
-
               hydrated,
-
             ];
 
           }
@@ -991,8 +1321,13 @@ export function ProjectProvider({
           }
         );
 
+
+        markProjectDirty();
+
       },
-      []
+      [
+        markProjectDirty,
+      ]
     );
 
 
@@ -1039,8 +1374,13 @@ export function ProjectProvider({
           }
         );
 
+
+        markProjectDirty();
+
       },
-      []
+      [
+        markProjectDirty,
+      ]
     );
 
 
@@ -1076,15 +1416,11 @@ export function ProjectProvider({
               ...previous,
 
               questionSets: [
-
                 ...previousSets,
-
                 newQuestionSet,
-
               ],
 
               activeQuestionSetId:
-
                 previous?.activeQuestionSetId ||
                 newQuestionSet.id,
 
@@ -1092,6 +1428,9 @@ export function ProjectProvider({
 
           }
         );
+
+
+        markProjectDirty();
 
 
         console.log(
@@ -1103,7 +1442,9 @@ export function ProjectProvider({
         return newQuestionSet;
 
       },
-      []
+      [
+        markProjectDirty,
+      ]
     );
 
 
@@ -1189,6 +1530,15 @@ export function ProjectProvider({
         );
 
 
+        if (
+          changed
+        ) {
+
+          markProjectDirty();
+
+        }
+
+
         console.log(
           "[Projects] Question Set updated",
           {
@@ -1204,7 +1554,9 @@ export function ProjectProvider({
         return changed;
 
       },
-      []
+      [
+        markProjectDirty,
+      ]
     );
 
 
@@ -1286,20 +1638,26 @@ export function ProjectProvider({
                 remaining,
 
               activeQuestionSetId:
-
                 wasActive
-
                   ? (
                       remaining[0]?.id ||
                       null
                     )
-
                   : previous?.activeQuestionSetId,
 
             });
 
           }
         );
+
+
+        if (
+          removed
+        ) {
+
+          markProjectDirty();
+
+        }
 
 
         console.log(
@@ -1317,7 +1675,9 @@ export function ProjectProvider({
         return removed;
 
       },
-      []
+      [
+        markProjectDirty,
+      ]
     );
 
 
@@ -1399,6 +1759,15 @@ export function ProjectProvider({
         );
 
 
+        if (
+          activated
+        ) {
+
+          markProjectDirty();
+
+        }
+
+
         console.log(
           "[Projects] Active Question Set changed",
           {
@@ -1414,117 +1783,122 @@ export function ProjectProvider({
         return activated;
 
       },
-      []
+      [
+        markProjectDirty,
+      ]
     );
 
 
-  // ===================================================
-  // LOAD PROJECT LIST
-  // ===================================================
+    // ===================================================
+    // LOAD PROJECT LIST
+    // ===================================================
 
-  const loadProjects =
-    useCallback(
-      async () => {
+    const loadProjects =
+      useCallback(
+        async () => {
 
-        try {
+          try {
 
-          setProjectsLoading(
-            true
-          );
-
-
-          console.log(
-            "[Projects] Loading projects..."
-          );
-
-
-          const response =
-            await api.get(
-              `${API_URL}/api/projects`,
-              {
-                withCredentials:
-                  true,
-              }
+            setProjectsLoading(
+              true
             );
 
 
-          const rawProjects =
-            Array.isArray(
-              response?.data?.projects
-            )
-              ? response.data.projects
-              : [];
+            console.log(
+              "[Projects] Loading projects..."
+            );
 
 
-          const hydratedProjects =
-            rawProjects
-              .map(
-                hydrateProject
+            const response =
+              await api.get(
+                `${API_URL}/api/projects`,
+                {
+                  withCredentials:
+                    true,
+                }
+              );
+
+
+            const rawProjects =
+              Array.isArray(
+                response?.data?.projects
               )
-              .filter(Boolean);
+                ? response.data.projects
+                : [];
 
 
-          setProjects(
-            hydratedProjects
-          );
+            const hydratedProjects =
+              rawProjects
+                .map(
+                  hydrateProject
+                )
+                .filter(Boolean);
 
 
-          /*
-          IMPORTANT:
-
-          Do not select an existing project on startup.
-
-          Startup always represents a new unsaved project.
-          */
-
-          startNewProject();
+            setProjects(
+              hydratedProjects
+            );
 
 
-          console.log(
-            "[Projects] Project list loaded",
-            {
+            /*
+            * Startup always represents a new unsaved
+            * project.
+            *
+            * IMPORTANT:
+            *
+            * Use initialiseNewProject(), NOT
+            * startNewProject(), so the initialisation
+            * effect remains independent of dirty state.
+            */
 
-              count:
-                hydratedProjects.length,
+            initialiseNewProject();
 
-              mode:
-                "new-project",
 
-            }
-          );
+            console.log(
+              "[Projects] Project list loaded",
+              {
 
-        }
-        catch (
-          error
-        ) {
+                count:
+                  hydratedProjects.length,
 
-          console.error(
-            "[Projects] Failed to load projects",
+                mode:
+                  "new-project",
+
+              }
+            );
+
+          }
+          catch (
             error
-          );
+          ) {
+
+            console.error(
+              "[Projects] Failed to load projects",
+              error
+            );
 
 
-          setProjects(
-            []
-          );
+            setProjects(
+              []
+            );
 
 
-          startNewProject();
+            initialiseNewProject();
 
-        }
-        finally {
+          }
+          finally {
 
-          setProjectsLoading(
-            false
-          );
+            setProjectsLoading(
+              false
+            );
 
-        }
+          }
 
-      },
-      [
-        startNewProject,
-      ]
-    );
+        },
+        [
+          initialiseNewProject,
+        ]
+      );
 
 
   // ===================================================
@@ -1547,12 +1921,19 @@ export function ProjectProvider({
   // SAVE INTERVIEW CONFIG
   // ===================================================
   //
-  // This persists the COMPLETE config immediately for
-  // an existing project.
+  // Saving interview configuration for an EXISTING
+  // project persists that specific piece of project data.
   //
-  // This is intentionally separate from saveCurrentProject
-  // so QuestionSetEditor can save directly without being
-  // affected by asynchronous React state updates.
+  // It does NOT automatically clear hasUnsavedChanges,
+  // because there could also be unsaved:
+  //
+  // - canvas changes
+  // - background changes
+  // - schema changes
+  // - project type changes
+  //
+  // For a NEW project there is no server persistence yet,
+  // so the project remains dirty.
   //
   // ===================================================
 
@@ -1598,6 +1979,9 @@ export function ProjectProvider({
           );
 
 
+          markProjectDirty();
+
+
           console.log(
             "[Projects] Interview config updated on NEW project"
           );
@@ -1641,10 +2025,8 @@ export function ProjectProvider({
           await api.patch(
             `${API_URL}/api/projects/${activeProject}`,
             {
-
               interviewConfig:
                 normalisedConfig,
-
             },
             {
               withCredentials:
@@ -1695,11 +2077,24 @@ export function ProjectProvider({
                 String(
                   activeProject
                 )
-
                   ? updatedProject
-
                   : project
             )
+        );
+
+
+        setProjectSchemaState(
+          updatedProject.schema
+        );
+
+
+        setProjectTypeState(
+          updatedProject.type
+        );
+
+
+        setBackgroundConfigsState(
+          updatedProject.backgroundConfigs
         );
 
 
@@ -1712,6 +2107,18 @@ export function ProjectProvider({
           updatedProject
         );
 
+
+        /*
+         * IMPORTANT:
+         *
+         * Do not mark the complete project clean here.
+         *
+         * saveInterviewConfig() only guarantees that the
+         * interviewConfig portion has been persisted.
+         *
+         * Any outstanding canvas/background/schema changes
+         * must remain dirty until the full project is saved.
+         */
 
         console.log(
           "[Projects] Interview configuration persisted",
@@ -1726,6 +2133,8 @@ export function ProjectProvider({
                 ?.questionSets
                 ?.length ||
               0,
+
+            hasUnsavedChanges,
 
           }
         );
@@ -1752,6 +2161,8 @@ export function ProjectProvider({
         activeProject,
         runtime,
         syncRuntimeProject,
+        markProjectDirty,
+        hasUnsavedChanges,
       ]
     );
 
@@ -1895,20 +2306,17 @@ export function ProjectProvider({
                     String(
                       activeProject
                     )
-
                       ? updatedProject
-
                       : project
                 )
             );
 
 
-            // ------------------------------------------------
-            // IMPORTANT
-            //
-            // Apply the server response back to ALL project
-            // editor state, not just interviewConfig.
-            // ------------------------------------------------
+            /*
+             * Apply the server version back into the editor.
+             *
+             * applyProject also marks the project clean.
+             */
 
             applyProject(
               updatedProject
@@ -2072,11 +2480,8 @@ export function ProjectProvider({
 
           setProjects(
             previous => [
-
               ...previous,
-
               newProject,
-
             ]
           );
 
@@ -2141,6 +2546,15 @@ export function ProjectProvider({
   // ===================================================
   // LOAD EXISTING PROJECT
   // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // This method itself performs the navigation guard.
+  //
+  // This protects calls originating from ProjectSidebar,
+  // not just MainApp.
+  //
+  // ===================================================
 
   const loadProject =
     useCallback(
@@ -2155,6 +2569,26 @@ export function ProjectProvider({
           throw new Error(
             "Project ID is required."
           );
+
+        }
+
+
+        const allowed =
+          confirmDiscardUnsavedChanges(
+            "You have unsaved changes to this project. Load another project without saving?"
+          );
+
+
+        if (
+          !allowed
+        ) {
+
+          console.log(
+            "[Projects] Project load cancelled"
+          );
+
+
+          return null;
 
         }
 
@@ -2244,6 +2678,7 @@ export function ProjectProvider({
       },
       [
         applyProject,
+        confirmDiscardUnsavedChanges,
       ]
     );
 
@@ -2411,12 +2846,38 @@ export function ProjectProvider({
         }
 
 
+        if (
+          String(
+            id
+          ) ===
+          String(
+            activeProject
+          )
+        ) {
+
+          const allowed =
+            confirmDiscardUnsavedChanges(
+              "You have unsaved changes to this project. Delete the project without saving?"
+            );
+
+
+          if (
+            !allowed
+          ) {
+
+            return false;
+
+          }
+
+        }
+
+
         await api.delete(
           `${API_URL}/api/projects/${id}`,
           {
             withCredentials:
               true,
-            }
+          }
         );
 
 
@@ -2441,7 +2902,10 @@ export function ProjectProvider({
           )
         ) {
 
-          startNewProject();
+          startNewProject({
+            skipConfirm:
+              true,
+          });
 
         }
 
@@ -2458,6 +2922,7 @@ export function ProjectProvider({
       [
         activeProject,
         startNewProject,
+        confirmDiscardUnsavedChanges,
       ]
     );
 
@@ -2557,16 +3022,33 @@ export function ProjectProvider({
         // ------------------------------------------------
 
         projectSchema,
+
         setProjectSchema,
 
         viewMode,
+
         setViewMode,
 
         projectType,
+
         setProjectType,
 
         backgroundConfigs,
+
         setBackgroundConfigs,
+
+
+        // ------------------------------------------------
+        // Dirty state
+        // ------------------------------------------------
+
+        hasUnsavedChanges,
+
+        markProjectDirty,
+
+        markProjectSaved,
+
+        confirmDiscardUnsavedChanges,
 
 
         // ------------------------------------------------
@@ -2582,6 +3064,7 @@ export function ProjectProvider({
         projectsLoading,
 
         collapsed,
+
         setCollapsed,
 
 
@@ -2645,26 +3128,53 @@ export function ProjectProvider({
       }),
       [
         projectSchema,
+
+        setProjectSchema,
+
         viewMode,
+
+        setViewMode,
+
         projectType,
+
+        setProjectType,
+
         backgroundConfigs,
 
+        setBackgroundConfigs,
+
+        hasUnsavedChanges,
+
+        markProjectDirty,
+
+        markProjectSaved,
+
+        confirmDiscardUnsavedChanges,
+
         projects,
+
         activeProject,
+
         currentProject,
+
         projectsLoading,
 
         collapsed,
 
         setActiveProject,
+
         startNewProject,
 
         loadProjects,
 
         saveProject,
+
         loadProject,
+
         updateProject,
+
         deleteProject,
+
         saveCurrentProject,
 
         resetProjectEditor,
@@ -2672,12 +3182,17 @@ export function ProjectProvider({
         interviewConfig,
 
         setInterviewConfig,
+
         updateInterviewConfig,
+
         saveInterviewConfig,
 
         addQuestionSet,
+
         updateQuestionSet,
+
         removeQuestionSet,
+
         setActiveQuestionSet,
       ]
     );
@@ -2688,11 +3203,17 @@ export function ProjectProvider({
   // ===================================================
 
   return (
+
     <ProjectContext.Provider
-      value={value}
+      value={
+        value
+      }
     >
+
       {children}
+
     </ProjectContext.Provider>
+
   );
 
 }
