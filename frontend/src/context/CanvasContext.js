@@ -1,30 +1,96 @@
+// src/context/CanvasContext.js
+
 import React, {
   createContext,
-  useContext,
-  useState,
-  useEffect,
   useCallback,
+  useContext,
+  useEffect,
+  useMemo,
   useRef,
+  useState,
 } from "react";
 
 import {
   useProjectContext,
 } from "./ProjectContext";
 
-import componentRegistry from "../actions/componentRegistry";
+import registry from "../components/elements/registry";
 
 import {
   projectTreeToElements,
 } from "../runtime/project/ProjectTreeLoader";
 
 
-const CanvasContext =
-  createContext();
+// =====================================================
+// CONTEXT
+// =====================================================
+
+export const CanvasContext =
+  createContext(null);
 
 
-/* =========================================================
-   DEFAULT EXTRACTION
-========================================================= */
+// =====================================================
+// CONSTANTS
+// =====================================================
+
+const DEFAULT_ELEMENT_WIDTH = 300;
+const DEFAULT_ELEMENT_HEIGHT = 150;
+
+const CANVAS_SCHEMA_VERSION = 1;
+
+
+// =====================================================
+// HELPERS
+// =====================================================
+
+function isFiniteNumber(value) {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value)
+  );
+}
+
+
+// =====================================================
+// NORMALISE ID
+// =====================================================
+
+function normaliseId(value) {
+
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return null;
+  }
+
+  const result =
+    String(value).trim();
+
+  return result || null;
+}
+
+
+// =====================================================
+// EXTRACT DEFAULT PROPS
+// =====================================================
+//
+// Registry editableProps may contain:
+//
+// {
+//   text: "Hello"
+// }
+//
+// or:
+//
+// {
+//   text: {
+//     type: "string",
+//     default: "Hello"
+//   }
+// }
+//
+// =====================================================
 
 function extractDefaults(
   editableProps = {}
@@ -35,113 +101,66 @@ function extractDefaults(
   Object.entries(
     editableProps
   ).forEach(
-    ([
-      key,
-      definition,
-    ]) => {
+    ([key, config]) => {
 
       if (
-        definition &&
-        typeof definition === "object" &&
-        definition.default !== undefined
+        config &&
+        typeof config === "object" &&
+        !Array.isArray(config) &&
+        config.default !== undefined
       ) {
 
         result[key] =
-          definition.default;
+          config.default;
 
         return;
-
-      }
-
-      if (
-        definition === null ||
-        typeof definition !== "object"
-      ) {
-
-        result[key] =
-          definition;
-
-        return;
-
-      }
-
-      const type =
-        String(
-          definition.type ||
-          ""
-        )
-          .toLowerCase()
-          .trim();
-
-      if (
-        type.includes("string")
-      ) {
-
-        result[key] =
-          "";
-
-        return;
-
-      }
-
-      if (
-        type.includes("number")
-      ) {
-
-        result[key] =
-          0;
-
-        return;
-
-      }
-
-      if (
-        type.includes("boolean")
-      ) {
-
-        result[key] =
-          false;
-
-        return;
-
-      }
-
-      if (
-        type.includes("array")
-      ) {
-
-        result[key] =
-          [];
-
-        return;
-
-      }
-
-      if (
-        type.includes("object")
-      ) {
-
-        result[key] =
-          null;
-
-        return;
-
       }
 
       result[key] =
-        null;
-
+        config;
     }
   );
 
   return result;
-
 }
 
 
-/* =========================================================
-   NORMALISE ELEMENT
-========================================================= */
+// =====================================================
+// GET REGISTRY ENTRY
+// =====================================================
+
+function getRegistryEntry(
+  type
+) {
+
+  if (
+    !type
+  ) {
+    return null;
+  }
+
+  return (
+    registry?.[type] ||
+    null
+  );
+}
+
+
+// =====================================================
+// NORMALISE ELEMENT
+// =====================================================
+//
+// IMPORTANT:
+//
+// Canvas geometry is canonical.
+//
+// x/y/width/height are stored in unscaled
+// canvas coordinates.
+//
+// The Canvas component is responsible for
+// applying display scale.
+//
+// =====================================================
 
 function normalizeElement(
   element
@@ -151,89 +170,125 @@ function normalizeElement(
     !element ||
     typeof element !== "object"
   ) {
-
     return null;
-
   }
 
+  const rawType =
+    element.type ||
+    "Text";
+
   const registryEntry =
-    componentRegistry?.[
-      element.type
-    ];
-
-  const editableProps =
-    registryEntry
-      ?.contract
-      ?.editableProps ||
-    {};
-
-  const defaultProps =
-    extractDefaults(
-      editableProps
+    getRegistryEntry(
+      rawType
     );
 
+  const type =
+    registryEntry
+      ? rawType
+      : "Text";
+
+  const editableDefaults =
+    extractDefaults(
+      registryEntry?.meta?.editableProps ||
+      {}
+    );
+
+  const existingProps =
+    element.props &&
+    typeof element.props === "object" &&
+    !Array.isArray(element.props)
+      ? element.props
+      : {};
+
   const props = {
-    ...defaultProps,
-    ...(element.props || {}),
+    ...editableDefaults,
+    ...existingProps,
   };
 
-  const normalized = {
+  const id =
+    normaliseId(
+      element.id
+    );
 
+  if (
+    !id
+  ) {
+    return null;
+  }
+
+  const parentId =
+    normaliseId(
+      element.parentId
+    );
+
+  const x =
+    isFiniteNumber(element.x)
+      ? element.x
+      : 0;
+
+  const y =
+    isFiniteNumber(element.y)
+      ? element.y
+      : 0;
+
+  const width =
+    isFiniteNumber(element.width) &&
+    element.width > 0
+      ? element.width
+      : DEFAULT_ELEMENT_WIDTH;
+
+  const height =
+    isFiniteNumber(element.height) &&
+    element.height > 0
+      ? element.height
+      : DEFAULT_ELEMENT_HEIGHT;
+
+  return {
     ...element,
 
-    id:
-      element.id ||
-      null,
+    id,
 
-    type:
-      registryEntry
-        ? element.type
-        : "Text",
+    type,
 
-    parentId:
-      element.parentId ??
-      null,
+    parentId,
 
     role:
       element.role ??
       null,
 
-    x:
-      Number.isFinite(element.x)
-        ? element.x
-        : 0,
+    x,
 
-    y:
-      Number.isFinite(element.y)
-        ? element.y
-        : 0,
+    y,
 
-    width:
-      Number.isFinite(element.width)
-        ? element.width
-        : 300,
+    width,
 
-    height:
-      Number.isFinite(element.height)
-        ? element.height
-        : 150,
+    height,
 
     props,
 
-    meta: {
-      ...(element.meta || {}),
-    },
-
+    meta:
+      element.meta &&
+      typeof element.meta === "object"
+        ? {
+            ...element.meta,
+          }
+        : {},
   };
-
-  return normalized;
-
 }
 
 
-/* =========================================================
-   NORMALISE ELEMENT COLLECTION
-========================================================= */
+// =====================================================
+// NORMALISE ELEMENT COLLECTION
+// =====================================================
+//
+// Guarantees:
+//
+// - valid objects only
+// - valid IDs
+// - no duplicate IDs
+// - stable array ordering
+//
+// =====================================================
 
 function normalizeElements(
   list
@@ -242,15 +297,13 @@ function normalizeElements(
   if (
     !Array.isArray(list)
   ) {
-
     return [];
-
   }
+
+  const result = [];
 
   const seenIds =
     new Set();
-
-  const result = [];
 
   list.forEach(
     element => {
@@ -260,21 +313,10 @@ function normalizeElements(
           element
         );
 
-      if (!normalized) {
-
+      if (
+        !normalized
+      ) {
         return;
-
-      }
-
-      if (!normalized.id) {
-
-        console.warn(
-          "[Canvas] Ignoring element without ID",
-          normalized
-        );
-
-        return;
-
       }
 
       if (
@@ -284,18 +326,17 @@ function normalizeElements(
       ) {
 
         console.warn(
-          "[Canvas] Duplicate element ID ignored",
+          "[CanvasContext] Duplicate element ID skipped",
           {
             id:
               normalized.id,
 
-            element:
-              normalized,
+            type:
+              normalized.type,
           }
         );
 
         return;
-
       }
 
       seenIds.add(
@@ -305,166 +346,49 @@ function normalizeElements(
       result.push(
         normalized
       );
-
     }
   );
 
   return result;
-
 }
 
 
-/* =========================================================
-   VALIDATE HIERARCHY
-========================================================= */
+// =====================================================
+// VALIDATE HIERARCHY
+// =====================================================
+//
+// Removes:
+//
+// - self-parenting
+// - orphaned parent references
+// - circular parent chains
+//
+// We intentionally do not change geometry here.
+//
+// Geometry belongs to the canonical Canvas model.
+//
+// =====================================================
 
 function validateHierarchy(
   elements
 ) {
 
-  if (
-    !Array.isArray(elements)
-  ) {
-
-    return [];
-
-  }
+  const normalized =
+    normalizeElements(
+      elements
+    );
 
   const ids =
     new Set(
-      elements.map(
+      normalized.map(
         element =>
           element.id
       )
     );
 
-  return elements.map(
-    element => {
-
-      if (
-        !element.parentId
-      ) {
-
-        return element;
-
-      }
-
-      if (
-        element.parentId ===
-        element.id
-      ) {
-
-        console.warn(
-          "[Canvas] Self-parenting removed",
-          {
-            elementId:
-              element.id,
-          }
-        );
-
-        return {
-          ...element,
-          parentId:
-            null,
-        };
-
-      }
-
-      if (
-        !ids.has(
-          element.parentId
-        )
-      ) {
-
-        console.warn(
-          "[Canvas] Missing parent removed",
-          {
-            elementId:
-              element.id,
-
-            parentId:
-              element.parentId,
-          }
-        );
-
-        return {
-          ...element,
-          parentId:
-            null,
-        };
-
-      }
-
-      return element;
-
-    }
-  );
-
-}
-
-
-/* =========================================================
-   DETECT CIRCULAR REFERENCES
-========================================================= */
-
-function hasCircularParentChain(
-  element,
-  elementMap
-) {
-
-  const visited =
-    new Set();
-
-  let current =
-    element;
-
-  while (
-    current?.parentId
-  ) {
-
-    if (
-      visited.has(
-        current.id
-      )
-    ) {
-
-      return true;
-
-    }
-
-    visited.add(
-      current.id
-    );
-
-    current =
-      elementMap.get(
-        current.parentId
-      );
-
-    if (!current) {
-
-      return false;
-
-    }
-
-  }
-
-  return false;
-
-}
-
-
-/* =========================================================
-   REPAIR CIRCULAR REFERENCES
-========================================================= */
-
-function repairCircularHierarchy(
-  elements
-) {
-
-  const elementMap =
+  const byId =
     new Map(
-      elements.map(
+      normalized.map(
         element => [
           element.id,
           element,
@@ -472,24 +396,34 @@ function repairCircularHierarchy(
       )
     );
 
-  return elements.map(
+  return normalized.map(
     element => {
 
+      let parentId =
+        normaliseId(
+          element.parentId
+        );
+
       if (
-        hasCircularParentChain(
-          element,
-          elementMap
-        )
+        !parentId
+      ) {
+        return {
+          ...element,
+          parentId:
+            null,
+        };
+      }
+
+      if (
+        parentId ===
+        element.id
       ) {
 
         console.warn(
-          "[Canvas] Circular hierarchy repaired",
+          "[CanvasContext] Self-parenting repaired",
           {
-            elementId:
+            id:
               element.id,
-
-            parentId:
-              element.parentId,
           }
         );
 
@@ -498,269 +432,348 @@ function repairCircularHierarchy(
           parentId:
             null,
         };
-
       }
 
-      return element;
+      if (
+        !ids.has(
+          parentId
+        )
+      ) {
 
+        console.warn(
+          "[CanvasContext] Orphaned parent repaired",
+          {
+            id:
+              element.id,
+
+            parentId,
+          }
+        );
+
+        return {
+          ...element,
+          parentId:
+            null,
+        };
+      }
+
+      const visited =
+        new Set();
+
+      let currentId =
+        element.id;
+
+      let circular =
+        false;
+
+      while (
+        currentId
+      ) {
+
+        if (
+          visited.has(
+            currentId
+          )
+        ) {
+
+          circular =
+            true;
+
+          break;
+        }
+
+        visited.add(
+          currentId
+        );
+
+        const current =
+          byId.get(
+            currentId
+          );
+
+        if (
+          !current?.parentId
+        ) {
+          break;
+        }
+
+        currentId =
+          current.parentId;
+      }
+
+      if (
+        circular
+      ) {
+
+        console.warn(
+          "[CanvasContext] Circular hierarchy repaired",
+          {
+            id:
+              element.id,
+          }
+        );
+
+        return {
+          ...element,
+          parentId:
+            null,
+        };
+      }
+
+      return {
+        ...element,
+        parentId,
+      };
     }
   );
-
 }
 
 
-/* =========================================================
-   CANVAS → PROJECT TREE
-=========================================================
+// =====================================================
+// PROJECT TREE → CANVAS
+// =====================================================
 //
-// Canvas elements are the canonical editable model.
+// This is now a FALLBACK hydration path only.
 //
-// element.parentId
-// element.x
-// element.y
-// element.width
-// element.height
+// Normal reload:
 //
-// parentId is authoritative for hierarchy.
+// projectSchema.canvas.elements
+//             ↓
+//       Canvas elements
 //
-// Child coordinates remain LOCAL to their parent.
-// ========================================================= */
+// Legacy / newly installed tree:
+//
+// projectSchema.tree
+//             ↓
+//     ProjectTreeLoader
+//             ↓
+//       Canvas elements
+//
+// =====================================================
+
+function loadElementsFromTree(
+  tree
+) {
+
+  if (
+    !tree ||
+    typeof tree !== "object"
+  ) {
+    return [];
+  }
+
+  try {
+
+    const loaded =
+      projectTreeToElements(
+        tree
+      );
+
+    return validateHierarchy(
+      loaded
+    );
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      "[CanvasContext] Tree → Canvas hydration failed",
+      error
+    );
+
+    return [];
+  }
+}
+
+
+// =====================================================
+// CANVAS → PROJECT TREE
+// =====================================================
+//
+// The project tree remains the structural representation
+// used by Confo/runtime.
+//
+// Canvas geometry is ALSO persisted separately under:
+//
+// projectSchema.canvas.elements
+//
+// =====================================================
 
 function elementsToProjectTree(
   elements,
-  previousTree = null
+  previousTree
 ) {
 
   const normalized =
-    repairCircularHierarchy(
-      validateHierarchy(
-        normalizeElements(
-          elements
-        )
-      )
+    validateHierarchy(
+      elements
     );
 
-  const safePreviousTree =
+  const previous =
     previousTree &&
     typeof previousTree === "object"
       ? previousTree
-      : null;
+      : {};
 
-  const previousRoot =
-    safePreviousTree?.type === "App"
-      ? safePreviousTree
-      : null;
+  const appId =
+    previous.id ||
+    "app";
 
-  const root = {
+  const appNode = {
+    ...previous,
+
+    id:
+      appId,
 
     type:
       "App",
 
-    props: {
-      ...(previousRoot?.props || {}),
-    },
+    name:
+      previous.name ||
+      "Untitled App",
 
-    meta: {
-      ...(previousRoot?.meta || {}),
-    },
+    version:
+      previous.version ??
+      1,
 
-    children: [],
-
+    children:
+      [],
   };
 
-  /* Preserve App-level identity information. */
+  delete appNode.parentId;
+  delete appNode.x;
+  delete appNode.y;
+  delete appNode.width;
+  delete appNode.height;
 
-  if (
-    previousRoot?.id !== undefined
-  ) {
-
-    root.id =
-      previousRoot.id;
-
-  }
-
-  if (
-    previousRoot?.name !== undefined
-  ) {
-
-    root.name =
-      previousRoot.name;
-
-  }
-
-  if (
-    previousRoot?.version !== undefined
-  ) {
-
-    root.version =
-      previousRoot.version;
-
-  }
-
-  if (
-    previousRoot?.metadata !== undefined
-  ) {
-
-    root.metadata =
-      previousRoot.metadata;
-
-  }
-
-  const elementMap =
+  const nodes =
     new Map();
 
   normalized.forEach(
     element => {
 
-      elementMap.set(
+      nodes.set(
         element.id,
-        element
-      );
+        {
+          id:
+            element.id,
 
+          type:
+            element.type,
+
+          x:
+            element.x,
+
+          y:
+            element.y,
+
+          width:
+            element.width,
+
+          height:
+            element.height,
+
+          props:
+            element.props &&
+            typeof element.props === "object"
+              ? {
+                  ...element.props,
+                }
+              : {},
+
+          meta:
+            element.meta &&
+            typeof element.meta === "object"
+              ? {
+                  ...element.meta,
+                }
+              : {},
+
+          role:
+            element.role ??
+            null,
+
+          children:
+            [],
+        }
+      );
     }
   );
-
-  const nodeMap =
-    new Map();
-
-  normalized.forEach(
-    element => {
-
-      const node = {
-
-        id:
-          element.id,
-
-        type:
-          element.type,
-
-        x:
-          element.x,
-
-        y:
-          element.y,
-
-        width:
-          element.width,
-
-        height:
-          element.height,
-
-        props: {
-          ...(element.props || {}),
-        },
-
-        meta: {
-          ...(element.meta || {}),
-        },
-
-        children: [],
-
-      };
-
-      if (
-        element.role !== undefined
-      ) {
-
-        node.role =
-          element.role;
-
-      }
-
-      nodeMap.set(
-        element.id,
-        node
-      );
-
-    }
-  );
-
-  /*
-   * Attach strictly through parentId.
-   *
-   * Never infer hierarchy from:
-   * - x/y
-   * - component type
-   * - visual order
-   */
 
   normalized.forEach(
     element => {
 
       const node =
-        nodeMap.get(
+        nodes.get(
           element.id
         );
 
-      if (!node) {
-
+      if (
+        !node
+      ) {
         return;
-
       }
 
+      const parentId =
+        normaliseId(
+          element.parentId
+        );
+
       if (
-        element.parentId
+        parentId &&
+        nodes.has(
+          parentId
+        )
       ) {
 
-        const parent =
-          nodeMap.get(
-            element.parentId
-          );
-
-        if (
-          parent
-        ) {
-
-          parent.children.push(
+        nodes
+          .get(parentId)
+          .children
+          .push(
             node
           );
 
-          return;
-
-        }
-
-        console.warn(
-          "[Canvas] Parent node missing during tree write",
-          {
-            elementId:
-              element.id,
-
-            parentId:
-              element.parentId,
-          }
-        );
-
+        return;
       }
 
-      root.children.push(
+      appNode.children.push(
         node
       );
-
     }
   );
 
-  console.log(
-    "[Canvas] ELEMENTS → TREE",
-    {
-      elementCount:
-        normalized.length,
-
-      topLevelCount:
-        root.children.length,
-
-      tree:
-        root,
-    }
-  );
-
-  return root;
-
+  return appNode;
 }
 
 
-/* =========================================================
-   PROVIDER
-========================================================= */
+// =====================================================
+// CANONICAL CANVAS SCHEMA
+// =====================================================
+
+function createCanvasSchema(
+  elements,
+  previousCanvas
+) {
+
+  return {
+    ...(previousCanvas || {}),
+
+    version:
+      previousCanvas?.version ??
+      CANVAS_SCHEMA_VERSION,
+
+    elements:
+      normalizeElements(
+        elements
+      ),
+  };
+}
+
+
+// =====================================================
+// CANVAS PROVIDER
+// =====================================================
 
 export function CanvasProvider({
   children,
@@ -774,132 +787,100 @@ export function CanvasProvider({
     useProjectContext();
 
 
+  // ===================================================
+  // CANONICAL CANVAS STATE
+  // ===================================================
+
   const [
     elements,
     setElements,
-  ] =
-    useState([]);
+  ] = useState(
+    []
+  );
 
 
-  const isHydratingRef =
+  // ===================================================
+  // REFS
+  // ===================================================
+  //
+  // Refs allow editor operations to always operate on
+  // the latest canonical element collection without
+  // relying on state updater side effects.
+  //
+  // ===================================================
+
+  const elementsRef =
+    useRef([]);
+
+  const projectSchemaRef =
+    useRef(
+      projectSchema
+    );
+
+  const hydratingRef =
+    useRef(false);
+
+  const migrationRef =
     useRef(false);
 
 
-  /* =======================================================
-     TREE → CANVAS
-  ======================================================= */
+  // ===================================================
+  // KEEP PROJECT SCHEMA REF CURRENT
+  // ===================================================
 
   useEffect(
     () => {
 
-      /*
-       * A tree change caused by Canvas → Tree is immediately
-       * followed by this effect. It is already represented by
-       * the current Canvas state, so do not re-hydrate it.
-       */
-
-      if (
-        isHydratingRef.current
-      ) {
-
-        isHydratingRef.current =
-          false;
-
-        return;
-
-      }
-
-
-      if (
-        !projectSchema?.tree
-      ) {
-
-        setElements(
-          []
-        );
-
-        return;
-
-      }
-
-
-      const generated =
-        projectTreeToElements(
-          projectSchema.tree
-        );
-
-
-      const normalized =
-        repairCircularHierarchy(
-          validateHierarchy(
-            normalizeElements(
-              generated
-            )
-          )
-        );
-
-
-      console.table(
-        normalized.map(
-          element => ({
-
-            id:
-              element.id,
-
-            type:
-              element.type,
-
-            parentId:
-              element.parentId,
-
-            x:
-              element.x,
-
-            y:
-              element.y,
-
-            width:
-              element.width,
-
-            height:
-              element.height,
-
-          })
-        )
-      );
-
-
-      console.log(
-        "[Canvas] HYDRATING FROM PROJECT TREE",
-        {
-          tree:
-            projectSchema.tree,
-
-          elementCount:
-            normalized.length,
-
-          elements:
-            normalized,
-        }
-      );
-
-
-      setElements(
-        normalized
-      );
+      projectSchemaRef.current =
+        projectSchema;
 
     },
     [
-      projectSchema?.tree,
+      projectSchema,
     ]
   );
 
 
-  /* =======================================================
-     CANVAS → TREE
-  ======================================================= */
+  // ===================================================
+  // KEEP ELEMENT REF CURRENT
+  // ===================================================
 
-  const syncTree =
+  const commitLocalElements =
+    useCallback(
+      nextElements => {
+
+        const normalized =
+          validateHierarchy(
+            nextElements
+          );
+
+        elementsRef.current =
+          normalized;
+
+        setElements(
+          normalized
+        );
+
+        return normalized;
+      },
+      []
+    );
+
+
+  // ===================================================
+  // PERSIST CANONICAL CANVAS
+  // =====================================================
+  //
+  // Every real editor change writes BOTH:
+  //
+  //   projectSchema.tree
+  //   projectSchema.canvas.elements
+  //
+  // The two representations therefore remain aligned.
+  //
+  // ===================================================
+
+  const persistElements =
     useCallback(
       (
         nextElements,
@@ -908,177 +889,377 @@ export function CanvasProvider({
         } = {}
       ) => {
 
-        const tree =
-          elementsToProjectTree(
-            nextElements,
+        const normalized =
+          validateHierarchy(
+            nextElements
+          );
 
-            projectSchema?.tree ||
+        const currentSchema =
+          projectSchemaRef.current ||
+          {};
+
+        const nextTree =
+          elementsToProjectTree(
+            normalized,
+            currentSchema.tree ||
               null
           );
 
+        const nextCanvas =
+          createCanvasSchema(
+            normalized,
+            currentSchema.canvas
+          );
 
-        console.log(
-          "[Canvas] CANVAS → TREE",
-          tree
-        );
-
-
-        /*
-         * The next projectSchema.tree update is generated
-         * by the current Canvas state, not an external load.
-         */
-
-        isHydratingRef.current =
+        hydratingRef.current =
           true;
-
 
         setProjectSchema(
           previous => ({
-
             ...previous,
 
-            tree,
+            tree:
+              nextTree,
 
+            canvas:
+              nextCanvas,
           })
         );
-
 
         if (
           markDirty
         ) {
-
           markProjectDirty();
-
         }
 
+        return normalized;
       },
       [
-        projectSchema?.tree,
-        setProjectSchema,
         markProjectDirty,
+        setProjectSchema,
       ]
     );
 
 
-  /* =======================================================
-     ADD ELEMENT
-  ======================================================= */
+  // =====================================================
+  // COMMIT EDIT
+  // =====================================================
+  //
+  // This is the single write path used by add/update/
+  // move/remove/load.
+  //
+  // =====================================================
 
-  const addElement =
+  const commitElements =
     useCallback(
-      newElement => {
+      (
+        nextElements,
+        {
+          markDirty = true,
+        } = {}
+      ) => {
 
         const normalized =
-          normalizeElement(
-            newElement
+          validateHierarchy(
+            nextElements
           );
 
+        commitLocalElements(
+          normalized
+        );
 
-        if (!normalized) {
-
-          console.warn(
-            "[Canvas] Invalid element rejected",
-            newElement
-          );
-
-          return;
-
-        }
-
-
-        if (!normalized.id) {
-
-          console.warn(
-            "[Canvas] Element requires an ID",
-            newElement
-          );
-
-          return;
-
-        }
-
-
-        setElements(
-          previous => {
-
-            const existing =
-              previous.some(
-                element =>
-                  element.id ===
-                  normalized.id
-              );
-
-
-            if (
-              existing
-            ) {
-
-              console.warn(
-                "[Canvas] Duplicate element prevented",
-                {
-                  id:
-                    normalized.id,
-                }
-              );
-
-              return previous;
-
-            }
-
-
-            let next = [
-              ...previous,
-              normalized,
-            ];
-
-
-            next =
-              repairCircularHierarchy(
-                validateHierarchy(
-                  next
-                )
-              );
-
-
-            console.log(
-              "[CANVAS ELEMENT ADDED]",
-              {
-                id:
-                  normalized.id,
-
-                type:
-                  normalized.type,
-
-                parentId:
-                  normalized.parentId,
-              }
-            );
-
-
-            syncTree(
-              next,
-              {
-                markDirty:
-                  true,
-              }
-            );
-
-
-            return next;
-
+        persistElements(
+          normalized,
+          {
+            markDirty,
           }
         );
 
+        return normalized;
       },
       [
-        syncTree,
+        commitLocalElements,
+        persistElements,
       ]
     );
 
 
-  /* =======================================================
-     UPDATE ELEMENT
-  ======================================================= */
+  // =====================================================
+  // PROJECT SCHEMA → CANVAS HYDRATION
+  // =====================================================
+  //
+  // IMPORTANT:
+  //
+  // If canonical canvas.elements exist, they WIN.
+  //
+  // We never reconstruct the editor geometry from the
+  // tree during normal reload.
+  //
+  // This is the key fix for save/reload geometry drift.
+  //
+  // =====================================================
+
+  useEffect(
+    () => {
+
+      if (
+        hydratingRef.current
+      ) {
+
+        hydratingRef.current =
+          false;
+
+        return;
+      }
+
+      const schema =
+        projectSchema;
+
+      if (
+        !schema ||
+        typeof schema !== "object"
+      ) {
+
+        elementsRef.current =
+          [];
+
+        setElements(
+          []
+        );
+
+        return;
+      }
+
+
+      // =================================================
+      // CANONICAL CANVAS EXISTS
+      // =================================================
+
+      if (
+        schema.canvas &&
+        Array.isArray(
+          schema.canvas.elements
+        )
+      ) {
+
+        const canonical =
+          validateHierarchy(
+            schema.canvas.elements
+          );
+
+        console.log(
+          "[CanvasContext] Hydrating canonical Canvas elements",
+          {
+            count:
+              canonical.length,
+          }
+        );
+
+        elementsRef.current =
+          canonical;
+
+        setElements(
+          canonical
+        );
+
+        return;
+      }
+
+
+      // =================================================
+      // LEGACY / TREE FALLBACK
+      // =================================================
+      //
+      // Existing projects created before the canonical
+      // Canvas model are migrated here.
+      //
+      // This is intentionally a one-time migration.
+      //
+      // =================================================
+
+      const treeElements =
+        loadElementsFromTree(
+          schema.tree
+        );
+
+      console.log(
+        "[CanvasContext] Hydrating Canvas from project tree",
+        {
+          count:
+            treeElements.length,
+        }
+      );
+
+      elementsRef.current =
+        treeElements;
+
+      setElements(
+        treeElements
+      );
+
+
+      // =================================================
+      // MIGRATE TREE → CANONICAL CANVAS
+      // =================================================
+      //
+      // The tracked ProjectContext setter marks this as
+      // dirty. This only occurs for projects which do not
+      // yet contain canvas.elements.
+      //
+      // Once saved, subsequent loads use the canonical
+      // Canvas representation and this path is never hit.
+      //
+      // =================================================
+
+      if (
+        !migrationRef.current
+      ) {
+
+        migrationRef.current =
+          true;
+
+        const migratedCanvas =
+          createCanvasSchema(
+            treeElements,
+            schema.canvas
+          );
+
+        const migratedTree =
+          elementsToProjectTree(
+            treeElements,
+            schema.tree ||
+              null
+          );
+
+        hydratingRef.current =
+          true;
+
+        setProjectSchema(
+          previous => ({
+            ...previous,
+
+            tree:
+              migratedTree,
+
+            canvas:
+              migratedCanvas,
+          })
+        );
+
+        markProjectDirty();
+
+        console.log(
+          "[CanvasContext] Legacy project migrated to canonical Canvas state"
+        );
+      }
+
+    },
+    [
+      projectSchema,
+      setProjectSchema,
+      markProjectDirty,
+    ]
+  );
+
+
+  // =====================================================
+  // RESET MIGRATION FLAG WHEN A CANONICAL SCHEMA ARRIVES
+  // =====================================================
+
+  useEffect(
+    () => {
+
+      if (
+        projectSchema?.canvas &&
+        Array.isArray(
+          projectSchema.canvas.elements
+        )
+      ) {
+
+        migrationRef.current =
+          false;
+      }
+
+    },
+    [
+      projectSchema?.canvas,
+    ]
+  );
+
+
+  // =====================================================
+  // ADD ELEMENT
+  // =====================================================
+
+  const addElement =
+    useCallback(
+      element => {
+
+        const normalized =
+          normalizeElement(
+            element
+          );
+
+        if (
+          !normalized
+        ) {
+
+          console.warn(
+            "[CanvasContext] addElement rejected invalid element",
+            element
+          );
+
+          return null;
+        }
+
+        const current =
+          elementsRef.current;
+
+        if (
+          current.some(
+            existing =>
+              existing.id ===
+              normalized.id
+          )
+        ) {
+
+          console.warn(
+            "[CanvasContext] addElement rejected duplicate ID",
+            normalized.id
+          );
+
+          return null;
+        }
+
+        const next =
+          [
+            ...current,
+            normalized,
+          ];
+
+        const validated =
+          commitElements(
+            next
+          );
+
+        return (
+          validated.find(
+            candidate =>
+              candidate.id ===
+              normalized.id
+          ) ||
+          null
+        );
+      },
+      [
+        commitElements,
+      ]
+    );
+
+
+  // =====================================================
+  // UPDATE ELEMENT
+  // =====================================================
 
   const updateElement =
     useCallback(
@@ -1087,604 +1268,511 @@ export function CanvasProvider({
         updates = {}
       ) => {
 
-        if (!id) {
+        const targetId =
+          normaliseId(
+            id
+          );
 
-          return;
+        if (
+          !targetId
+        ) {
+          return null;
+        }
 
+        const current =
+          elementsRef.current;
+
+        const index =
+          current.findIndex(
+            element =>
+              element.id ===
+              targetId
+          );
+
+        if (
+          index === -1
+        ) {
+
+          console.warn(
+            "[CanvasContext] updateElement target not found",
+            targetId
+          );
+
+          return null;
+        }
+
+        const existing =
+          current[index];
+
+        const nextProps =
+          updates.props !== undefined
+            ? {
+                ...(existing.props || {}),
+                ...(updates.props || {}),
+              }
+            : existing.props;
+
+        const nextElement = {
+          ...existing,
+
+          ...updates,
+
+          id:
+            existing.id,
+
+          props:
+            nextProps,
+        };
+
+
+        // -----------------------------------------------
+        // Explicit parent detach
+        // -----------------------------------------------
+
+        if (
+          Object.prototype.hasOwnProperty.call(
+            updates,
+            "parentId"
+          )
+        ) {
+
+          nextElement.parentId =
+            normaliseId(
+              updates.parentId
+            );
         }
 
 
-        setElements(
-          previous => {
+        // -----------------------------------------------
+        // Never allow accidental ID mutation
+        // -----------------------------------------------
 
-            const target =
-              previous.find(
-                element =>
-                  element.id ===
-                  id
-              );
+        nextElement.id =
+          existing.id;
 
 
-            if (!target) {
+        const normalized =
+          normalizeElement(
+            nextElement
+          );
 
-              console.warn(
-                "[Canvas] Cannot update missing element",
-                {
-                  id,
-                }
-              );
+        if (
+          !normalized
+        ) {
+          return null;
+        }
 
-              return previous;
+        const next =
+          [
+            ...current,
+          ];
 
-            }
+        next[index] =
+          normalized;
 
+        const validated =
+          commitElements(
+            next
+          );
 
-            const next =
-              previous.map(
-                element => {
-
-                  if (
-                    element.id !==
-                    id
-                  ) {
-
-                    return element;
-
-                  }
-
-
-                  const merged = {
-
-                    ...element,
-
-                    ...updates,
-
-                    props: {
-
-                      ...(element.props || {}),
-
-                      ...(updates?.props || {}),
-
-                    },
-
-                  };
-
-
-                  /*
-                   * Explicit null detaches.
-                   * Undefined preserves the existing parent.
-                   */
-
-                  if (
-                    updates.parentId !==
-                    undefined
-                  ) {
-
-                    merged.parentId =
-                      updates.parentId ??
-                      null;
-
-                  }
-                  else {
-
-                    merged.parentId =
-                      element.parentId ??
-                      null;
-
-                  }
-
-
-                  return normalizeElement(
-                    merged
-                  );
-
-                }
-              );
-
-
-            const validated =
-              repairCircularHierarchy(
-                validateHierarchy(
-                  next
-                )
-              );
-
-
-            const updated =
-              validated.find(
-                element =>
-                  element.id ===
-                  id
-              );
-
-
-            console.log(
-              "[CANVAS UPDATE ELEMENT]",
-              {
-                id,
-
-                before:
-                  target,
-
-                updates,
-
-                after:
-                  updated,
-
-                parentId:
-                  updated?.parentId ??
-                  null,
-              }
-            );
-
-
-            /*
-             * Parent movement and child movement are
-             * independent.
-             *
-             * Updating a parent does not rewrite children.
-             * Updating a child does not rewrite parentId.
-             */
-
-            syncTree(
-              validated,
-              {
-                markDirty:
-                  true,
-              }
-            );
-
-
-            return validated;
-
-          }
+        return (
+          validated.find(
+            candidate =>
+              candidate.id ===
+              targetId
+          ) ||
+          null
         );
-
       },
       [
-        syncTree,
+        commitElements,
       ]
     );
 
 
-  /* =======================================================
-     MOVE ELEMENT TO PARENT
-  ======================================================= */
+  // =====================================================
+  // MOVE ELEMENT TO PARENT
+  // =====================================================
+  //
+  // Geometry is deliberately NOT changed here.
+  //
+  // The Layout Engine / Canvas renderer will eventually
+  // decide how managed-container geometry is derived.
+  //
+  // For now this operation only changes hierarchy.
+  //
+  // =====================================================
 
   const moveElementToParent =
     useCallback(
       (
-        elementId,
+        id,
         parentId = null
       ) => {
 
-        setElements(
-          previous => {
+        const targetId =
+          normaliseId(
+            id
+          );
 
-            const element =
-              previous.find(
-                item =>
-                  item.id ===
-                  elementId
-              );
+        const targetParentId =
+          normaliseId(
+            parentId
+          );
 
+        if (
+          !targetId
+        ) {
+          return null;
+        }
 
-            if (!element) {
+        if (
+          targetParentId ===
+          targetId
+        ) {
 
-              console.warn(
-                "[Canvas] Cannot move missing element",
-                {
-                  elementId,
-                }
-              );
-
-              return previous;
-
+          console.warn(
+            "[CanvasContext] moveElementToParent rejected self-parenting",
+            {
+              id:
+                targetId,
             }
+          );
 
+          return null;
+        }
+
+        const current =
+          elementsRef.current;
+
+        const target =
+          current.find(
+            element =>
+              element.id ===
+              targetId
+          );
+
+        if (
+          !target
+        ) {
+
+          console.warn(
+            "[CanvasContext] moveElementToParent target not found",
+            targetId
+          );
+
+          return null;
+        }
+
+        if (
+          targetParentId &&
+          !current.some(
+            element =>
+              element.id ===
+              targetParentId
+          )
+        ) {
+
+          console.warn(
+            "[CanvasContext] moveElementToParent parent not found",
+            {
+              id:
+                targetId,
+
+              parentId:
+                targetParentId,
+            }
+          );
+
+          return null;
+        }
+
+
+        // -----------------------------------------------
+        // Cycle protection
+        // -----------------------------------------------
+
+        if (
+          targetParentId
+        ) {
+
+          const visited =
+            new Set();
+
+          let currentId =
+            targetParentId;
+
+          while (
+            currentId
+          ) {
 
             if (
-              parentId ===
-              elementId
+              currentId ===
+              targetId
             ) {
 
               console.warn(
-                "[Canvas] Cannot parent element to itself",
+                "[CanvasContext] moveElementToParent rejected circular hierarchy",
                 {
-                  elementId,
-                  parentId,
+                  id:
+                    targetId,
+
+                  parentId:
+                    targetParentId,
                 }
               );
 
-              return previous;
-
+              return null;
             }
 
-
             if (
-              parentId !== null &&
-              !previous.some(
-                item =>
-                  item.id ===
-                  parentId
+              visited.has(
+                currentId
               )
             ) {
+              break;
+            }
 
-              console.warn(
-                "[Canvas] Parent does not exist",
-                {
-                  elementId,
-                  parentId,
-                }
+            visited.add(
+              currentId
+            );
+
+            const parent =
+              current.find(
+                element =>
+                  element.id ===
+                  currentId
               );
 
-              return previous;
-
-            }
-
-
-            /*
-             * Prevent parent → descendant cycles.
-             */
-
-            if (
-              parentId !== null
-            ) {
-
-              const visited =
-                new Set();
-
-              let currentId =
-                parentId;
+            currentId =
+              parent?.parentId ||
+              null;
+          }
+        }
 
 
-              while (
-                currentId
-              ) {
-
-                if (
-                  currentId ===
-                  elementId
-                ) {
-
-                  console.warn(
-                    "[Canvas] Circular hierarchy rejected",
-                    {
-                      elementId,
-                      parentId,
-                    }
-                  );
-
-                  return previous;
-
-                }
-
-
-                if (
-                  visited.has(
-                    currentId
-                  )
-                ) {
-
-                  console.warn(
-                    "[Canvas] Existing circular hierarchy detected",
-                    {
-                      elementId,
-                      parentId,
-                    }
-                  );
-
-                  return previous;
-
-                }
-
-
-                visited.add(
-                  currentId
-                );
-
-
-                const current =
-                  previous.find(
-                    item =>
-                      item.id ===
-                      currentId
-                  );
-
-
-                currentId =
-                  current?.parentId ||
-                  null;
-
-              }
-
-            }
-
-
-            const next =
-              previous.map(
-                item => {
-
-                  if (
-                    item.id !==
-                    elementId
-                  ) {
-
-                    return item;
-
-                  }
-
-
-                  /*
-                   * ONLY parentId changes.
-                   * Child-local x/y are preserved.
-                   */
-
-                  return normalizeElement({
-
-                    ...item,
+        const next =
+          current.map(
+            element =>
+              element.id ===
+              targetId
+                ? {
+                    ...element,
 
                     parentId:
-                      parentId ??
-                      null,
+                      targetParentId,
+                  }
+                : element
+          );
 
-                  });
+        const validated =
+          commitElements(
+            next
+          );
 
-                }
-              );
-
-
-            const validated =
-              repairCircularHierarchy(
-                validateHierarchy(
-                  next
-                )
-              );
-
-
-            console.log(
-              "[CANVAS PARENT CHANGE]",
-              {
-                elementId,
-
-                previousParentId:
-                  element.parentId ??
-                  null,
-
-                parentId:
-                  parentId ??
-                  null,
-
-              }
-            );
-
-
-            syncTree(
-              validated,
-              {
-                markDirty:
-                  true,
-              }
-            );
-
-
-            return validated;
-
-          }
+        return (
+          validated.find(
+            element =>
+              element.id ===
+              targetId
+          ) ||
+          null
         );
-
       },
       [
-        syncTree,
+        commitElements,
       ]
     );
 
 
-  /* =======================================================
-     REMOVE ELEMENT
-  ======================================================= */
+  // =====================================================
+  // REMOVE ELEMENT
+  // =====================================================
+  //
+  // Removing a parent removes its entire subtree.
+  //
+  // =====================================================
 
   const removeElement =
     useCallback(
       id => {
 
-        if (!id) {
+        const targetId =
+          normaliseId(
+            id
+          );
 
-          return;
+        if (
+          !targetId
+        ) {
+          return false;
+        }
 
+        const current =
+          elementsRef.current;
+
+        const target =
+          current.find(
+            element =>
+              element.id ===
+              targetId
+          );
+
+        if (
+          !target
+        ) {
+
+          return false;
         }
 
 
-        setElements(
-          previous => {
+        // -----------------------------------------------
+        // Collect subtree
+        // -----------------------------------------------
 
-            const idsToRemove =
-              new Set([
-                id,
-              ]);
+        const removeIds =
+          new Set([
+            targetId,
+          ]);
 
+        let changed =
+          true;
 
-            let changed =
-              true;
+        while (
+          changed
+        ) {
 
+          changed =
+            false;
 
-            while (
-              changed
-            ) {
+          current.forEach(
+            element => {
 
-              changed =
-                false;
+              if (
+                element.parentId &&
+                removeIds.has(
+                  element.parentId
+                ) &&
+                !removeIds.has(
+                  element.id
+                )
+              ) {
 
+                removeIds.add(
+                  element.id
+                );
 
-              previous.forEach(
-                element => {
-
-                  if (
-                    element.parentId &&
-                    idsToRemove.has(
-                      element.parentId
-                    ) &&
-                    !idsToRemove.has(
-                      element.id
-                    )
-                  ) {
-
-                    idsToRemove.add(
-                      element.id
-                    );
-
-                    changed =
-                      true;
-
-                  }
-
-                }
-              );
-
+                changed =
+                  true;
+              }
             }
+          );
+        }
 
 
-            const next =
-              previous.filter(
-                element =>
-                  !idsToRemove.has(
-                    element.id
-                  )
-              );
+        const next =
+          current.filter(
+            element =>
+              !removeIds.has(
+                element.id
+              )
+          );
 
-
-            console.log(
-              "[CANVAS REMOVE ELEMENT]",
-              {
-                removedId:
-                  id,
-
-                removedIds:
-                  Array.from(
-                    idsToRemove
-                  ),
-
-                remaining:
-                  next.length,
-              }
-            );
-
-
-            syncTree(
-              next,
-              {
-                markDirty:
-                  true,
-              }
-            );
-
-
-            return next;
-
-          }
+        commitElements(
+          next
         );
 
+        return true;
       },
       [
-        syncTree,
+        commitElements,
       ]
     );
 
 
-  /* =======================================================
-     CLEAR CANVAS
-  ======================================================= */
+  // =====================================================
+  // CLEAR CANVAS
+  // =====================================================
 
   const clearCanvas =
     useCallback(
       () => {
 
-        setElements(
+        commitElements(
           []
         );
 
-
-        syncTree(
-          [],
-          {
-            markDirty:
-              true,
-          }
-        );
-
+        return true;
       },
       [
-        syncTree,
+        commitElements,
       ]
     );
 
 
-  /* =======================================================
-     LOAD ELEMENTS
-  ======================================================= */
+  // =====================================================
+  // LOAD ELEMENTS
+  // =====================================================
+  //
+  // Explicit external loading path.
+  //
+  // This should be used when a caller already has a
+  // canonical element collection and wants it installed
+  // into the editor.
+  //
+  // =====================================================
 
   const loadElements =
     useCallback(
-      saved => {
+      (
+        savedElements = [],
+        options = {}
+      ) => {
 
         const normalized =
-          repairCircularHierarchy(
-            validateHierarchy(
-              normalizeElements(
-                saved
-              )
-            )
+          validateHierarchy(
+            savedElements
           );
 
+        const shouldMarkDirty =
+          options.markDirty !==
+          undefined
+            ? !!options.markDirty
+            : true;
 
-        console.log(
-          "[Canvas] LOAD ELEMENTS",
-          {
-            count:
-              normalized.length,
-
-            elements:
-              normalized,
-          }
-        );
-
-
-        setElements(
-          normalized
-        );
-
-
-        /*
-         * loadElements is an explicit editor operation, so
-         * it represents a user change and marks the project
-         * as unsaved.
-         */
-
-        syncTree(
+        commitElements(
           normalized,
           {
             markDirty:
-              true,
+              shouldMarkDirty,
           }
         );
 
+        return normalized;
       },
       [
-        syncTree,
+        commitElements,
       ]
     );
 
 
-  /* =======================================================
-     CONTEXT VALUE
-  ======================================================= */
+  // =====================================================
+  // CONTEXT VALUE
+  // =====================================================
 
-  return (
+  const value =
+    useMemo(
+      () => ({
 
-    <CanvasContext.Provider
-      value={{
+        // -------------------------------------------------
+        // Canonical editor state
+        // -------------------------------------------------
 
         elements,
+
+        // -------------------------------------------------
+        // Element operations
+        // -------------------------------------------------
 
         addElement,
 
@@ -1698,23 +1786,44 @@ export function CanvasProvider({
 
         loadElements,
 
-      }}
-    >
+      }),
+      [
+        elements,
 
-      {
-        children
+        addElement,
+
+        updateElement,
+
+        moveElementToParent,
+
+        removeElement,
+
+        clearCanvas,
+
+        loadElements,
+      ]
+    );
+
+
+  // =====================================================
+  // PROVIDER
+  // =====================================================
+
+  return (
+    <CanvasContext.Provider
+      value={
+        value
       }
-
+    >
+      {children}
     </CanvasContext.Provider>
-
   );
-
 }
 
 
-/* =========================================================
-   HOOK
-========================================================= */
+// =====================================================
+// HOOK
+// =====================================================
 
 export function useCanvasState() {
 
@@ -1723,16 +1832,21 @@ export function useCanvasState() {
       CanvasContext
     );
 
-
-  if (!context) {
+  if (
+    !context
+  ) {
 
     throw new Error(
-      "useCanvasState must be used inside CanvasProvider"
+      "useCanvasState must be used within CanvasProvider"
     );
-
   }
 
-
   return context;
-
 }
+
+
+// =====================================================
+// DEFAULT EXPORT
+// =====================================================
+
+export default CanvasContext;
