@@ -145,10 +145,10 @@ import loadCompliance
 import requestEvidence
   from "./compliance/requestEvidence";
 
-import uploadEvidence 
+import uploadEvidence
   from "./compliance/uploadEvidence";
 
-import analyseEvidence 
+import analyseEvidence
   from "./compliance/analyseEvidence";
 
 import acceptEvidence
@@ -159,6 +159,47 @@ import rejectEvidence
 
 import updateControlStatus
   from "./compliance/updateControlStatus";
+
+
+// =========================================================
+// CHAT ACTIONS
+// =========================================================
+
+import createConversation
+  from "./chat/createConversation";
+
+import loadConversations
+  from "./chat/loadConversations";
+
+import loadMessages
+  from "./chat/loadMessages";
+
+import joinConversation
+  from "./chat/joinConversation";
+
+import leaveConversation
+  from "./chat/leaveConversation";
+
+import sendMessage
+  from "./chat/sendMessage";
+
+import acceptConversationInvitation
+  from "./chat/acceptConversationInvitation";
+
+import declineConversationInvitation
+  from "./chat/declineConversationInvitation";
+
+import editMessage
+  from "./chat/editMessage";
+
+import deleteMessage
+  from "./chat/deleteMessage";
+
+import markConversationRead
+  from "./chat/markConversationRead";
+
+import closeConversation
+  from "./chat/closeConversation";
 
 
 import {
@@ -335,24 +376,65 @@ export const ACTIONS = {
 
   COMPLIANCE_LOAD:
     "compliance.load",
-  
-  COMPLIANCE_REQUEST_EVIDENCE: 
+
+  COMPLIANCE_REQUEST_EVIDENCE:
     "compliance.requestEvidence",
 
-  COMPLIANCE_UPLOAD_EVIDENCE: 
+  COMPLIANCE_UPLOAD_EVIDENCE:
     "compliance.uploadEvidence",
 
   COMPLIANCE_ANALYSE_EVIDENCE:
     "compliance.analyseEvidence",
-  
+
   COMPLIANCE_ACCEPT_EVIDENCE:
-  "compliance.acceptEvidence",
+    "compliance.acceptEvidence",
 
   COMPLIANCE_REJECT_EVIDENCE:
     "compliance.rejectEvidence",
-  
+
   COMPLIANCE_UPDATE_CONTROL_STATUS:
     "compliance.updateControlStatus",
+
+
+  // =======================================================
+  // CHAT
+  // =======================================================
+
+  CHAT_CREATE_CONVERSATION:
+    "chat.createConversation",
+
+  CHAT_LOAD_CONVERSATIONS:
+    "chat.loadConversations",
+
+  CHAT_LOAD_MESSAGES:
+    "chat.loadMessages",
+
+  CHAT_JOIN_CONVERSATION:
+    "chat.joinConversation",
+
+  CHAT_LEAVE_CONVERSATION:
+    "chat.leaveConversation",
+
+  CHAT_SEND_MESSAGE:
+    "chat.sendMessage",
+
+  CHAT_ACCEPT_INVITATION:
+    "chat.acceptConversationInvitation",
+
+  CHAT_DECLINE_INVITATION:
+    "chat.declineConversationInvitation",
+
+  CHAT_EDIT_MESSAGE:
+    "chat.editMessage",
+
+  CHAT_DELETE_MESSAGE:
+    "chat.deleteMessage",
+
+  CHAT_MARK_READ:
+    "chat.markConversationRead",
+
+  CHAT_CLOSE_CONVERSATION:
+    "chat.closeConversation",
 
 
   // =======================================================
@@ -472,6 +554,7 @@ const createAction = ({
 // =========================================================
 // COMMON CONDITION PATH DEFINITIONS
 // =========================================================
+
 
 // =====================================================
 // CALL
@@ -826,6 +909,132 @@ const PATH_INTERVIEW_ANSWER =
       "interview.answer",
     label:
       "Current answer",
+    type:
+      "string",
+  });
+
+
+// =====================================================
+// CHAT
+// =====================================================
+
+const PATH_CHAT_CONVERSATION_ID =
+  conditionPath({
+    path:
+      "chat.conversationId",
+
+    label:
+      "Conversation ID",
+
+    type:
+      "string",
+  });
+
+
+const PATH_CHAT_CONVERSATION_STATUS =
+  conditionPath({
+    path:
+      "chat.conversationStatus",
+
+    label:
+      "Conversation status",
+
+    type:
+      "string",
+
+    options: [
+      "active",
+      "closed",
+    ],
+  });
+
+
+const PATH_CHAT_JOINED =
+  conditionPath({
+    path:
+      "chat.joined",
+
+    label:
+      "Conversation joined",
+
+    type:
+      "boolean",
+  });
+
+
+const PATH_CHAT_CONVERSATIONS =
+  conditionPath({
+    path:
+      "chat.conversations",
+
+    label:
+      "Conversations",
+
+    type:
+      "object",
+  });
+
+
+const PATH_CHAT_MESSAGES =
+  conditionPath({
+    path:
+      "chat.messages",
+
+    label:
+      "Messages",
+
+    type:
+      "object",
+  });
+
+
+const PATH_CHAT_PARTICIPANTS =
+  conditionPath({
+    path:
+      "chat.participants",
+
+    label:
+      "Conversation participants",
+
+    type:
+      "object",
+  });
+
+
+const PATH_CHAT_LAST_MESSAGE =
+  conditionPath({
+    path:
+      "chat.lastMessage",
+
+    label:
+      "Last message",
+
+    type:
+      "object",
+  });
+
+
+const PATH_CHAT_MESSAGE_ID =
+  conditionPath({
+    path:
+      "chat.messageId",
+
+    label:
+      "Message ID",
+
+    type:
+      "string",
+  });
+
+
+const PATH_CHAT_LAST_READ_MESSAGE_ID =
+  conditionPath({
+    path:
+      "chat.lastReadMessageId",
+
+    label:
+      "Last read message ID",
+
     type:
       "string",
   });
@@ -2914,12 +3123,6 @@ export const actionRegistry = {
 
       conditionPaths: [],
 
-      /*
-       * Loading data does not recursively trigger itself.
-       *
-       * A UI refresh button, polling mechanism, or another
-       * runtime trigger can explicitly invoke compliance.load.
-       */
       nextActions: [],
 
       autoNextActions: [],
@@ -2964,17 +3167,6 @@ export const actionRegistry = {
 
       conditionPaths: [],
 
-      /*
-       * Do not automatically chain another action here.
-       *
-       * The evidenceRequested event can later be consumed
-       * by RuntimeTriggers to perform things such as:
-       *
-       *   notify owner
-       *   create task
-       *   send reminder
-       *   escalate overdue evidence
-       */
       nextActions: [],
 
       autoNextActions: [],
@@ -3045,11 +3237,20 @@ export const actionRegistry = {
 
     }),
 
+
     uploadEvidence: createAction({
-      value: ACTIONS.COMPLIANCE_UPLOAD_EVIDENCE,
-      label: "Upload Evidence",
-      category: "compliance",
-      run: uploadEvidence,
+
+      value:
+        ACTIONS.COMPLIANCE_UPLOAD_EVIDENCE,
+
+      label:
+        "Upload Evidence",
+
+      category:
+        "compliance",
+
+      run:
+        uploadEvidence,
 
       targets: [
         "ComplianceEvidence",
@@ -3066,33 +3267,61 @@ export const actionRegistry = {
       ],
 
       conditionPaths: [],
+
       nextActions: [],
+
       autoNextActions: [],
 
       params: {
+
         evidenceId: {
-          type: "string",
-          required: true,
+
+          type:
+            "string",
+
+          required:
+            true,
+
         },
+
         fileName: {
-          type: "string",
-          required: true,
+
+          type:
+            "string",
+
+          required:
+            true,
+
         },
+
         fileUrl: {
-          type: "string",
-          required: false,
+
+          type:
+            "string",
+
+          required:
+            false,
+
         },
+
       },
+
     }),
+
 
     analyseEvidence: createAction({
-      value: ACTIONS.COMPLIANCE_ANALYSE_EVIDENCE,
 
-      label: "Analyse Evidence",
+      value:
+        ACTIONS.COMPLIANCE_ANALYSE_EVIDENCE,
 
-      category: "compliance",
+      label:
+        "Analyse Evidence",
 
-      run: analyseEvidence,
+      category:
+        "compliance",
+
+      run:
+        analyseEvidence,
 
       targets: [
         "ComplianceEvidence",
@@ -3115,14 +3344,24 @@ export const actionRegistry = {
       autoNextActions: [],
 
       params: {
+
         evidenceId: {
-          type: "string",
-          required: true,
+
+          type:
+            "string",
+
+          required:
+            true,
+
         },
+
       },
+
     }),
 
+
     acceptEvidence: createAction({
+
       value:
         ACTIONS.COMPLIANCE_ACCEPT_EVIDENCE,
 
@@ -3156,14 +3395,24 @@ export const actionRegistry = {
       autoNextActions: [],
 
       params: {
+
         evidenceId: {
-          type: "string",
-          required: true,
+
+          type:
+            "string",
+
+          required:
+            true,
+
         },
+
       },
+
     }),
 
+
     rejectEvidence: createAction({
+
       value:
         ACTIONS.COMPLIANCE_REJECT_EVIDENCE,
 
@@ -3197,60 +3446,847 @@ export const actionRegistry = {
       autoNextActions: [],
 
       params: {
+
         evidenceId: {
-          type: "string",
-          required: true,
+
+          type:
+            "string",
+
+          required:
+            true,
+
         },
+
       },
+
     }),
 
+
     updateControlStatus: createAction({
-  value:
-    ACTIONS.COMPLIANCE_UPDATE_CONTROL_STATUS,
 
-  label:
-    "Update Control Status",
+      value:
+        ACTIONS.COMPLIANCE_UPDATE_CONTROL_STATUS,
 
-  category:
-    "compliance",
+      label:
+        "Update Control Status",
 
-  run:
-    updateControlStatus,
+      category:
+        "compliance",
 
-  targets: [
-    "ComplianceControl",
-    "ComplianceDashboard",
-  ],
+      run:
+        updateControlStatus,
 
-  requires: [
-    "compliance.controls",
-  ],
+      targets: [
+        "ComplianceControl",
+        "ComplianceDashboard",
+      ],
 
-  produces: [
-    "compliance.controls",
-  ],
+      requires: [
+        "compliance.controls",
+      ],
 
-  conditionPaths: [],
+      produces: [
+        "compliance.controls",
+      ],
 
-  nextActions: [],
+      conditionPaths: [],
 
-  autoNextActions: [],
+      nextActions: [],
 
-  params: {
-    controlId: {
-      type: "string",
-      required: true,
-    },
+      autoNextActions: [],
 
-    status: {
-      type: "string",
-      required: true,
-    },
+      params: {
+
+        controlId: {
+
+          type:
+            "string",
+
+          required:
+            true,
+
+        },
+
+        status: {
+
+          type:
+            "string",
+
+          required:
+            true,
+
+        },
+
+      },
+
+    }),
+
   },
-}),
+
+
+  // =======================================================
+  // CHAT SYSTEM
+  // =======================================================
+
+  chat: {
+
+    // =====================================================
+    // CONVERSATIONS
+    // =====================================================
+
+    createConversation: createAction({
+
+      value:
+        ACTIONS.CHAT_CREATE_CONVERSATION,
+
+      label:
+        "Create Conversation",
+
+      category:
+        "chat",
+
+      run:
+        createConversation,
+
+      targets: [
+        "ChatPanel",
+        "ParticipantSelector",
+      ],
+
+      requires: [],
+
+      produces: [
+        "chat.conversationId",
+        "chat.conversation",
+        "chat.conversationStatus",
+        "chat.participants",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+        PATH_CHAT_CONVERSATION_STATUS,
+        PATH_CHAT_PARTICIPANTS,
+      ],
+
+      nextActions: [
+        "chat.loadMessages",
+        "chat.sendMessage",
+        "chat.leaveConversation",
+        "chat.closeConversation",
+      ],
+
+      params: {
+
+        title: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        type: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+          options: [
+            "direct",
+            "group",
+          ],
+
+        },
+
+        participantIds: {
+
+          type:
+            "array",
+
+          itemType:
+            "string",
+
+          required:
+            true,
+
+        },
+
+      },
+
+    }),
+
+
+    loadConversations: createAction({
+
+      value:
+        ACTIONS.CHAT_LOAD_CONVERSATIONS,
+
+      label:
+        "Load Conversations",
+
+      category:
+        "chat",
+
+      run:
+        loadConversations,
+
+      targets: [
+        "ChatPanel",
+        "ConversationList",
+      ],
+
+      requires: [],
+
+      produces: [
+        "chat.conversations",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATIONS,
+      ],
+
+      nextActions: [
+        "chat.createConversation",
+        "chat.joinConversation",
+        "chat.acceptConversationInvitation",
+      ],
+
+      params: {},
+
+    }),
+
+
+    loadMessages: createAction({
+
+      value:
+        ACTIONS.CHAT_LOAD_MESSAGES,
+
+      label:
+        "Load Messages",
+
+      category:
+        "chat",
+
+      run:
+        loadMessages,
+
+      targets: [
+        "ChatPanel",
+      ],
+
+      requires: [
+        "chat.conversationId",
+      ],
+
+      produces: [
+        "chat.conversationId",
+        "chat.messages",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+        PATH_CHAT_MESSAGES,
+      ],
+
+      nextActions: [
+        "chat.sendMessage",
+        "chat.markConversationRead",
+        "chat.editMessage",
+        "chat.deleteMessage",
+        "chat.leaveConversation",
+        "chat.closeConversation",
+      ],
+
+      params: {
+
+        conversationId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    joinConversation: createAction({
+
+      value:
+        ACTIONS.CHAT_JOIN_CONVERSATION,
+
+      label:
+        "Join Conversation",
+
+      category:
+        "chat",
+
+      run:
+        joinConversation,
+
+      targets: [
+        "ChatPanel",
+        "ConversationList",
+      ],
+
+      requires: [
+        "chat.conversationId",
+      ],
+
+      produces: [
+        "chat.conversationId",
+        "chat.conversation",
+        "chat.conversationStatus",
+        "chat.participants",
+        "chat.joined",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+        PATH_CHAT_CONVERSATION_STATUS,
+        PATH_CHAT_PARTICIPANTS,
+        PATH_CHAT_JOINED,
+      ],
+
+      nextActions: [
+        "chat.loadMessages",
+        "chat.sendMessage",
+        "chat.markConversationRead",
+        "chat.leaveConversation",
+        "chat.closeConversation",
+      ],
+
+      params: {
+
+        conversationId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    leaveConversation: createAction({
+
+      value:
+        ACTIONS.CHAT_LEAVE_CONVERSATION,
+
+      label:
+        "Leave Conversation",
+
+      category:
+        "chat",
+
+      run:
+        leaveConversation,
+
+      targets: [
+        "ChatPanel",
+        "ConversationList",
+      ],
+
+      requires: [
+        "chat.conversationId",
+      ],
+
+      produces: [
+        "chat.conversationId",
+        "chat.conversation",
+        "chat.conversationStatus",
+        "chat.participants",
+        "chat.joined",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+        PATH_CHAT_CONVERSATION_STATUS,
+        PATH_CHAT_PARTICIPANTS,
+        PATH_CHAT_JOINED,
+      ],
+
+      nextActions: [
+        "chat.loadConversations",
+        "chat.joinConversation",
+      ],
+
+      params: {
+
+        conversationId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    closeConversation: createAction({
+
+      value:
+        ACTIONS.CHAT_CLOSE_CONVERSATION,
+
+      label:
+        "Close Conversation",
+
+      category:
+        "chat",
+
+      run:
+        closeConversation,
+
+      targets: [
+        "ChatPanel",
+        "ConversationList",
+      ],
+
+      requires: [
+        "chat.conversationId",
+      ],
+
+      produces: [
+        "chat.conversation",
+        "chat.conversationStatus",
+        "chat.joined",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+        PATH_CHAT_CONVERSATION_STATUS,
+        PATH_CHAT_JOINED,
+      ],
+
+      nextActions: [
+        "chat.loadConversations",
+      ],
+
+      params: {
+
+        conversationId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    // =====================================================
+    // INVITATIONS
+    // =====================================================
+
+    acceptConversationInvitation: createAction({
+
+      value:
+        ACTIONS.CHAT_ACCEPT_INVITATION,
+
+      label:
+        "Accept Conversation Invitation",
+
+      category:
+        "chat",
+
+      run:
+        acceptConversationInvitation,
+
+      targets: [
+        "ChatPanel",
+        "ConversationList",
+      ],
+
+      requires: [
+        "chat.conversationId",
+      ],
+
+      produces: [
+        "chat.conversationId",
+        "chat.conversation",
+        "chat.conversationStatus",
+        "chat.participants",
+        "chat.joined",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+        PATH_CHAT_CONVERSATION_STATUS,
+        PATH_CHAT_PARTICIPANTS,
+        PATH_CHAT_JOINED,
+      ],
+
+      nextActions: [
+        "chat.loadMessages",
+        "chat.sendMessage",
+        "chat.markConversationRead",
+        "chat.leaveConversation",
+      ],
+
+      params: {
+
+        conversationId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    declineConversationInvitation: createAction({
+
+      value:
+        ACTIONS.CHAT_DECLINE_INVITATION,
+
+      label:
+        "Decline Conversation Invitation",
+
+      category:
+        "chat",
+
+      run:
+        declineConversationInvitation,
+
+      targets: [
+        "ChatPanel",
+        "ConversationList",
+      ],
+
+      requires: [
+        "chat.conversationId",
+      ],
+
+      produces: [],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+      ],
+
+      nextActions: [
+        "chat.loadConversations",
+      ],
+
+      params: {
+
+        conversationId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
+
+
+    // =====================================================
+    // MESSAGES
+    // =====================================================
+
+    sendMessage: createAction({
+
+      value:
+        ACTIONS.CHAT_SEND_MESSAGE,
+
+      label:
+        "Send Message",
+
+      category:
+        "chat",
+
+      run:
+        sendMessage,
+
+      targets: [
+        "ChatPanel",
+      ],
+
+      requires: [
+        "chat.conversationId",
+        "chat.joined",
+      ],
+
+      produces: [
+        "chat.messages",
+        "chat.lastMessage",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+        PATH_CHAT_JOINED,
+        PATH_CHAT_MESSAGES,
+        PATH_CHAT_LAST_MESSAGE,
+      ],
+
+      nextActions: [
+        "chat.sendMessage",
+        "chat.editMessage",
+        "chat.deleteMessage",
+        "chat.markConversationRead",
+      ],
+
+      params: {
+
+        conversationId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        text: {
+
+          type:
+            "string",
+
+          required:
+            true,
+
+        },
+
+      },
+
+    }),
+
+
+    editMessage: createAction({
+
+      value:
+        ACTIONS.CHAT_EDIT_MESSAGE,
+
+      label:
+        "Edit Message",
+
+      category:
+        "chat",
+
+      run:
+        editMessage,
+
+      targets: [
+        "ChatPanel",
+      ],
+
+      requires: [
+        "chat.conversationId",
+        "chat.messageId",
+      ],
+
+      produces: [
+        "chat.messages",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+        PATH_CHAT_MESSAGE_ID,
+        PATH_CHAT_MESSAGES,
+      ],
+
+      nextActions: [
+        "chat.sendMessage",
+        "chat.deleteMessage",
+      ],
+
+      params: {
+
+        conversationId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        messageId: {
+
+          type:
+            "string",
+
+          required:
+            true,
+
+        },
+
+        text: {
+
+          type:
+            "string",
+
+          required:
+            true,
+
+        },
+
+      },
+
+    }),
+
+
+    deleteMessage: createAction({
+
+      value:
+        ACTIONS.CHAT_DELETE_MESSAGE,
+
+      label:
+        "Delete Message",
+
+      category:
+        "chat",
+
+      run:
+        deleteMessage,
+
+      targets: [
+        "ChatPanel",
+      ],
+
+      requires: [
+        "chat.conversationId",
+        "chat.messageId",
+      ],
+
+      produces: [
+        "chat.messages",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+        PATH_CHAT_MESSAGE_ID,
+        PATH_CHAT_MESSAGES,
+      ],
+
+      nextActions: [
+        "chat.sendMessage",
+        "chat.markConversationRead",
+      ],
+
+      params: {
+
+        conversationId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        messageId: {
+
+          type:
+            "string",
+
+          required:
+            true,
+
+        },
+
+      },
+
+    }),
+
+
+    markConversationRead: createAction({
+
+      value:
+        ACTIONS.CHAT_MARK_READ,
+
+      label:
+        "Mark Conversation Read",
+
+      category:
+        "chat",
+
+      run:
+        markConversationRead,
+
+      targets: [
+        "ChatPanel",
+      ],
+
+      requires: [
+        "chat.conversationId",
+      ],
+
+      produces: [
+        "chat.lastReadMessageId",
+        "chat.lastReadAt",
+      ],
+
+      conditionPaths: [
+        PATH_CHAT_CONVERSATION_ID,
+        PATH_CHAT_LAST_READ_MESSAGE_ID,
+      ],
+
+      nextActions: [],
+
+      params: {
+
+        conversationId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+        messageId: {
+
+          type:
+            "string",
+
+          required:
+            false,
+
+        },
+
+      },
+
+    }),
 
   },
-
 
 
   // =======================================================
@@ -3417,6 +4453,11 @@ console.log(
         actionRegistry.compliance || {}
       ),
 
+    chatActions:
+      Object.keys(
+        actionRegistry.chat || {}
+      ),
+
     groupCallActions: [
       "createGroupCall",
       "fetchPendingInvitations",
@@ -3556,6 +4597,74 @@ console.log(
         .compliance
         ?.requestEvidence
         ?.params,
+
+  }
+);
+
+
+console.log(
+  "[CHAT ACTION DEBUG]",
+  {
+
+    createConversation:
+      actionRegistry
+        .chat
+        ?.createConversation,
+
+    loadConversations:
+      actionRegistry
+        .chat
+        ?.loadConversations,
+
+    loadMessages:
+      actionRegistry
+        .chat
+        ?.loadMessages,
+
+    joinConversation:
+      actionRegistry
+        .chat
+        ?.joinConversation,
+
+    leaveConversation:
+      actionRegistry
+        .chat
+        ?.leaveConversation,
+
+    sendMessage:
+      actionRegistry
+        .chat
+        ?.sendMessage,
+
+    acceptConversationInvitation:
+      actionRegistry
+        .chat
+        ?.acceptConversationInvitation,
+
+    declineConversationInvitation:
+      actionRegistry
+        .chat
+        ?.declineConversationInvitation,
+
+    editMessage:
+      actionRegistry
+        .chat
+        ?.editMessage,
+
+    deleteMessage:
+      actionRegistry
+        .chat
+        ?.deleteMessage,
+
+    markConversationRead:
+      actionRegistry
+        .chat
+        ?.markConversationRead,
+
+    closeConversation:
+      actionRegistry
+        .chat
+        ?.closeConversation,
 
   }
 );

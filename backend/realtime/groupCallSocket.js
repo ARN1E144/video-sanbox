@@ -1,9 +1,12 @@
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 
 import Call from "../models/call.js";
 
 import TrainingSession from "../models/TrainingSession.js";
 import TrainingParticipant from "../models/TrainingParticipant.js";
+
+import ChatConversation from "../models/ChatConversation.js";
 
 import {
   applyGroupCallParticipantLeave,
@@ -11,27 +14,30 @@ import {
 
 
 // =====================================================
-// GROUP CALL / TRAINING SOCKET
+// GROUP CALL / TRAINING / CHAT SOCKET
 // =====================================================
 //
 // Shared Socket.IO transport for:
 //
 //   - Group Calls
 //   - Remote Training
+//   - Chat
 //
 // IMPORTANT:
 //
-// The database lifecycle remains owned by the relevant
+// Database lifecycle remains owned by the relevant
 // HTTP/domain layer.
 //
 // This module owns:
 //
 //   - socket authentication
 //   - realtime signalling
-//   - socket -> user association
 //   - authenticated user-room membership
 //   - group-call room membership
 //   - training-session room membership
+//   - chat conversation room membership
+//   - chat typing signalling
+//   - chat read signalling
 //   - unexpected Group Call disconnect lifecycle
 //
 // It does NOT own:
@@ -40,6 +46,18 @@ import {
 //   - HTTP responses
 //   - Group Call lifecycle rules
 //   - Training Session lifecycle rules
+//   - Chat message persistence
+//   - Chat conversation creation
+//
+// Chat persistence remains:
+//
+//   ChatConversation
+//        ↓
+//   ChatMessage
+//
+// through the HTTP/domain routes.
+//
+// Socket.IO is realtime transport only.
 //
 // =====================================================
 
@@ -156,6 +174,23 @@ function getTrainingRoom(
 
 
 // =====================================================
+// CHAT ROOM
+// =====================================================
+
+function getChatRoom(
+  conversationId
+) {
+
+  return (
+    `chat:${String(
+      conversationId
+    )}`
+  );
+
+}
+
+
+// =====================================================
 // USER ROOM
 // =====================================================
 //
@@ -163,21 +198,12 @@ function getTrainingRoom(
 //
 //   user:<userId>
 //
-// This room is used by the HTTP/domain layers to send
-// realtime events directly to a specific authenticated
-// user.
+// Used for:
 //
-// Examples:
-//
-//   group-call invitations
-//   training invitations
-//   training started notifications
-//   training ended notifications
-//
-// This is intentionally separate from:
-//
-//   group-call:<callId>
-//   training-session:<sessionId>
+//   - group call invitations
+//   - training invitations
+//   - chat invitations
+//   - future direct-user events
 //
 // =====================================================
 
@@ -243,18 +269,1010 @@ async function findTrainingParticipant({
 
 
 // =====================================================
-// JOIN TRAINING SESSION ROOM
+// CHAT PARTICIPANT USER ID
 // =====================================================
 //
-// This is intentionally independent from Group Call.
+// Supports the current V1 participant object:
 //
-// A training participant may join the socket room when:
+//   {
+//     userId,
+//     name,
+//     email,
+//     status
+//   }
 //
-//   invited
-//   joined
+// while remaining compatible with simpler historical
+// representations.
+// =====================================================
+
+function getChatParticipantUserId(
+  participant
+) {
+
+  if (
+    participant === null ||
+    participant === undefined
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    typeof participant !==
+    "object"
+  ) {
+
+    return normaliseId(
+      participant
+    );
+
+  }
+
+
+  return (
+
+    normaliseId(
+      participant?.userId
+    ) ||
+
+    normaliseId(
+      participant?.id
+    ) ||
+
+    normaliseId(
+      participant?._id
+    )
+
+  );
+
+}
+
+
+// =====================================================
+// CHECK CHAT PARTICIPATION
+// =====================================================
+
+function isChatParticipant(
+  conversation,
+  userId
+) {
+
+  const currentUserId =
+    normaliseId(
+      userId
+    );
+
+
+  if (
+    !currentUserId
+  ) {
+
+    return false;
+
+  }
+
+
+  // ---------------------------------------------------
+  // participants[]
+  // ---------------------------------------------------
+
+  if (
+    Array.isArray(
+      conversation?.participants
+    )
+  ) {
+
+    const match =
+      conversation.participants.some(
+        participant =>
+          getChatParticipantUserId(
+            participant
+          ) ===
+          currentUserId
+      );
+
+
+    if (
+      match
+    ) {
+
+      return true;
+
+    }
+
+  }
+
+
+  // ---------------------------------------------------
+  // participantIds[]
+  // ---------------------------------------------------
+
+  if (
+    Array.isArray(
+      conversation?.participantIds
+    )
+  ) {
+
+    const match =
+      conversation.participantIds.some(
+        participantId =>
+          normaliseId(
+            participantId
+          ) ===
+          currentUserId
+      );
+
+
+    if (
+      match
+    ) {
+
+      return true;
+
+    }
+
+  }
+
+
+  // ---------------------------------------------------
+  // Creator fallback
+  // ---------------------------------------------------
+
+  const ownerIds = [
+
+    conversation?.createdByUserId,
+
+    conversation?.ownerId,
+
+  ];
+
+
+  return ownerIds.some(
+    value =>
+      normaliseId(
+        value
+      ) ===
+      currentUserId
+  );
+
+}
+
+
+// =====================================================
+// FIND CHAT CONVERSATION
+// =====================================================
+
+async function findChatConversation({
+  conversationId,
+  tenantId,
+}) {
+
+  const id =
+    normaliseId(
+      conversationId
+    );
+
+
+  if (
+    !id
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    !mongoose.Types.ObjectId.isValid(
+      id
+    )
+  ) {
+
+    return null;
+
+  }
+
+
+  return ChatConversation.findOne({
+
+    _id:
+      id,
+
+    tenantId,
+
+  });
+
+}
+
+
+// =====================================================
+// JOIN CHAT ROOM
+// =====================================================
 //
-// Socket membership does NOT change database state.
+// IMPORTANT:
 //
+// Socket room membership does not change the database.
+//
+// ChatConversation remains authoritative.
+//
+// =====================================================
+
+async function handleChatJoin(
+  namespace,
+  socket,
+  conversationId
+) {
+
+  const id =
+    normaliseId(
+      conversationId
+    );
+
+
+  if (
+    !id
+  ) {
+
+    socket.emit(
+      "chat:error",
+      {
+
+        code:
+          "CHAT_CONVERSATION_ID_REQUIRED",
+
+        message:
+          "conversationId is required",
+
+      }
+    );
+
+
+    return;
+
+  }
+
+
+  try {
+
+    // ===============================================
+    // OBJECT ID
+    // ===============================================
+
+    if (
+      !mongoose.Types.ObjectId.isValid(
+        id
+      )
+    ) {
+
+      socket.emit(
+        "chat:error",
+        {
+
+          conversationId:
+            id,
+
+          code:
+            "CHAT_INVALID_CONVERSATION_ID",
+
+          message:
+            "Invalid conversationId",
+
+        }
+      );
+
+
+      return;
+
+    }
+
+
+    // ===============================================
+    // FIND CONVERSATION
+    // ===============================================
+
+    const conversation =
+      await findChatConversation({
+
+        conversationId:
+          id,
+
+        tenantId:
+          socket.user.tenantId,
+
+      });
+
+
+    if (
+      !conversation
+    ) {
+
+      socket.emit(
+        "chat:error",
+        {
+
+          conversationId:
+            id,
+
+          code:
+            "CHAT_CONVERSATION_NOT_FOUND",
+
+          message:
+            "Chat conversation not found",
+
+        }
+      );
+
+
+      return;
+
+    }
+
+
+    // ===============================================
+    // VERIFY PARTICIPANT
+    // ===============================================
+
+    const participant =
+      isChatParticipant(
+        conversation,
+        socket.user.userId
+      );
+
+
+    if (
+      !participant
+    ) {
+
+      socket.emit(
+        "chat:error",
+        {
+
+          conversationId:
+            id,
+
+          code:
+            "CHAT_ACCESS_DENIED",
+
+          message:
+            "You are not a participant in this conversation",
+
+        }
+      );
+
+
+      return;
+
+    }
+
+
+    // ===============================================
+    // DO NOT JOIN CLOSED CONVERSATIONS
+    // ===============================================
+
+    if (
+      conversation.status ===
+      "closed"
+    ) {
+
+      socket.emit(
+        "chat:error",
+        {
+
+          conversationId:
+            id,
+
+          code:
+            "CHAT_CONVERSATION_CLOSED",
+
+          message:
+            "This conversation is closed",
+
+        }
+      );
+
+
+      return;
+
+    }
+
+
+    // ===============================================
+    // JOIN ROOM
+    // ===============================================
+
+    const room =
+      getChatRoom(
+        id
+      );
+
+
+    await socket.join(
+      room
+    );
+
+
+    // ===============================================
+    // TRACK SOCKET MEMBERSHIP
+    // ===============================================
+
+    if (
+      !(
+        socket.data
+          .chatConversationIds
+        instanceof Set
+      )
+    ) {
+
+      socket.data.chatConversationIds =
+        new Set();
+
+    }
+
+
+    socket.data.chatConversationIds.add(
+      id
+    );
+
+
+    socket.data.userId =
+      String(
+        socket.user.userId
+      );
+
+    socket.data.tenantId =
+      String(
+        socket.user.tenantId
+      );
+
+
+    console.log(
+      "[GroupCallSocket] joined chat room",
+      {
+
+        socketId:
+          socket.id,
+
+        conversationId:
+          id,
+
+        userId:
+          socket.user.userId,
+
+        room,
+
+      }
+    );
+
+
+    socket.emit(
+      "chat:joined",
+      {
+
+        conversationId:
+          id,
+
+      }
+    );
+
+
+    // -------------------------------------------------
+    // Notify existing room members that the participant
+    // is now connected.
+    //
+    // The joining socket already receives chat:joined.
+    // Others receive participant-connected.
+    // -------------------------------------------------
+
+    socket.to(
+      room
+    ).emit(
+      "chat:participant-joined",
+      {
+
+        conversationId:
+          id,
+
+        userId:
+          normaliseId(
+            socket.user.userId
+          ),
+
+      }
+    );
+
+  }
+  catch (error) {
+
+    console.error(
+      "[GroupCallSocket] chat:join failed",
+      {
+
+        conversationId:
+          id,
+
+        userId:
+          socket.user.userId,
+
+        error,
+
+      }
+    );
+
+
+    socket.emit(
+      "chat:error",
+      {
+
+        conversationId:
+          id,
+
+        code:
+          "CHAT_JOIN_FAILED",
+
+        message:
+          "Failed to join chat conversation",
+
+      }
+    );
+
+  }
+
+}
+
+
+// =====================================================
+// LEAVE CHAT ROOM
+// =====================================================
+
+async function handleChatLeaveRoom(
+  socket,
+  conversationId = null
+) {
+
+  const id =
+    normaliseId(
+      conversationId
+    );
+
+
+  if (
+    !id
+  ) {
+
+    return;
+
+  }
+
+
+  const room =
+    getChatRoom(
+      id
+    );
+
+
+  try {
+
+    await socket.leave(
+      room
+    );
+
+  }
+  catch (error) {
+
+    console.warn(
+      "[GroupCallSocket] chat leave room failed",
+      {
+
+        conversationId:
+          id,
+
+        socketId:
+          socket.id,
+
+        error,
+
+      }
+    );
+
+  }
+
+
+  if (
+    socket.data
+      ?.chatConversationIds instanceof Set
+  ) {
+
+    socket.data.chatConversationIds.delete(
+      id
+    );
+
+  }
+
+
+  console.log(
+    "[GroupCallSocket] left chat room",
+    {
+
+      socketId:
+        socket.id,
+
+      conversationId:
+        id,
+
+      userId:
+        socket.data?.userId,
+
+    }
+  );
+
+
+  socket.to(
+    room
+  ).emit(
+    "chat:participant-left",
+    {
+
+      conversationId:
+        id,
+
+      userId:
+        normaliseId(
+          socket.data?.userId
+        ),
+
+      leftAt:
+        new Date(),
+
+    }
+  );
+
+
+  socket.emit(
+    "chat:left",
+    {
+
+      conversationId:
+        id,
+
+    }
+  );
+
+}
+
+
+// =====================================================
+// LEAVE ALL CHAT ROOMS
+// =====================================================
+
+async function leaveAllChatRooms(
+  socket
+) {
+
+  const conversationIds =
+    socket.data
+      ?.chatConversationIds instanceof Set
+
+      ? Array.from(
+          socket.data.chatConversationIds
+        )
+
+      : [];
+
+
+  for (
+    const conversationId of
+      conversationIds
+  ) {
+
+    const room =
+      getChatRoom(
+        conversationId
+      );
+
+
+    try {
+
+      // ---------------------------------------------
+      // Notify remaining connected participants.
+      // ---------------------------------------------
+
+      socket.to(
+        room
+      ).emit(
+        "chat:participant-left",
+        {
+
+          conversationId,
+
+          userId:
+            normaliseId(
+              socket.data?.userId
+            ),
+
+          leftAt:
+            new Date(),
+
+        }
+      );
+
+
+      await socket.leave(
+        room
+      );
+
+    }
+    catch (error) {
+
+      console.warn(
+        "[GroupCallSocket] failed leaving chat room on disconnect",
+        {
+
+          conversationId,
+
+          socketId:
+            socket.id,
+
+          error,
+
+        }
+      );
+
+    }
+
+  }
+
+
+  if (
+    socket.data
+  ) {
+
+    socket.data.chatConversationIds =
+      new Set();
+
+  }
+
+}
+
+
+// =====================================================
+// VERIFY CHAT ROOM MEMBERSHIP
+// =====================================================
+
+function isSocketInChatRoom(
+  socket,
+  conversationId
+) {
+
+  const id =
+    normaliseId(
+      conversationId
+    );
+
+
+  if (
+    !id
+  ) {
+
+    return false;
+
+  }
+
+
+  return (
+    socket.data
+      ?.chatConversationIds instanceof Set &&
+    socket.data.chatConversationIds.has(
+      id
+    )
+  );
+
+}
+
+
+// =====================================================
+// CHAT TYPING
+// =====================================================
+//
+// Realtime only.
+//
+// No MongoDB write.
+// =====================================================
+
+function handleChatTyping(
+  namespace,
+  socket,
+  payload = {}
+) {
+
+  const conversationId =
+    normaliseId(
+      payload?.conversationId
+    );
+
+
+  if (
+    !conversationId
+  ) {
+
+    return;
+
+  }
+
+
+  if (
+    !isSocketInChatRoom(
+      socket,
+      conversationId
+    )
+  ) {
+
+    console.warn(
+      "[GroupCallSocket] chat typing ignored - socket is not in conversation",
+      {
+
+        conversationId,
+
+        userId:
+          socket.user.userId,
+
+      }
+    );
+
+
+    return;
+
+  }
+
+
+  const room =
+    getChatRoom(
+      conversationId
+    );
+
+
+  socket.to(
+    room
+  ).emit(
+    "chat:typing",
+    {
+
+      conversationId,
+
+      userId:
+        normaliseId(
+          socket.user.userId
+        ),
+
+      isTyping:
+        payload?.isTyping !== false,
+
+    }
+  );
+
+}
+
+
+// =====================================================
+// CHAT STOP TYPING
+// =====================================================
+
+function handleChatStopTyping(
+  namespace,
+  socket,
+  payload = {}
+) {
+
+  handleChatTyping(
+    namespace,
+    socket,
+    {
+
+      ...(payload || {}),
+
+      isTyping:
+        false,
+
+    }
+  );
+
+}
+
+
+// =====================================================
+// CHAT READ
+// =====================================================
+//
+// Realtime signalling only.
+//
+// A future HTTP/chat service can persist read state.
+//
+// =====================================================
+
+function handleChatRead(
+  namespace,
+  socket,
+  payload = {}
+) {
+
+  const conversationId =
+    normaliseId(
+      payload?.conversationId
+    );
+
+
+  if (
+    !conversationId
+  ) {
+
+    return;
+
+  }
+
+
+  if (
+    !isSocketInChatRoom(
+      socket,
+      conversationId
+    )
+  ) {
+
+    console.warn(
+      "[GroupCallSocket] chat read ignored - socket is not in conversation",
+      {
+
+        conversationId,
+
+        userId:
+          socket.user.userId,
+
+      }
+    );
+
+
+    return;
+
+  }
+
+
+  const room =
+    getChatRoom(
+      conversationId
+    );
+
+
+  namespace
+    .to(
+      room
+    )
+    .emit(
+      "chat:read",
+      {
+
+        conversationId,
+
+        userId:
+          normaliseId(
+            socket.user.userId
+          ),
+
+        lastMessageId:
+          normaliseId(
+            payload?.lastMessageId
+          ),
+
+        readAt:
+          new Date(),
+
+      }
+    );
+
+}
+
+
+// =====================================================
+// JOIN TRAINING SESSION ROOM
 // =====================================================
 
 async function handleTrainingJoin(
@@ -276,8 +1294,10 @@ async function handleTrainingJoin(
     console.warn(
       "[GroupCallSocket] training-session:join missing sessionId",
       {
+
         socketId:
           socket.id,
+
       }
     );
 
@@ -371,7 +1391,7 @@ async function handleTrainingJoin(
 
 
     // ===============================================
-    // ONLY VALID TRAINING PARTICIPANTS
+    // ELIGIBLE PARTICIPANT
     // ===============================================
 
     if (
@@ -411,7 +1431,7 @@ async function handleTrainingJoin(
 
     if (
       session.status ===
-        "ended"
+      "ended"
     ) {
 
       console.warn(
@@ -520,12 +1540,6 @@ async function handleTrainingJoin(
 
 // =====================================================
 // LEAVE TRAINING SOCKET ROOM
-// =====================================================
-//
-// This does NOT modify MongoDB participant state.
-//
-// The HTTP training leave route remains authoritative.
-//
 // =====================================================
 
 async function handleTrainingLeaveRoom(
@@ -713,25 +1727,12 @@ export function registerGroupCallSockets(
           socket.user.tenantId
         );
 
+      socket.data.chatConversationIds =
+        new Set();
+
 
       // =================================================
       // AUTHENTICATED USER ROOM
-      // =================================================
-      //
-      // Every authenticated socket joins its own private
-      // user room immediately after authentication.
-      //
-      // This is what allows backend routes to target:
-      //
-      //   user:<userId>
-      //
-      // without requiring the socket to already be inside
-      // a specific call/training room.
-      //
-      // This is especially important for invitations,
-      // because an invited user may not yet have joined
-      // the group-call/training room.
-      //
       // =================================================
 
       const userRoom =
@@ -1038,13 +2039,6 @@ export function registerGroupCallSockets(
       // =================================================
       // TRAINING SESSION JOIN
       // =================================================
-      //
-      // This does not alter TrainingParticipant state.
-      //
-      // It only associates the socket with the training
-      // session realtime room.
-      //
-      // =================================================
 
       socket.on(
         "training-session:join",
@@ -1054,6 +2048,116 @@ export function registerGroupCallSockets(
             namespace,
             socket,
             payload?.sessionId
+          );
+
+        }
+      );
+
+
+      // =================================================
+      // CHAT JOIN
+      // =================================================
+
+      socket.on(
+        "chat:join",
+        async payload => {
+
+          await handleChatJoin(
+            namespace,
+            socket,
+            payload?.conversationId
+          );
+
+        }
+      );
+
+
+      // =================================================
+      // CHAT LEAVE
+      // =================================================
+      //
+      // Current client service uses:
+      //
+      //   chat:leave
+      //
+      // Earlier transport used:
+      //
+      //   chat:leave-room
+      //
+      // Support BOTH so existing templates are not broken.
+      // =================================================
+
+      const chatLeaveHandler =
+        async payload => {
+
+          await handleChatLeaveRoom(
+            socket,
+            payload?.conversationId
+          );
+
+        };
+
+
+      socket.on(
+        "chat:leave",
+        chatLeaveHandler
+      );
+
+
+      socket.on(
+        "chat:leave-room",
+        chatLeaveHandler
+      );
+
+
+      // =================================================
+      // CHAT TYPING
+      // =================================================
+
+      socket.on(
+        "chat:typing",
+        payload => {
+
+          handleChatTyping(
+            namespace,
+            socket,
+            payload
+          );
+
+        }
+      );
+
+
+      // =================================================
+      // CHAT STOP TYPING
+      // =================================================
+
+      socket.on(
+        "chat:stop-typing",
+        payload => {
+
+          handleChatStopTyping(
+            namespace,
+            socket,
+            payload
+          );
+
+        }
+      );
+
+
+      // =================================================
+      // CHAT READ
+      // =================================================
+
+      socket.on(
+        "chat:read",
+        payload => {
+
+          handleChatRead(
+            namespace,
+            socket,
+            payload
           );
 
         }
@@ -1168,17 +2272,17 @@ export function registerGroupCallSockets(
       // =================================================
       //
       // Group Call:
-      //   disconnect applies the shared lifecycle.
+      //   unexpected disconnect applies lifecycle.
       //
       // Training:
-      //   disconnect marks a joined participant as left.
+      //   unexpected disconnect marks joined participant
+      //   as left.
       //
-      // IMPORTANT:
+      // Chat:
+      //   socket room membership is cleaned up, but MongoDB
+      //   conversation membership is NOT changed.
       //
-      // REST leave/end remains authoritative for explicit
-      // user actions. This path handles unexpected browser
-      // disconnects.
-      //
+      // HTTP routes remain authoritative for chat leave.
       // =================================================
 
       socket.on(
@@ -1199,8 +2303,28 @@ export function registerGroupCallSockets(
             socket.data?.userId;
 
 
+          const chatConversationIds =
+            socket.data
+              ?.chatConversationIds instanceof Set
+
+              ? Array.from(
+                  socket.data.chatConversationIds
+                )
+
+              : [];
+
+
           // =============================================
-          // NO ACTIVE SESSION
+          // CHAT CLEANUP
+          // =============================================
+
+          await leaveAllChatRooms(
+            socket
+          );
+
+
+          // =============================================
+          // NO CALL / TRAINING
           // =============================================
 
           if (
@@ -1216,6 +2340,9 @@ export function registerGroupCallSockets(
                   socket.id,
 
                 reason,
+
+                chatConversationCount:
+                  chatConversationIds.length,
 
               }
             );
@@ -1538,10 +2665,6 @@ export function registerGroupCallSockets(
                   await participant.save();
 
 
-                  // ------------------------------------
-                  // Broadcast participant departure
-                  // ------------------------------------
-
                   namespace
                     .to(
                       getTrainingRoom(
@@ -1609,27 +2732,53 @@ export function registerGroupCallSockets(
 
 
   // ===================================================
-  // TRAINING REALTIME EVENTS
+  // EXPOSE ROOM HELPERS
   // ===================================================
   //
-  // These are helpers for the HTTP training routes.
+  // These are convenience helpers for HTTP/domain layers
+  // that already have the namespace instance:
   //
-  // The routes can obtain the namespace with:
+  //   const namespace = req.app.get("io").of("/group-calls");
   //
-  //   req.app.get("io").of("/group-calls")
-  //
-  // and emit:
-  //
-  //   training-session:invited
-  //   training-session:started
-  //   training-session:ended
-  //
-  // The client runtime filters them by session/user.
-  //
+  // Existing routes can continue using literal room names,
+  // so these are additive and non-breaking.
+  // ===================================================
+
+  namespace.getUserRoom =
+    getUserRoom;
+
+  namespace.getGroupCallRoom =
+    getGroupCallRoom;
+
+  namespace.getTrainingRoom =
+    getTrainingRoom;
+
+  namespace.getChatRoom =
+    getChatRoom;
+
+
+  // ===================================================
+  // REGISTERED
   // ===================================================
 
   console.log(
-    "[GroupCallSocket] namespace registered"
+    "[GroupCallSocket] namespace registered",
+    {
+
+      namespace:
+        "/group-calls",
+
+      features: [
+
+        "group-call",
+
+        "training-session",
+
+        "chat",
+
+      ],
+
+    }
   );
 
 

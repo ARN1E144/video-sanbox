@@ -21,7 +21,10 @@ The installer:
 - preserves metadata
 - resolves targetId references
 - preserves explicit Canvas properties
-- unwraps logical root containers
+- preserves parent/child relationships explicitly
+- preserves tree paths
+- preserves logical root containers
+- provides diagnostics for hierarchy integrity
 
 It does NOT:
 
@@ -29,7 +32,7 @@ It does NOT:
 - render components
 - create Canvas runtime state
 
-ProjectTreeLoader handles Canvas layout.
+ProjectTreeLoader / Canvas layer handles Canvas layout.
 
 IMPORTANT ID MODEL
 -----------------------------------------------------
@@ -46,8 +49,26 @@ Metadata:
 
     meta.sourceId = "interview-video"
 
-This gives us a stable relationship between the
-template definition and the installed project instance.
+Hierarchy metadata:
+
+    meta.parentId
+    meta.parentSourceId
+    meta.treePath
+    meta.depth
+
+This gives the project system TWO reliable ways to
+understand hierarchy:
+
+1. Native tree structure:
+
+      parent.children[]
+
+2. Explicit relationship metadata:
+
+      child.meta.parentId
+
+The native tree remains authoritative.
+
 =====================================================
 */
 
@@ -80,23 +101,12 @@ function createInstalledId(
 
 
 // =====================================================
-// GET ORIGINAL SOURCE ID
+// GET SOURCE ID
 // =====================================================
 //
-// This is deliberately independent from the generated
-// installed ID.
+// Original Confo identity is always retained separately
+// from the generated installed project ID.
 //
-// Example:
-//
-// node.id = "interview-video"
-//
-// installed node:
-//
-// id:
-//   "confo-interview-video-2"
-//
-// meta.sourceId:
-//   "interview-video"
 // =====================================================
 
 function getSourceId(
@@ -115,7 +125,7 @@ function getSourceId(
 
   if (
     typeof node.meta?.sourceId ===
-    "string" &&
+      "string" &&
     node.meta.sourceId.trim()
   ) {
 
@@ -126,7 +136,7 @@ function getSourceId(
 
   if (
     typeof node.id ===
-    "string" &&
+      "string" &&
     node.id.trim()
   ) {
 
@@ -136,6 +146,41 @@ function getSourceId(
 
 
   return null;
+
+}
+
+
+// =====================================================
+// GET ORIGINAL META
+// =====================================================
+
+function getOriginalMeta(
+  node
+) {
+
+  if (
+    !node ||
+    typeof node !== "object"
+  ) {
+
+    return {};
+
+  }
+
+
+  if (
+    !node.meta ||
+    typeof node.meta !== "object"
+  ) {
+
+    return {};
+
+  }
+
+
+  return {
+    ...node.meta,
+  };
 
 }
 
@@ -153,6 +198,10 @@ function getSourceId(
 // interview-video
 //      ↓
 // confo-interview-video-2
+//
+// The walk is recursive so nested children are always
+// included.
+//
 // =====================================================
 
 function buildIdMap(
@@ -241,13 +290,17 @@ function buildIdMap(
 // RESOLVE TARGET REFERENCES
 // =====================================================
 //
-// Confo:
+// Supports:
 //
 // targetId: "interview-video"
 //
-// Installed:
+// →
 //
 // targetId: "confo-interview-video-2"
+//
+// Existing target IDs that cannot be resolved are
+// intentionally retained rather than removed.
+//
 // =====================================================
 
 function resolveTargetReferences(
@@ -266,15 +319,13 @@ function resolveTargetReferences(
 
 
   const resolved = {
-
     ...props,
-
   };
 
 
   if (
     typeof resolved.targetId ===
-    "string"
+      "string"
   ) {
 
     resolved.targetId =
@@ -294,11 +345,29 @@ function resolveTargetReferences(
 // =====================================================
 // INSTALL NODE
 // =====================================================
+//
+// Recursive installation.
+//
+// IMPORTANT:
+//
+// children are NEVER flattened.
+//
+// Every installed child remains inside:
+//
+// parent.children[]
+//
+// In addition, parent relationships are written into
+// metadata so downstream Canvas code can reconstruct
+// hierarchy safely even if it temporarily works with a
+// flattened element collection.
+// =====================================================
 
 function installNode(
   node,
   path,
-  idMap
+  idMap,
+  parentNode = null,
+  depth = 0
 ) {
 
   if (
@@ -346,21 +415,41 @@ function installNode(
 
 
   // ===================================================
+  // PARENT INFORMATION
+  // ===================================================
+
+  const parentId =
+    parentNode?.id ||
+    null;
+
+
+  const parentSourceId =
+    parentNode
+      ? (
+          getSourceId(
+            parentNode
+          ) ||
+          null
+        )
+      : null;
+
+
+  // ===================================================
   // META
   // ===================================================
   //
-  // IMPORTANT:
+  // Preserve ALL existing metadata.
   //
-  // sourceId is written explicitly here.
-  //
-  // We do NOT rely on spreading node.meta to preserve
-  // the relationship.
+  // Then add installer metadata without overwriting
+  // the important source relationship.
   //
   // ===================================================
 
   const installedMeta = {
 
-    ...(node.meta || {}),
+    ...getOriginalMeta(
+      node
+    ),
 
     source:
       node.meta?.source ||
@@ -370,8 +459,19 @@ function installNode(
       sourceId,
 
     installedId:
-
       installedId,
+
+    treePath:
+      path,
+
+    depth:
+      depth,
+
+    parentId:
+      parentId,
+
+    parentSourceId:
+      parentSourceId,
 
   };
 
@@ -448,6 +548,14 @@ function installNode(
   // ===================================================
   // CHILDREN
   // ===================================================
+  //
+  // CRITICAL:
+  //
+  // The hierarchy remains nested.
+  //
+  // We do NOT convert children into siblings.
+  //
+  // ===================================================
 
   if (
     Array.isArray(
@@ -457,6 +565,7 @@ function installNode(
 
     const children =
       node.children
+
         .map(
           (
             child,
@@ -464,10 +573,17 @@ function installNode(
           ) =>
             installNode(
               child,
+
               `${path}-${childIndex}`,
-              idMap
+
+              idMap,
+
+              installedNode,
+
+              depth + 1
             )
         )
+
         .filter(
           Boolean
         );
@@ -491,7 +607,20 @@ function installNode(
 
 
 // =====================================================
-// UNWRAP ROOT
+// GET INSTALL ROOT
+// =====================================================
+//
+// Converts the Confo logical root into the project App
+// root when necessary.
+//
+// IMPORTANT:
+//
+// The logical Container itself is NOT installed as a
+// detached Canvas element.
+//
+// Its children become the App's children while retaining
+// their complete internal hierarchy.
+//
 // =====================================================
 
 function getInstallRoot(
@@ -558,6 +687,9 @@ function getInstallRoot(
           confoTree.props?.layout ||
           "vertical",
 
+        sourceId:
+          null,
+
       },
 
     };
@@ -588,6 +720,9 @@ function getInstallRoot(
 
       source:
         "confo-root",
+
+      sourceId:
+        null,
 
     },
 
@@ -630,6 +765,18 @@ function debugHierarchy(
       sourceId:
         node.meta?.sourceId,
 
+      parentId:
+        node.meta?.parentId,
+
+      parentSourceId:
+        node.meta?.parentSourceId,
+
+      treePath:
+        node.meta?.treePath,
+
+      depth:
+        node.meta?.depth,
+
       meta:
         node.meta,
 
@@ -657,6 +804,208 @@ function debugHierarchy(
 
 
 // =====================================================
+// VALIDATE INSTALLED HIERARCHY
+// =====================================================
+//
+// This deliberately runs after installation.
+//
+// It does NOT modify the tree.
+//
+// It only detects structural problems so we can see
+// whether the installer itself has detached anything.
+//
+// =====================================================
+
+function validateInstalledHierarchy(
+  node,
+  result = {
+    valid:
+      true,
+
+    errors: [],
+
+    nodes:
+      0,
+
+  },
+  parent = null
+) {
+
+  if (
+    !node ||
+    typeof node !== "object"
+  ) {
+
+    return result;
+
+  }
+
+
+  result.nodes +=
+    1;
+
+
+  // ---------------------------------------------------
+  // Parent relationship
+  // ---------------------------------------------------
+
+  if (
+    parent
+  ) {
+
+    const expectedParentId =
+      parent.id ||
+      null;
+
+
+    const actualParentId =
+      node.meta?.parentId ||
+      null;
+
+
+    if (
+      expectedParentId !==
+      actualParentId
+    ) {
+
+      result.valid =
+        false;
+
+
+      result.errors.push(
+
+        `Hierarchy mismatch for '${node.id}': expected parent '${expectedParentId}', received '${actualParentId}'.`
+
+      );
+
+    }
+
+  }
+  else {
+
+    // Root App is allowed to have no parent.
+
+    if (
+      node.meta?.parentId
+    ) {
+
+      result.valid =
+        false;
+
+
+      result.errors.push(
+
+        `Root node '${node.id}' unexpectedly contains parentId '${node.meta.parentId}'.`
+
+      );
+
+    }
+
+  }
+
+
+  // ---------------------------------------------------
+  // Recursive validation
+  // ---------------------------------------------------
+
+  if (
+    Array.isArray(
+      node.children
+    )
+  ) {
+
+    node.children.forEach(
+      child =>
+        validateInstalledHierarchy(
+          child,
+          result,
+          node
+        )
+    );
+
+  }
+
+
+  return result;
+
+}
+
+
+// =====================================================
+// FIND NODE BY SOURCE ID
+// =====================================================
+
+function findNodeBySourceId(
+  node,
+  sourceId
+) {
+
+  if (
+    !node ||
+    typeof node !== "object"
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    node.meta?.sourceId ===
+    sourceId
+  ) {
+
+    return node;
+
+  }
+
+
+  if (
+    node.id ===
+    sourceId
+  ) {
+
+    return node;
+
+  }
+
+
+  if (
+    Array.isArray(
+      node.children
+    )
+  ) {
+
+    for (
+      const child of node.children
+    ) {
+
+      const found =
+        findNodeBySourceId(
+          child,
+          sourceId
+        );
+
+
+      if (
+        found
+      ) {
+
+        return found;
+
+      }
+
+    }
+
+  }
+
+
+  return null;
+
+}
+
+
+// =====================================================
 // INSTALL CONFO
 // =====================================================
 
@@ -668,6 +1017,7 @@ export function installConfo(
   console.log(
     "[ConfoProjectInstaller] Installing",
     {
+
       id:
         confo?.id,
 
@@ -786,10 +1136,19 @@ export function installConfo(
         ) =>
           installNode(
             child,
-            String(index),
-            idMap
+
+            String(
+              index
+            ),
+
+            idMap,
+
+            null,
+
+            0
           )
       )
+
       .filter(
         Boolean
       );
@@ -822,6 +1181,9 @@ export function installConfo(
       source:
         "project-tree",
 
+      sourceId:
+        null,
+
       installedFromConfo:
         confo.id ||
         confo.name,
@@ -832,6 +1194,18 @@ export function installConfo(
       confoVersion:
         confo.version ||
         1,
+
+      treePath:
+        "root",
+
+      depth:
+        0,
+
+      parentId:
+        null,
+
+      parentSourceId:
+        null,
 
     },
 
@@ -854,91 +1228,30 @@ export function installConfo(
 
 
   // ===================================================
+  // HIERARCHY VALIDATION
+  // ===================================================
+
+  const hierarchyValidation =
+    validateInstalledHierarchy(
+      installedTree
+    );
+
+
+  console.log(
+    "[ConfoProjectInstaller] HIERARCHY VALIDATION",
+    hierarchyValidation
+  );
+
+
+  // ===================================================
   // EXPLICIT VIDEOFEED CHECK
   // ===================================================
 
-  let interviewVideo = null;
-
-
-  function findInterviewVideo(
-    node
-  ) {
-
-    if (
-      !node ||
-      typeof node !== "object"
-    ) {
-
-      return;
-
-    }
-
-
-    if (
-      node.meta?.sourceId ===
+  const interviewVideo =
+    findNodeBySourceId(
+      installedTree,
       "interview-video"
-    ) {
-
-      interviewVideo =
-        node;
-
-      return;
-
-    }
-
-
-    if (
-      node.type ===
-      "VideoFeed" &&
-      (
-        node.meta?.sourceId ===
-          "interview-video" ||
-        node.id ===
-          "confo-interview-video"
-      )
-    ) {
-
-      interviewVideo =
-        node;
-
-      return;
-
-    }
-
-
-    if (
-      Array.isArray(
-        node.children
-      )
-    ) {
-
-      for (
-        const child of node.children
-      ) {
-
-        if (
-          interviewVideo
-        ) {
-
-          break;
-
-        }
-
-
-        findInterviewVideo(
-          child
-        );
-
-      }
-
-    }
-
-  }
-
-
-  findInterviewVideo(
-    installedTree
-  );
+    );
 
 
   console.log(
@@ -954,6 +1267,14 @@ export function installConfo(
 
       sourceId:
         interviewVideo?.meta?.sourceId ||
+        null,
+
+      parentId:
+        interviewVideo?.meta?.parentId ||
+        null,
+
+      treePath:
+        interviewVideo?.meta?.treePath ||
         null,
 
       meta:
@@ -973,7 +1294,10 @@ export function installConfo(
     success:
       true,
 
-    errors: [],
+    errors:
+      hierarchyValidation.valid
+        ? []
+        : hierarchyValidation.errors,
 
     tree:
       installedTree,
@@ -983,6 +1307,16 @@ export function installConfo(
     previousTree:
       projectSchema?.tree ||
       null,
+
+    hierarchy: {
+
+      valid:
+        hierarchyValidation.valid,
+
+      nodes:
+        hierarchyValidation.nodes,
+
+    },
 
   };
 

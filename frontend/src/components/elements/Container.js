@@ -1,48 +1,89 @@
 import React from "react";
 
 export default function Container({
- children,
- style = {},
+  children,
+  style = {},
 }) {
 
-return (
+  const layout =
+    style.layout ||
+    "vertical";
 
-<div
+  const isHorizontal =
+    layout === "horizontal";
 
-style={{
+  return (
 
-width:"100%",
-height:"100%",
+    <div
+      style={{
+        width:
+          style.width ||
+          "100%",
 
-display:"flex",
+        height:
+          style.height ||
+          "auto",
 
-flexDirection:"column",
+        minWidth:
+          0,
 
-alignItems:"center",
+        minHeight:
+          0,
 
-justifyContent:"center",
+        boxSizing:
+          "border-box",
 
-backgroundColor:
-style.backgroundColor || "rgba(255,255,255,0.05)",
+        display:
+          "flex",
 
-borderRadius:
-style.borderRadius || "0px",
+        flexDirection:
+          isHorizontal
+            ? "row"
+            : "column",
 
-border:
-"1px dashed rgba(255,255,255,0.2)",
+        alignItems:
+          style.alignItems ||
+          "stretch",
 
-position:"relative",
+        justifyContent:
+          style.justifyContent ||
+          "flex-start",
 
-overflow:"hidden"
+        gap:
+          style.gap ??
+          8,
 
-}}
+        padding:
+          style.padding ??
+          0,
 
->
+        backgroundColor:
+          style.backgroundColor ||
+          "rgba(255,255,255,0.05)",
 
-{children}
+        borderRadius:
+          style.borderRadius ??
+          0,
 
-</div>
+        border:
+          style.border ||
+          "1px dashed rgba(255,255,255,0.12)",
 
-);
+        position:
+          "relative",
+
+        overflow:
+          style.overflow ||
+          "visible",
+
+        ...style,
+      }}
+    >
+
+      {children}
+
+    </div>
+
+  );
 
 }

@@ -1,6 +1,13 @@
 import express from "express";
 import mongoose from "mongoose";
 import multer from "multer";
+import OpenAI from "openai";
+
+import {
+  PDFParse,
+} from "pdf-parse";
+
+import mammoth from "mammoth";
 
 import Compliance from "../models/Compliance.js";
 
@@ -13,41 +20,80 @@ import {
 } from "../middleware/projectAccess.js";
 
 
+// =====================================================
+// OPENAI
+// =====================================================
+
+const openai =
+  new OpenAI({
+    apiKey:
+      process.env.OPENAI_API_KEY,
+  });
+
+
+// =====================================================
+// ROUTER
+// =====================================================
+
 const router =
   express.Router();
+
+
+// =====================================================
+// UPLOAD
+// =====================================================
+
+const upload =
+  multer({
+
+    storage:
+      multer.memoryStorage(),
+
+    limits: {
+
+      fileSize:
+        25 *
+        1024 *
+        1024,
+
+    },
+
+  });
+
+
+// =====================================================
+// CONSTANTS
+// =====================================================
+
+const MAX_EXTRACTED_TEXT_LENGTH =
+  120000;
+
+const MAX_AI_INPUT_TEXT_LENGTH =
+  60000;
 
 
 // =====================================================
 // HELPERS
 // =====================================================
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 25 * 1024 * 1024,
-  },
-});
-
-
-// =====================================================
-// PROJECT ID
-// =====================================================
-
-function getProjectId(req) {
+function getProjectId(
+  req
+) {
 
   return (
-    req.params.projectId ||
-    req.query.projectId ||
+
+    req.params?.projectId ||
+
+    req.query?.projectId ||
+
     req.body?.projectId ||
+
     null
+
   );
 
 }
 
-
-// =====================================================
-// PROJECT ACCESS
-// =====================================================
 
 async function requireComplianceProject(
   req,
@@ -55,16 +101,25 @@ async function requireComplianceProject(
 ) {
 
   const projectId =
-    getProjectId(req);
+    getProjectId(
+      req
+    );
 
 
-  if (!projectId) {
+  if (
+    !projectId
+  ) {
 
     return {
-      error: res.status(400).json({
-        error:
-          "projectId is required",
-      }),
+
+      error:
+        res.status(400).json({
+
+          error:
+            "projectId is required",
+
+        }),
+
     };
 
   }
@@ -77,10 +132,15 @@ async function requireComplianceProject(
   ) {
 
     return {
-      error: res.status(400).json({
-        error:
-          "Invalid projectId",
-      }),
+
+      error:
+        res.status(400).json({
+
+          error:
+            "Invalid projectId",
+
+        }),
+
     };
 
   }
@@ -88,46 +148,49 @@ async function requireComplianceProject(
 
   const access =
     await getProjectAccess(
+
       req,
+
       projectId,
+
       "canView"
+
     );
 
 
-  if (!access.allowed) {
+  if (
+    !access.allowed
+  ) {
 
     return {
-      error: res.status(403).json({
-        error:
-          "You do not have access to this project",
-      }),
+
+      error:
+        res.status(403).json({
+
+          error:
+            "You do not have access to this project",
+
+        }),
+
     };
 
   }
 
 
   return {
+
     projectId,
+
     project:
       access.project,
+
     membership:
       access.membership,
+
   };
 
 }
 
-
-// =====================================================
-// REVIEW ACTOR SNAPSHOT
-// =====================================================
-//
-// We deliberately store a small snapshot rather than
-// making DataHub resolve the user every time.
-//
-// This means historical records remain readable even
-// if the user's display name changes later.
-//
-// =====================================================
 
 function getReviewActor(
   req
@@ -161,6 +224,464 @@ function getReviewActor(
 }
 
 
+function normaliseExtractedText(
+  value
+) {
+
+  return String(
+    value ||
+    ""
+  )
+
+    .replace(
+      /\u0000/g,
+      ""
+    )
+
+    .replace(
+      /\r\n/g,
+      "\n"
+    )
+
+    .replace(
+      /\r/g,
+      "\n"
+    )
+
+    .replace(
+      /[ \t]+/g,
+      " "
+    )
+
+    .replace(
+      /\n{3,}/g,
+      "\n\n"
+    )
+
+    .trim();
+
+}
+
+
+function clampScore(
+  value
+) {
+
+  const number =
+    Number(
+      value
+    );
+
+
+  if (
+    !Number.isFinite(
+      number
+    )
+  ) {
+
+    return 0;
+
+  }
+
+
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        number
+      )
+    )
+  );
+
+}
+
+
+function clampConfidence(
+  value
+) {
+
+  const number =
+    Number(
+      value
+    );
+
+
+  if (
+    !Number.isFinite(
+      number
+    )
+  ) {
+
+    return 0;
+
+  }
+
+
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      number
+    )
+  );
+
+}
+
+
+function normaliseStringArray(
+  value
+) {
+
+  if (
+    !Array.isArray(
+      value
+    )
+  ) {
+
+    return [];
+
+  }
+
+
+  return value
+
+    .map(
+      item =>
+        String(
+          item ??
+          ""
+        ).trim()
+    )
+
+    .filter(
+      Boolean
+    );
+
+}
+
+
+function extractJsonText(
+  text
+) {
+
+  const raw =
+    String(
+      text ||
+      ""
+    ).trim();
+
+
+  if (
+    !raw
+  ) {
+
+    return "";
+
+  }
+
+
+  if (
+    raw.startsWith(
+      "{"
+    ) &&
+    raw.endsWith(
+      "}"
+    )
+  ) {
+
+    return raw;
+
+  }
+
+
+  const fenced =
+    raw.match(
+      /```(?:json)?\s*([\s\S]*?)\s*```/i
+    );
+
+
+  if (
+    fenced?.[1]
+  ) {
+
+    return fenced[1].trim();
+
+  }
+
+
+  const firstBrace =
+    raw.indexOf(
+      "{"
+    );
+
+
+  const lastBrace =
+    raw.lastIndexOf(
+      "}"
+    );
+
+
+  if (
+    firstBrace >= 0 &&
+    lastBrace > firstBrace
+  ) {
+
+    return raw.slice(
+      firstBrace,
+      lastBrace + 1
+    );
+
+  }
+
+
+  return raw;
+
+}
+
+
+// =====================================================
+// DOCUMENT TEXT EXTRACTION
+// =====================================================
+//
+// Supported:
+//
+// PDF
+// DOCX
+// TXT
+// MD
+// JSON
+//
+// Images intentionally do not use OCR in V1.
+// =====================================================
+
+async function extractDocumentText(
+  file
+) {
+
+  if (
+    !file?.buffer
+  ) {
+
+    return {
+
+      text:
+        "",
+
+      method:
+        "none",
+
+    };
+
+  }
+
+
+  const fileName =
+    String(
+      file.originalname ||
+      ""
+    ).toLowerCase();
+
+
+  const mimeType =
+    String(
+      file.mimetype ||
+      ""
+    ).toLowerCase();
+
+
+  try {
+
+    // =================================================
+    // PDF
+    // =================================================
+
+    if (
+      mimeType ===
+        "application/pdf" ||
+      fileName.endsWith(
+        ".pdf"
+      )
+    ) {
+
+      const parser =
+        new PDFParse({
+          data:
+            file.buffer,
+        });
+
+
+      try {
+
+        const parsed =
+          await parser.getText();
+
+
+        const text =
+          normaliseExtractedText(
+            parsed?.text
+          );
+
+
+        return {
+
+          text:
+            text.slice(
+              0,
+              MAX_EXTRACTED_TEXT_LENGTH
+            ),
+
+          method:
+            "pdf",
+
+        };
+
+      }
+      finally {
+
+        await parser.destroy();
+
+      }
+
+    }
+
+
+    // =================================================
+    // DOCX
+    // =================================================
+
+    if (
+      mimeType ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      fileName.endsWith(
+        ".docx"
+      )
+    ) {
+
+      const result =
+        await mammoth.extractRawText({
+
+          buffer:
+            file.buffer,
+
+        });
+
+
+      const text =
+        normaliseExtractedText(
+          result?.value
+        );
+
+
+      return {
+
+        text:
+          text.slice(
+            0,
+            MAX_EXTRACTED_TEXT_LENGTH
+          ),
+
+        method:
+          "docx",
+
+      };
+
+    }
+
+
+    // =================================================
+    // TEXT
+    // =================================================
+
+    if (
+      mimeType.startsWith(
+        "text/"
+      ) ||
+      fileName.endsWith(
+        ".txt"
+      ) ||
+      fileName.endsWith(
+        ".md"
+      ) ||
+      fileName.endsWith(
+        ".json"
+      )
+    ) {
+
+      const text =
+        normaliseExtractedText(
+          file.buffer.toString(
+            "utf8"
+          )
+        );
+
+
+      return {
+
+        text:
+          text.slice(
+            0,
+            MAX_EXTRACTED_TEXT_LENGTH
+          ),
+
+        method:
+          "text",
+
+      };
+
+    }
+
+
+    return {
+
+      text:
+        "",
+
+      method:
+        "none",
+
+    };
+
+  }
+  catch (
+    error
+  ) {
+
+    console.error(
+      "[COMPLIANCE] Document extraction failed",
+      {
+
+        fileName:
+          file.originalname,
+
+        mimeType:
+          file.mimetype,
+
+        error:
+          error?.message,
+
+      }
+    );
+
+
+    return {
+
+      text:
+        "",
+
+      method:
+        "failed",
+
+      error:
+        error?.message,
+
+    };
+
+  }
+
+}
+
+
 // =====================================================
 // NORMALISE CONTROL
 // =====================================================
@@ -169,63 +690,69 @@ function normaliseControl(
   control
 ) {
 
+  const safeControl =
+    control ||
+    {};
+
+
   const controlId =
-    control.controlId ||
-    control.id ||
-    control.key;
+    safeControl.controlId ||
+    safeControl.id ||
+    safeControl.key;
 
 
   return {
 
-    ...control,
+    ...safeControl,
 
     controlId,
 
     name:
-      control.name ||
-      control.title ||
+      safeControl.name ||
+      safeControl.title ||
       "",
 
     description:
-      control.description ||
+      safeControl.description ||
       "",
 
     category:
-      control.category ||
+      safeControl.category ||
       "",
 
     status:
-      control.status ||
+      safeControl.status ||
       "not_started",
 
     evidenceStatus:
-      control.evidenceStatus ||
+      safeControl.evidenceStatus ||
       "none",
 
     evidenceIds:
       Array.isArray(
-        control.evidenceIds
+        safeControl.evidenceIds
       )
-        ? control.evidenceIds
+        ? safeControl.evidenceIds
         : [],
 
     evidenceVerified:
-      control.evidenceVerified === true,
+      safeControl.evidenceVerified ===
+      true,
 
     evidenceVerifiedAt:
-      control.evidenceVerifiedAt ||
+      safeControl.evidenceVerifiedAt ||
       null,
 
     lastEvidenceId:
-      control.lastEvidenceId ||
+      safeControl.lastEvidenceId ||
       null,
 
     lastReviewedAt:
-      control.lastReviewedAt ||
+      safeControl.lastReviewedAt ||
       null,
 
     lastReviewedByUserId:
-      control.lastReviewedByUserId ||
+      safeControl.lastReviewedByUserId ||
       null,
 
   };
@@ -322,7 +849,7 @@ async function createInitialCompliance(
 
 
 // =====================================================
-// FIND OR CREATE COMPLIANCE
+// FIND OR CREATE
 // =====================================================
 
 async function getOrCreateCompliance(
@@ -342,7 +869,9 @@ async function getOrCreateCompliance(
     });
 
 
-  if (compliance) {
+  if (
+    compliance
+  ) {
 
     return compliance;
 
@@ -353,18 +882,26 @@ async function getOrCreateCompliance(
 
     compliance =
       await createInitialCompliance(
+
         req,
+
         projectId,
+
         project
+
       );
+
 
     return compliance;
 
   }
-  catch (error) {
+  catch (
+    error
+  ) {
 
     if (
-      error?.code === 11000
+      error?.code ===
+      11000
     ) {
 
       compliance =
@@ -378,7 +915,9 @@ async function getOrCreateCompliance(
         });
 
 
-      if (compliance) {
+      if (
+        compliance
+      ) {
 
         return compliance;
 
@@ -397,35 +936,18 @@ async function getOrCreateCompliance(
 // =====================================================
 // CONTROL STATE REBUILDER
 // =====================================================
-//
-// A control may have multiple evidence records.
-//
-// Therefore deleting or changing one piece of evidence
-// must not blindly reset the control.
-//
-// Priority:
-//
-// accepted
-//    ↓
-// review_required
-//    ↓
-// processing
-//    ↓
-// requested
-//    ↓
-// rejected
-//    ↓
-// none
-//
-// =====================================================
 
 function rebuildControlState(
   control,
   evidenceRecords
 ) {
 
-  if (!control) {
+  if (
+    !control
+  ) {
+
     return;
+
   }
 
 
@@ -447,20 +969,26 @@ function rebuildControlState(
 
   control.evidenceIds =
     related
+
       .map(
         item =>
           item?.evidenceId
       )
-      .filter(Boolean);
+
+      .filter(
+        Boolean
+      );
 
 
   const accepted =
     related
+
       .filter(
         item =>
           item?.status ===
           "accepted"
       )
+
       .sort(
         (
           a,
@@ -479,37 +1007,9 @@ function rebuildControlState(
       );
 
 
-  const reviewRequired =
-    related
-      .filter(
-        item =>
-          item?.status ===
-          "review_required"
-      );
-
-
-  const processing =
-    related
-      .filter(
-        item =>
-          item?.status ===
-            "processing" ||
-          item?.status ===
-            "requested"
-      );
-
-
-  const rejected =
-    related
-      .filter(
-        item =>
-          item?.status ===
-          "rejected"
-      );
-
-
   if (
-    accepted.length > 0
+    accepted.length >
+    0
   ) {
 
     const latest =
@@ -546,55 +1046,45 @@ function rebuildControlState(
   }
 
 
-  if (
-    reviewRequired.length > 0
-  ) {
+  const reviewRequired =
+    related
 
-    control.status =
-      "review_required";
-
-    control.evidenceStatus =
-      "review_required";
-
-    control.evidenceVerified =
-      false;
-
-    control.evidenceVerifiedAt =
-      null;
-
-    control.lastEvidenceId =
-      reviewRequired[
-        reviewRequired.length - 1
-      ]?.evidenceId ||
-      null;
-
-    return;
-
-  }
-
-
-  if (
-    processing.length > 0
-  ) {
-
-    const hasProcessing =
-      processing.some(
+      .filter(
         item =>
           item?.status ===
-          "processing"
+          "review_required"
+      )
+
+      .sort(
+        (
+          a,
+          b
+        ) =>
+          new Date(
+            b?.createdAt ||
+            0
+          ) -
+          new Date(
+            a?.createdAt ||
+            0
+          )
       );
 
 
-    control.status =
-      hasProcessing
-        ? "review_required"
-        : "evidence_requested";
+  if (
+    reviewRequired.length >
+    0
+  ) {
 
+    const latest =
+      reviewRequired[0];
+
+
+    control.status =
+      "review_required";
 
     control.evidenceStatus =
-      hasProcessing
-        ? "processing"
-        : "requested";
+      "review_required";
 
     control.evidenceVerified =
       false;
@@ -603,9 +1093,7 @@ function rebuildControlState(
       null;
 
     control.lastEvidenceId =
-      processing[
-        processing.length - 1
-      ]?.evidenceId ||
+      latest?.evidenceId ||
       null;
 
     return;
@@ -613,14 +1101,142 @@ function rebuildControlState(
   }
 
 
+  const processing =
+    related
+
+      .filter(
+        item =>
+          item?.status ===
+          "processing"
+      )
+
+      .sort(
+        (
+          a,
+          b
+        ) =>
+          new Date(
+            b?.createdAt ||
+            0
+          ) -
+          new Date(
+            a?.createdAt ||
+            0
+          )
+      );
+
+
   if (
-    rejected.length > 0
+    processing.length >
+    0
+  ) {
+
+    control.status =
+      "review_required";
+
+    control.evidenceStatus =
+      "processing";
+
+    control.evidenceVerified =
+      false;
+
+    control.evidenceVerifiedAt =
+      null;
+
+    control.lastEvidenceId =
+      processing[0]?.evidenceId ||
+      null;
+
+    return;
+
+  }
+
+
+  const requested =
+    related
+
+      .filter(
+        item =>
+          item?.status ===
+          "requested"
+      )
+
+      .sort(
+        (
+          a,
+          b
+        ) =>
+          new Date(
+            b?.createdAt ||
+            0
+          ) -
+          new Date(
+            a?.createdAt ||
+            0
+          )
+      );
+
+
+  if (
+    requested.length >
+    0
+  ) {
+
+    control.status =
+      "evidence_requested";
+
+    control.evidenceStatus =
+      "requested";
+
+    control.evidenceVerified =
+      false;
+
+    control.evidenceVerifiedAt =
+      null;
+
+    control.lastEvidenceId =
+      requested[0]?.evidenceId ||
+      null;
+
+    return;
+
+  }
+
+
+  const rejected =
+    related
+
+      .filter(
+        item =>
+          item?.status ===
+          "rejected"
+      )
+
+      .sort(
+        (
+          a,
+          b
+        ) =>
+          new Date(
+            b?.reviewedAt ||
+            b?.createdAt ||
+            0
+          ) -
+          new Date(
+            a?.reviewedAt ||
+            a?.createdAt ||
+            0
+          )
+      );
+
+
+  if (
+    rejected.length >
+    0
   ) {
 
     const latest =
-      rejected[
-        rejected.length - 1
-      ];
+      rejected[0];
 
 
     control.status =
@@ -667,11 +1283,56 @@ function rebuildControlState(
   control.lastEvidenceId =
     null;
 
+  control.lastReviewedAt =
+    null;
+
+  control.lastReviewedByUserId =
+    null;
+
 }
 
 
 // =====================================================
-// SERIALISE COMPLIANCE
+// REBUILD ALL
+// =====================================================
+
+function rebuildAllControlStates(
+  compliance
+) {
+
+  if (
+    !compliance
+  ) {
+
+    return;
+
+  }
+
+
+  const evidence =
+    compliance.evidence ||
+    [];
+
+
+  (
+    compliance.controls ||
+    []
+  ).forEach(
+    control => {
+
+      rebuildControlState(
+        control,
+        evidence
+      );
+
+    }
+  );
+
+}
+
+
+// =====================================================
+// SERIALISE
 // =====================================================
 
 function serialiseCompliance(
@@ -712,13 +1373,17 @@ function serialiseCompliance(
 
 
   const overallScore =
-    controls.length > 0
+    controls.length >
+    0
+
       ? Math.round(
           (
             controlsSatisfied /
             controls.length
-          ) * 100
+          ) *
+          100
         )
+
       : 0;
 
 
@@ -768,9 +1433,17 @@ function serialiseCompliance(
       compliance.audits ||
       [],
 
-    notifications: [],
+    notifications:
+      [],
 
-    activity: [],
+    activity:
+      [],
+
+    createdAt:
+      compliance.createdAt,
+
+    updatedAt:
+      compliance.updatedAt,
 
     metrics: {
 
@@ -829,17 +1502,33 @@ router.get(
         );
 
 
-      if (access.error) {
+      if (
+        access.error
+      ) {
+
         return;
+
       }
 
 
       const compliance =
         await getOrCreateCompliance(
+
           req,
+
           access.projectId,
+
           access.project
+
         );
+
+
+      rebuildAllControlStates(
+        compliance
+      );
+
+
+      await compliance.save();
 
 
       return res.json(
@@ -849,7 +1538,9 @@ router.get(
       );
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[COMPLIANCE] Failed to load compliance",
@@ -858,8 +1549,10 @@ router.get(
 
 
       return res.status(500).json({
+
         error:
           "Failed to load compliance data",
+
       });
 
     }
@@ -889,26 +1582,42 @@ router.post(
         );
 
 
-      if (access.error) {
+      if (
+        access.error
+      ) {
+
         return;
+
       }
 
 
       const {
+
         controlId,
+
         name,
+
         description,
+
         type,
+
         dueDate,
+
         requestedFor,
-      } = req.body;
+
+      } =
+        req.body || {};
 
 
-      if (!controlId) {
+      if (
+        !controlId
+      ) {
 
         return res.status(400).json({
+
           error:
             "controlId is required",
+
         });
 
       }
@@ -916,25 +1625,35 @@ router.post(
 
       const compliance =
         await getOrCreateCompliance(
+
           req,
+
           access.projectId,
+
           access.project
+
         );
 
 
       const control =
         compliance.controls.find(
+
           item =>
             item.controlId ===
             controlId
+
         );
 
 
-      if (!control) {
+      if (
+        !control
+      ) {
 
         return res.status(404).json({
+
           error:
             "Compliance control not found",
+
         });
 
       }
@@ -957,12 +1676,16 @@ router.post(
         controlId,
 
         name:
-          name ||
-          "Evidence required",
+          String(
+            name ||
+            "Evidence required"
+          ).trim(),
 
         description:
-          description ||
-          "",
+          String(
+            description ||
+            ""
+          ),
 
         type:
           type ||
@@ -986,7 +1709,9 @@ router.post(
 
         dueDate:
           dueDate
-            ? new Date(dueDate)
+            ? new Date(
+                dueDate
+              )
             : null,
 
         aiAssessment:
@@ -1021,16 +1746,10 @@ router.post(
       );
 
 
-      control.evidenceIds.push(
-        evidenceId
+      rebuildControlState(
+        control,
+        compliance.evidence
       );
-
-
-      control.status =
-        "evidence_requested";
-
-      control.evidenceStatus =
-        "requested";
 
 
       compliance.reviewHistory.push({
@@ -1065,11 +1784,15 @@ router.post(
 
 
       return res.status(201).json({
+
         evidence,
+
       });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[COMPLIANCE] Failed to request evidence",
@@ -1078,8 +1801,10 @@ router.post(
 
 
       return res.status(500).json({
+
         error:
           "Failed to request evidence",
+
       });
 
     }
@@ -1091,11 +1816,27 @@ router.post(
 // =====================================================
 // UPLOAD EVIDENCE
 // =====================================================
+//
+// IMPORTANT:
+//
+// This endpoint now:
+//
+// 1. receives the actual file
+// 2. extracts text
+// 3. stores the extracted text
+// 4. stores extraction metadata
+// 5. marks evidence as processing
+//
+// The separate AI action can therefore analyse the
+// persisted document content later.
+// =====================================================
 
 router.post(
   "/evidence/upload",
   requireAuth,
-  upload.single("file"),
+  upload.single(
+    "file"
+  ),
   async (
     req,
     res
@@ -1110,8 +1851,12 @@ router.post(
         );
 
 
-      if (access.error) {
+      if (
+        access.error
+      ) {
+
         return;
+
       }
 
 
@@ -1123,11 +1868,29 @@ router.post(
         req.file;
 
 
-      if (!evidenceId) {
+      if (
+        !evidenceId
+      ) {
 
         return res.status(400).json({
+
           error:
             "evidenceId is required",
+
+        });
+
+      }
+
+
+      if (
+        !file
+      ) {
+
+        return res.status(400).json({
+
+          error:
+            "file is required",
+
         });
 
       }
@@ -1135,25 +1898,60 @@ router.post(
 
       const compliance =
         await getOrCreateCompliance(
+
           req,
+
           access.projectId,
+
           access.project
+
         );
 
 
       const evidence =
         compliance.evidence.find(
+
           item =>
             item.evidenceId ===
             evidenceId
+
         );
 
 
-      if (!evidence) {
+      if (
+        !evidence
+      ) {
 
         return res.status(404).json({
+
           error:
             "Evidence not found",
+
+        });
+
+      }
+
+
+      const extraction =
+        await extractDocumentText(
+          file
+        );
+
+
+      if (
+        extraction.method ===
+          "failed"
+      ) {
+
+        return res.status(422).json({
+
+          error:
+            "Unable to extract document text",
+
+          details:
+            extraction.error ||
+            "Document extraction failed.",
+
         });
 
       }
@@ -1163,16 +1961,21 @@ router.post(
         new Date();
 
 
+      // =================================================
+      // FILE METADATA
+      // =================================================
+
       evidence.fileName =
-        file?.originalname ||
+        file.originalname ||
         evidence.fileName ||
         null;
 
 
       /*
-       * The actual S3 URL can continue to be supplied by
-       * the separate storage flow.
+       * A separate storage flow may populate fileUrl.
+       * Preserve it rather than overwriting it.
        */
+
       evidence.fileUrl =
         evidence.fileUrl ||
         null;
@@ -1181,24 +1984,83 @@ router.post(
       evidence.source =
         "upload";
 
+
       evidence.status =
         "processing";
+
 
       evidence.reviewDecision =
         null;
 
+
       evidence.reviewedByUserId =
         null;
+
 
       evidence.reviewedByName =
         null;
 
+
       evidence.reviewedByEmail =
         null;
+
 
       evidence.reviewedAt =
         null;
 
+
+      // =================================================
+      // DOCUMENT ANALYSIS DATA
+      // =================================================
+
+      /*
+       * These fields require the Compliance model update
+       * shown below.
+       */
+
+      evidence.extractedText =
+        extraction.text;
+
+
+      evidence.extractionMethod =
+        extraction.method;
+
+
+      evidence.extractedAt =
+        extraction.text
+          ? now
+          : null;
+
+
+      // =================================================
+      // RESET OLD AI RESULT
+      // =================================================
+
+      evidence.aiAssessment =
+        null;
+
+
+      // =================================================
+      // CONTROL
+      // =================================================
+
+      const control =
+        compliance.controls.find(
+          item =>
+            item.controlId ===
+            evidence.controlId
+        );
+
+
+      rebuildControlState(
+        control,
+        compliance.evidence
+      );
+
+
+      // =================================================
+      // AUDIT EVENT
+      // =================================================
 
       compliance.reviewHistory.push({
 
@@ -1221,6 +2083,12 @@ router.post(
           fileUrl:
             evidence.fileUrl,
 
+          extractionMethod:
+            extraction.method,
+
+          extractedTextLength:
+            extraction.text.length,
+
         },
 
         createdAt:
@@ -1229,29 +2097,51 @@ router.post(
       });
 
 
-      const control =
-        compliance.controls.find(
-          item =>
-            item.controlId ===
-            evidence.controlId
-        );
-
-
-      rebuildControlState(
-        control,
-        compliance.evidence
-      );
-
-
       await compliance.save();
 
 
+      console.log(
+        "[COMPLIANCE] Evidence uploaded and text extracted",
+        {
+
+          projectId:
+            access.projectId,
+
+          evidenceId,
+
+          fileName:
+            evidence.fileName,
+
+          extractionMethod:
+            extraction.method,
+
+          extractedTextLength:
+            extraction.text.length,
+
+        }
+      );
+
+
       return res.json({
+
         evidence,
+
+        extraction: {
+
+          method:
+            extraction.method,
+
+          textLength:
+            extraction.text.length,
+
+        },
+
       });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[COMPLIANCE] Failed to upload evidence",
@@ -1260,8 +2150,13 @@ router.post(
 
 
       return res.status(500).json({
+
         error:
           "Failed to upload evidence",
+
+        details:
+          error?.message,
+
       });
 
     }
@@ -1271,7 +2166,21 @@ router.post(
 
 
 // =====================================================
-// ANALYSE EVIDENCE
+// ANALYSE EVIDENCE WITH OPENAI
+// =====================================================
+//
+// OpenAI receives:
+//
+// - framework
+// - control ID
+// - control name
+// - control description
+// - evidence name
+// - evidence type
+// - extracted document text
+//
+// The model is explicitly instructed NOT to treat
+// unrelated professional content as compliance evidence.
 // =====================================================
 
 router.post(
@@ -1282,7 +2191,30 @@ router.post(
     res
   ) => {
 
+    console.log(
+      "================================================="
+    );
+
+    console.log(
+      "[COMPLIANCE] AI ANALYSIS REQUEST RECEIVED"
+    );
+
+    console.log(
+      "================================================="
+    );
+
+
     try {
+
+      const {
+
+        evidenceId,
+
+        controlId,
+
+      } =
+        req.body || {};
+
 
       const access =
         await requireComplianceProject(
@@ -1291,22 +2223,24 @@ router.post(
         );
 
 
-      if (access.error) {
+      if (
+        access.error
+      ) {
+
         return;
+
       }
 
 
-      const {
-        evidenceId,
-        controlId,
-      } = req.body;
-
-
-      if (!evidenceId) {
+      if (
+        !evidenceId
+      ) {
 
         return res.status(400).json({
+
           error:
             "evidenceId is required",
+
         });
 
       }
@@ -1314,25 +2248,35 @@ router.post(
 
       const compliance =
         await getOrCreateCompliance(
+
           req,
+
           access.projectId,
+
           access.project
+
         );
 
 
       const evidence =
         compliance.evidence.find(
+
           item =>
             item.evidenceId ===
             evidenceId
+
         );
 
 
-      if (!evidence) {
+      if (
+        !evidence
+      ) {
 
         return res.status(404).json({
+
           error:
             "Evidence not found",
+
         });
 
       }
@@ -1343,22 +2287,500 @@ router.post(
         evidence.controlId;
 
 
-      const assessment = {
+      const control =
+        compliance.controls.find(
 
-        decision:
-          "likely_sufficient",
+          item =>
+            item.controlId ===
+            resolvedControlId
 
-        confidence:
-          0.87,
+        );
+
+
+      if (
+        !control
+      ) {
+
+        return res.status(404).json({
+
+          error:
+            "Compliance control not found",
+
+        });
+
+      }
+
+
+      const extractedText =
+        normaliseExtractedText(
+          evidence.extractedText
+        );
+
+
+      console.log(
+        "[COMPLIANCE] ANALYSIS INPUT",
+        {
+
+          projectId:
+            access.projectId,
+
+          evidenceId,
+
+          controlId:
+            resolvedControlId,
+
+          fileName:
+            evidence.fileName,
+
+          extractionMethod:
+            evidence.extractionMethod ||
+            "unknown",
+
+          extractedTextLength:
+            extractedText.length,
+
+        }
+      );
+
+
+      if (
+        !extractedText
+      ) {
+
+        return res.status(422).json({
+
+          error:
+            "No extracted document text is available for AI analysis.",
+
+          details:
+            "Upload a text-readable PDF, DOCX or text document before analysing the evidence.",
+
+        });
+
+      }
+
+
+      if (
+        !process.env.OPENAI_API_KEY
+      ) {
+
+        return res.status(500).json({
+
+          error:
+            "OPENAI_API_KEY is not configured",
+
+        });
+
+      }
+
+
+      // =================================================
+      // CACHE PROTECTION
+      // =================================================
+
+      if (
+        evidence.aiAssessment &&
+        evidence.aiAssessment.analysedAt
+      ) {
+
+        console.log(
+          "[COMPLIANCE] Existing AI assessment found"
+        );
+
+
+        return res.json({
+
+          cached:
+            true,
+
+          evidence,
+
+          assessment:
+            evidence.aiAssessment,
+
+        });
+
+      }
+
+
+      const analysisText =
+        extractedText.slice(
+          0,
+          MAX_AI_INPUT_TEXT_LENGTH
+        );
+
+
+      const truncated =
+        extractedText.length >
+        MAX_AI_INPUT_TEXT_LENGTH;
+
+
+      // =================================================
+      // SYSTEM PROMPT
+      // =================================================
+
+      const systemPrompt = `
+You are an expert ISO/IEC 27001 compliance evidence assessor.
+
+Your job is to determine whether a supplied document is actually relevant evidence for ONE specific ISO/IEC 27001 control.
+
+This is NOT a general document quality assessment.
+
+A document must directly support the requirements of the specified control to receive a meaningful evidence score.
+
+IMPORTANT RULES:
+
+1. Evaluate ONLY the supplied control and supplied document.
+2. Do NOT assume facts that are not present in the document.
+3. Do NOT infer compliance merely because a document belongs to a professional person or organisation.
+4. A CV, résumé, job description, marketing document, generic profile or unrelated professional document should normally be considered NOT_RELEVANT unless its actual content directly evidences the control.
+5. Job titles alone are NOT evidence.
+6. General statements such as "experienced in security" are NOT sufficient evidence unless they directly address the control requirements.
+7. Distinguish between:
+   - directly relevant evidence
+   - partially relevant evidence
+   - unrelated material
+8. Evidence quality must be based on content, not file type.
+9. If the document does not meaningfully address the control, score relevance very low.
+10. Do not award a high score because the document sounds credible.
+11. Human review remains authoritative. The AI assessment is advisory.
+
+Return ONLY valid JSON using exactly this structure:
+
+{
+  "relevanceScore": 0,
+  "confidence": 0,
+  "decision": "not_relevant",
+  "summary": "string",
+  "findings": [],
+  "matchedRequirements": [],
+  "gaps": []
+}
+
+relevanceScore:
+0-100 indicating how strongly this document actually supports this specific control.
+
+confidence:
+0-1 indicating how confident you are in the assessment.
+
+decision must be exactly one of:
+
+"sufficient"
+"partially_sufficient"
+"insufficient"
+"not_relevant"
+
+Use "not_relevant" when the document does not materially support the control.
+
+Use "insufficient" when the document is relevant but does not provide enough evidence.
+
+Use "partially_sufficient" when the document provides some meaningful evidence but important requirements remain unsupported.
+
+Use "sufficient" only when the supplied document contains strong, direct and specific evidence for the control.
+
+findings:
+Concrete observations from the document.
+
+matchedRequirements:
+Specific control requirements that the document appears to support.
+
+gaps:
+Specific requirements or evidence that are missing.
+
+Never invent evidence.
+`;
+
+
+      // =================================================
+      // USER PROMPT
+      // =================================================
+
+      const userPrompt = `
+
+FRAMEWORK:
+${compliance.framework?.name || "ISO/IEC 27001"}
+
+FRAMEWORK VERSION:
+${compliance.framework?.version || "2022"}
+
+CONTROL ID:
+${control.controlId}
+
+CONTROL NAME:
+${control.name || ""}
+
+CONTROL CATEGORY:
+${control.category || ""}
+
+CONTROL DESCRIPTION:
+${control.description || ""}
+
+EVIDENCE NAME:
+${evidence.name || evidence.fileName || "Evidence"}
+
+EVIDENCE TYPE:
+${evidence.type || "document"}
+
+DOCUMENT EXTRACTION METHOD:
+${evidence.extractionMethod || "unknown"}
+
+DOCUMENT TEXT:
+${analysisText}
+
+DOCUMENT TEXT TRUNCATED:
+${truncated ? "true" : "false"}
+
+Assess ONLY whether this document is relevant evidence for the specified control.
+`;
+
+
+      // =================================================
+      // OPENAI
+      // =================================================
+
+      console.log(
+        "[COMPLIANCE] CALLING OPENAI",
+        {
+
+          model:
+            "gpt-4o-mini",
+
+          controlId:
+            control.controlId,
+
+          extractedTextLength:
+            extractedText.length,
+
+          analysisTextLength:
+            analysisText.length,
+
+        }
+      );
+
+
+      const completion =
+        await openai.chat.completions.create({
+
+          model:
+            "gpt-4o-mini",
+
+          messages: [
+
+            {
+
+              role:
+                "system",
+
+              content:
+                systemPrompt,
+
+            },
+
+            {
+
+              role:
+                "user",
+
+              content:
+                userPrompt,
+
+            },
+
+          ],
+
+          temperature:
+            0.1,
+
+          response_format: {
+
+            type:
+              "json_object",
+
+          },
+
+        });
+
+
+      const text =
+        completion
+          ?.choices?.[0]
+          ?.message
+          ?.content;
+
+
+      console.log(
+        "[COMPLIANCE] OPENAI RESPONSE RECEIVED",
+        {
+
+          finishReason:
+            completion
+              ?.choices?.[0]
+              ?.finish_reason ||
+            null,
+
+        }
+      );
+
+
+      if (
+        !text
+      ) {
+
+        throw new Error(
+          "OpenAI returned an empty response."
+        );
+
+      }
+
+
+      const jsonText =
+        extractJsonText(
+          text
+        );
+
+
+      let result;
+
+
+      try {
+
+        result =
+          JSON.parse(
+            jsonText
+          );
+
+      }
+      catch (
+        parseError
+      ) {
+
+        console.error(
+          "[COMPLIANCE] AI JSON PARSE FAILED",
+          {
+
+            rawText:
+              text,
+
+            extracted:
+              jsonText,
+
+            error:
+              parseError?.message,
+
+          }
+        );
+
+
+        throw new Error(
+          `AI returned invalid JSON: ${parseError.message}`
+        );
+
+      }
+
+
+      // =================================================
+      // NORMALISE ASSESSMENT
+      // =================================================
+
+      const allowedDecisions = [
+
+        "sufficient",
+
+        "partially_sufficient",
+
+        "insufficient",
+
+        "not_relevant",
+
+      ];
+
+
+      const decision =
+        allowedDecisions.includes(
+          result?.decision
+        )
+
+          ? result.decision
+
+          : "insufficient";
+
+
+      let relevanceScore =
+        clampScore(
+          result?.relevanceScore
+        );
+
+
+      let confidence =
+        clampConfidence(
+          result?.confidence
+        );
+
+
+      /*
+       * Safety rule:
+       *
+       * "not_relevant" should never accidentally carry
+       * a high relevance score because of a malformed AI
+       * response.
+       */
+
+      if (
+        decision ===
+        "not_relevant"
+      ) {
+
+        relevanceScore =
+          Math.min(
+            relevanceScore,
+            20
+          );
+
+      }
+
+
+      if (
+        decision ===
+        "sufficient"
+      ) {
+
+        relevanceScore =
+          Math.max(
+            relevanceScore,
+            70
+          );
+
+      }
+
+
+      const persistedAssessment = {
+
+        relevanceScore,
+
+        confidence,
+
+        decision,
 
         summary:
-          "The submitted evidence appears relevant to the control and should be reviewed by a human assessor.",
+          String(
+            result?.summary ||
+            ""
+          ).trim(),
 
-        findings: [
-          "Evidence document identified",
-          "Evidence is associated with the requested control",
-          "Human review is still required",
-        ],
+        findings:
+          normaliseStringArray(
+            result?.findings
+          ),
+
+        matchedRequirements:
+          normaliseStringArray(
+            result?.matchedRequirements
+          ),
+
+        gaps:
+          normaliseStringArray(
+            result?.gaps
+          ),
 
         controlId:
           resolvedControlId,
@@ -1367,54 +2789,52 @@ router.post(
           new Date(),
 
         model:
-          "temporary-assessment",
+          "gpt-4o-mini",
 
       };
 
 
+      // =================================================
+      // PERSIST
+      // =================================================
+
       evidence.aiAssessment =
-        assessment;
+        persistedAssessment;
+
 
       evidence.status =
         "review_required";
 
+
       evidence.reviewDecision =
         null;
+
 
       evidence.reviewedByUserId =
         null;
 
+
       evidence.reviewedByName =
         null;
 
+
       evidence.reviewedByEmail =
         null;
+
 
       evidence.reviewedAt =
         null;
 
 
-      const control =
-        compliance.controls.find(
-          item =>
-            item.controlId ===
-            resolvedControlId
-        );
+      rebuildControlState(
+        control,
+        compliance.evidence
+      );
 
 
-      if (control) {
-
-        control.status =
-          "review_required";
-
-        control.evidenceStatus =
-          "review_required";
-
-        control.evidenceVerified =
-          false;
-
-      }
-
+      // =================================================
+      // AUDIT
+      // =================================================
 
       compliance.reviewHistory.push({
 
@@ -1431,14 +2851,21 @@ router.post(
 
         data: {
 
-          decision:
-            assessment.decision,
+          decision,
 
-          confidence:
-            assessment.confidence,
+          relevanceScore,
+
+          confidence,
 
           model:
-            assessment.model,
+            "gpt-4o-mini",
+
+          extractionMethod:
+            evidence.extractionMethod ||
+            "unknown",
+
+          extractedTextLength:
+            extractedText.length,
 
         },
 
@@ -1451,23 +2878,95 @@ router.post(
       await compliance.save();
 
 
+      console.log(
+        "[COMPLIANCE] AI ASSESSMENT PERSISTED",
+        {
+
+          projectId:
+            access.projectId,
+
+          evidenceId,
+
+          controlId:
+            resolvedControlId,
+
+          decision,
+
+          relevanceScore,
+
+          confidence,
+
+        }
+      );
+
+
       return res.json({
+
+        cached:
+          false,
+
         evidence,
-        assessment,
+
+        assessment:
+          persistedAssessment,
+
       });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
-        "[COMPLIANCE] Failed to analyse evidence",
+        "================================================="
+      );
+
+      console.error(
+        "[COMPLIANCE] AI ANALYSIS FAILED"
+      );
+
+      console.error(
+        "================================================="
+      );
+
+
+      console.error(
         error
       );
 
 
+      console.error(
+        "[COMPLIANCE] ERROR MESSAGE",
+        error?.message
+      );
+
+
+      console.error(
+        "[COMPLIANCE] OPENAI STATUS",
+        error?.status
+      );
+
+
+      console.error(
+        "[COMPLIANCE] OPENAI CODE",
+        error?.code
+      );
+
+
+      console.error(
+        "[COMPLIANCE] OPENAI TYPE",
+        error?.type
+      );
+
+
       return res.status(500).json({
+
         error:
-          "Failed to analyse evidence",
+          "Failed to analyse compliance evidence",
+
+        details:
+          error?.message,
+
       });
 
     }
@@ -1497,21 +2996,30 @@ router.post(
         );
 
 
-      if (access.error) {
+      if (
+        access.error
+      ) {
+
         return;
+
       }
 
 
       const {
         evidenceId,
-      } = req.body;
+      } =
+        req.body || {};
 
 
-      if (!evidenceId) {
+      if (
+        !evidenceId
+      ) {
 
         return res.status(400).json({
+
           error:
             "evidenceId is required",
+
         });
 
       }
@@ -1519,9 +3027,13 @@ router.post(
 
       const compliance =
         await getOrCreateCompliance(
+
           req,
+
           access.projectId,
+
           access.project
+
         );
 
 
@@ -1533,11 +3045,15 @@ router.post(
         );
 
 
-      if (!evidence) {
+      if (
+        !evidence
+      ) {
 
         return res.status(404).json({
+
           error:
             "Evidence not found",
+
         });
 
       }
@@ -1549,15 +3065,13 @@ router.post(
       ) {
 
         return res.status(400).json({
+
           error:
             "Evidence is not awaiting review",
+
         });
 
       }
-
-
-      const now =
-        new Date();
 
 
       const actor =
@@ -1566,20 +3080,29 @@ router.post(
         );
 
 
+      const now =
+        new Date();
+
+
       evidence.status =
         "accepted";
+
 
       evidence.reviewDecision =
         "accepted";
 
+
       evidence.reviewedByUserId =
         actor.userId;
+
 
       evidence.reviewedByName =
         actor.name;
 
+
       evidence.reviewedByEmail =
         actor.email;
+
 
       evidence.reviewedAt =
         now;
@@ -1593,30 +3116,10 @@ router.post(
         );
 
 
-      if (control) {
-
-        control.status =
-          "compliant";
-
-        control.evidenceStatus =
-          "verified";
-
-        control.evidenceVerified =
-          true;
-
-        control.evidenceVerifiedAt =
-          now;
-
-        control.lastEvidenceId =
-          evidenceId;
-
-        control.lastReviewedAt =
-          now;
-
-        control.lastReviewedByUserId =
-          actor.userId;
-
-      }
+      rebuildControlState(
+        control,
+        compliance.evidence
+      );
 
 
       compliance.reviewHistory.push({
@@ -1672,10 +3175,10 @@ router.post(
           evidence.controlId,
 
         status:
-          "accepted",
+          evidence.status,
 
         reviewDecision:
-          "accepted",
+          evidence.reviewDecision,
 
         reviewedByUserId:
           actor.userId,
@@ -1692,7 +3195,9 @@ router.post(
       });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[COMPLIANCE] Failed to accept evidence",
@@ -1701,8 +3206,10 @@ router.post(
 
 
       return res.status(500).json({
+
         error:
           "Failed to accept evidence",
+
       });
 
     }
@@ -1732,21 +3239,30 @@ router.post(
         );
 
 
-      if (access.error) {
+      if (
+        access.error
+      ) {
+
         return;
+
       }
 
 
       const {
         evidenceId,
-      } = req.body;
+      } =
+        req.body || {};
 
 
-      if (!evidenceId) {
+      if (
+        !evidenceId
+      ) {
 
         return res.status(400).json({
+
           error:
             "evidenceId is required",
+
         });
 
       }
@@ -1754,9 +3270,13 @@ router.post(
 
       const compliance =
         await getOrCreateCompliance(
+
           req,
+
           access.projectId,
+
           access.project
+
         );
 
 
@@ -1768,11 +3288,15 @@ router.post(
         );
 
 
-      if (!evidence) {
+      if (
+        !evidence
+      ) {
 
         return res.status(404).json({
+
           error:
             "Evidence not found",
+
         });
 
       }
@@ -1784,15 +3308,13 @@ router.post(
       ) {
 
         return res.status(400).json({
+
           error:
             "Evidence is not awaiting review",
+
         });
 
       }
-
-
-      const now =
-        new Date();
 
 
       const actor =
@@ -1801,20 +3323,29 @@ router.post(
         );
 
 
+      const now =
+        new Date();
+
+
       evidence.status =
         "rejected";
+
 
       evidence.reviewDecision =
         "rejected";
 
+
       evidence.reviewedByUserId =
         actor.userId;
+
 
       evidence.reviewedByName =
         actor.name;
 
+
       evidence.reviewedByEmail =
         actor.email;
+
 
       evidence.reviewedAt =
         now;
@@ -1828,30 +3359,10 @@ router.post(
         );
 
 
-      if (control) {
-
-        control.status =
-          "remediation";
-
-        control.evidenceStatus =
-          "rejected";
-
-        control.evidenceVerified =
-          false;
-
-        control.evidenceVerifiedAt =
-          null;
-
-        control.lastEvidenceId =
-          evidenceId;
-
-        control.lastReviewedAt =
-          now;
-
-        control.lastReviewedByUserId =
-          actor.userId;
-
-      }
+      rebuildControlState(
+        control,
+        compliance.evidence
+      );
 
 
       compliance.reviewHistory.push({
@@ -1907,10 +3418,10 @@ router.post(
           evidence.controlId,
 
         status:
-          "rejected",
+          evidence.status,
 
         reviewDecision:
-          "rejected",
+          evidence.reviewDecision,
 
         reviewedByUserId:
           actor.userId,
@@ -1927,7 +3438,9 @@ router.post(
       });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[COMPLIANCE] Failed to reject evidence",
@@ -1936,8 +3449,10 @@ router.post(
 
 
       return res.status(500).json({
+
         error:
           "Failed to reject evidence",
+
       });
 
     }
@@ -1948,11 +3463,6 @@ router.post(
 
 // =====================================================
 // GET SINGLE EVIDENCE
-// =====================================================
-//
-// GET /api/compliance/evidence/:evidenceId
-//
-// Used by the future Data Hub evidence detail view.
 // =====================================================
 
 router.get(
@@ -1972,16 +3482,24 @@ router.get(
         );
 
 
-      if (access.error) {
+      if (
+        access.error
+      ) {
+
         return;
+
       }
 
 
       const compliance =
         await getOrCreateCompliance(
+
           req,
+
           access.projectId,
+
           access.project
+
         );
 
 
@@ -1993,11 +3511,15 @@ router.get(
         );
 
 
-      if (!evidence) {
+      if (
+        !evidence
+      ) {
 
         return res.status(404).json({
+
           error:
             "Evidence not found",
+
         });
 
       }
@@ -2007,11 +3529,28 @@ router.get(
         (
           compliance.reviewHistory ||
           []
-        ).filter(
-          item =>
-            item.evidenceId ===
-            evidence.evidenceId
-        );
+        )
+
+          .filter(
+            item =>
+              item.evidenceId ===
+              evidence.evidenceId
+          )
+
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              new Date(
+                b?.createdAt ||
+                0
+              ) -
+              new Date(
+                a?.createdAt ||
+                0
+              )
+          );
 
 
       return res.json({
@@ -2023,7 +3562,9 @@ router.get(
       });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[COMPLIANCE] Failed to load evidence detail",
@@ -2032,8 +3573,10 @@ router.get(
 
 
       return res.status(500).json({
+
         error:
           "Failed to load evidence detail",
+
       });
 
     }
@@ -2044,29 +3587,6 @@ router.get(
 
 // =====================================================
 // UPDATE EVIDENCE
-// =====================================================
-//
-// PATCH /api/compliance/evidence/:evidenceId
-//
-// Editable:
-//
-// name
-// description
-// type
-// dueDate
-// controlId
-//
-// Deliberately protected:
-//
-// evidenceId
-// status
-// reviewDecision
-// reviewer
-// createdAt
-// AI assessment
-//
-// Those state transitions must happen through their
-// dedicated endpoints.
 // =====================================================
 
 router.patch(
@@ -2086,16 +3606,24 @@ router.patch(
         );
 
 
-      if (access.error) {
+      if (
+        access.error
+      ) {
+
         return;
+
       }
 
 
       const compliance =
         await getOrCreateCompliance(
+
           req,
+
           access.projectId,
+
           access.project
+
         );
 
 
@@ -2107,23 +3635,34 @@ router.patch(
         );
 
 
-      if (!evidence) {
+      if (
+        !evidence
+      ) {
 
         return res.status(404).json({
+
           error:
             "Evidence not found",
+
         });
 
       }
 
 
       const {
+
         name,
+
         description,
+
         type,
+
         dueDate,
+
         controlId,
-      } = req.body;
+
+      } =
+        req.body || {};
 
 
       const previousControlId =
@@ -2144,8 +3683,10 @@ router.patch(
         ) {
 
           return res.status(400).json({
+
             error:
               "controlId cannot be empty",
+
           });
 
         }
@@ -2159,11 +3700,15 @@ router.patch(
           );
 
 
-        if (!targetControl) {
+        if (
+          !targetControl
+        ) {
 
           return res.status(404).json({
+
             error:
               "Target compliance control not found",
+
           });
 
         }
@@ -2195,7 +3740,8 @@ router.patch(
 
         evidence.description =
           String(
-            description
+            description ||
+            ""
           );
 
       }
@@ -2207,11 +3753,17 @@ router.patch(
       ) {
 
         const allowedTypes = [
+
           "document",
+
           "image",
+
           "spreadsheet",
+
           "video",
+
           "other",
+
         ];
 
 
@@ -2222,8 +3774,10 @@ router.patch(
         ) {
 
           return res.status(400).json({
+
             error:
               "Invalid evidence type",
+
           });
 
         }
@@ -2242,9 +3796,9 @@ router.patch(
 
         if (
           dueDate ===
-          null ||
+            null ||
           dueDate ===
-          ""
+            ""
         ) {
 
           evidence.dueDate =
@@ -2266,8 +3820,10 @@ router.patch(
           ) {
 
             return res.status(400).json({
+
               error:
                 "Invalid dueDate",
+
             });
 
           }
@@ -2290,6 +3846,15 @@ router.patch(
           nextControlId;
 
 
+        /*
+         * Moving evidence to a different control means
+         * the previous AI assessment may no longer be valid.
+         */
+
+        evidence.aiAssessment =
+          null;
+
+
         const oldControl =
           compliance.controls.find(
             item =>
@@ -2306,24 +3871,16 @@ router.patch(
           );
 
 
-        if (oldControl) {
-
-          rebuildControlState(
-            oldControl,
-            compliance.evidence
-          );
-
-        }
+        rebuildControlState(
+          oldControl,
+          compliance.evidence
+        );
 
 
-        if (newControl) {
-
-          rebuildControlState(
-            newControl,
-            compliance.evidence
-          );
-
-        }
+        rebuildControlState(
+          newControl,
+          compliance.evidence
+        );
 
       }
       else {
@@ -2344,6 +3901,24 @@ router.patch(
       }
 
 
+      const changedFields =
+        Object.keys(
+          req.body ||
+          {}
+        ).filter(
+          field =>
+            [
+              "name",
+              "description",
+              "type",
+              "dueDate",
+              "controlId",
+            ].includes(
+              field
+            )
+        );
+
+
       compliance.reviewHistory.push({
 
         event:
@@ -2360,21 +3935,7 @@ router.patch(
 
         data: {
 
-          changedFields:
-            Object.keys(
-              req.body || {}
-            ).filter(
-              field =>
-                [
-                  "name",
-                  "description",
-                  "type",
-                  "dueDate",
-                  "controlId",
-                ].includes(
-                  field
-                )
-            ),
+          changedFields,
 
           previousControlId,
 
@@ -2392,14 +3953,18 @@ router.patch(
 
 
       return res.json({
+
         ok:
           true,
 
         evidence,
+
       });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[COMPLIANCE] Failed to update evidence",
@@ -2408,8 +3973,10 @@ router.patch(
 
 
       return res.status(500).json({
+
         error:
           "Failed to update evidence",
+
       });
 
     }
@@ -2420,16 +3987,6 @@ router.patch(
 
 // =====================================================
 // DELETE EVIDENCE
-// =====================================================
-//
-// DELETE /api/compliance/evidence/:evidenceId
-//
-// Deletes the embedded evidence record and removes its
-// reference from the associated control.
-//
-// The file itself is NOT deleted from S3 here because
-// the current prototype deliberately separates storage
-// from the compliance metadata service.
 // =====================================================
 
 router.delete(
@@ -2449,16 +4006,24 @@ router.delete(
         );
 
 
-      if (access.error) {
+      if (
+        access.error
+      ) {
+
         return;
+
       }
 
 
       const compliance =
         await getOrCreateCompliance(
+
           req,
+
           access.projectId,
+
           access.project
+
         );
 
 
@@ -2476,8 +4041,10 @@ router.delete(
       ) {
 
         return res.status(404).json({
+
           error:
             "Evidence not found",
+
         });
 
       }
@@ -2489,17 +4056,56 @@ router.delete(
         ];
 
 
-      const controlId =
-        evidence.controlId;
-
-
       const evidenceId =
         evidence.evidenceId;
 
 
+      const controlId =
+        evidence.controlId;
+
+
+      const deletedEvidence = {
+
+        evidenceId,
+
+        controlId,
+
+        name:
+          evidence.name,
+
+        description:
+          evidence.description,
+
+        type:
+          evidence.type,
+
+        fileName:
+          evidence.fileName,
+
+        fileUrl:
+          evidence.fileUrl,
+
+        source:
+          evidence.source,
+
+        previousStatus:
+          evidence.status,
+
+        reviewDecision:
+          evidence.reviewDecision,
+
+        aiAssessment:
+          evidence.aiAssessment,
+
+      };
+
+
       compliance.evidence.splice(
+
         evidenceIndex,
+
         1
+
       );
 
 
@@ -2512,8 +4118,11 @@ router.delete(
 
 
       rebuildControlState(
+
         control,
+
         compliance.evidence
+
       );
 
 
@@ -2529,18 +4138,8 @@ router.delete(
         userId:
           req.user.userId,
 
-        data: {
-
-          name:
-            evidence.name,
-
-          fileName:
-            evidence.fileName,
-
-          previousStatus:
-            evidence.status,
-
-        },
+        data:
+          deletedEvidence,
 
         createdAt:
           new Date(),
@@ -2560,10 +4159,15 @@ router.delete(
 
         controlId,
 
+        deleted:
+          true,
+
       });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[COMPLIANCE] Failed to delete evidence",
@@ -2572,8 +4176,10 @@ router.delete(
 
 
       return res.status(500).json({
+
         error:
           "Failed to delete evidence",
+
       });
 
     }
@@ -2584,11 +4190,6 @@ router.delete(
 
 // =====================================================
 // COMPLIANCE HISTORY
-// =====================================================
-//
-// GET /api/compliance/history?projectId=...
-//
-// Dedicated Data Hub audit feed.
 // =====================================================
 
 router.get(
@@ -2603,21 +4204,32 @@ router.get(
 
       const access =
         await requireComplianceProject(
+
           req,
+
           res
+
         );
 
 
-      if (access.error) {
+      if (
+        access.error
+      ) {
+
         return;
+
       }
 
 
       const compliance =
         await getOrCreateCompliance(
+
           req,
+
           access.projectId,
+
           access.project
+
         );
 
 
@@ -2625,6 +4237,7 @@ router.get(
         Array.isArray(
           compliance.reviewHistory
         )
+
           ? compliance.reviewHistory
               .slice()
               .sort(
@@ -2641,6 +4254,7 @@ router.get(
                     0
                   )
               )
+
           : [];
 
 
@@ -2654,7 +4268,9 @@ router.get(
       });
 
     }
-    catch (error) {
+    catch (
+      error
+    ) {
 
       console.error(
         "[COMPLIANCE] Failed to load history",
@@ -2663,8 +4279,10 @@ router.get(
 
 
       return res.status(500).json({
+
         error:
           "Failed to load compliance history",
+
       });
 
     }

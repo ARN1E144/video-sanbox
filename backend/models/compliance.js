@@ -356,12 +356,80 @@ const complianceEvidenceSchema =
 
       },
 
+      // =================================================
+      // EXTRACTED DOCUMENT CONTENT
+      // =================================================
+      //
+      // The original uploaded file remains in the storage
+      // system. This is a searchable text representation
+      // used by the compliance AI assessment.
+      //
+      // We deliberately store extracted text rather than
+      // sending the original binary document directly to
+      // the model for V1.
+      //
+      // =================================================
+
+      extractedText: {
+
+        type:
+          String,
+
+        default:
+          "",
+
+      },
+
+      extractionMethod: {
+
+        type:
+          String,
+
+        enum: [
+
+          "pdf",
+
+          "docx",
+
+          "text",
+
+          "none",
+
+          "failed",
+
+        ],
+
+        default:
+          "none",
+
+      },
+
+      extractedAt: {
+
+        type:
+          Date,
+
+        default:
+          null,
+
+      },
+
+      extractedTextLength: {
+
+        type:
+          Number,
+
+        default:
+          0,
+
+      },
+
 
       // =================================================
       // AI ASSESSMENT
       // =================================================
 
-      aiAssessment: {
+            aiAssessment: {
 
         decision: {
 
@@ -373,6 +441,29 @@ const complianceEvidenceSchema =
 
         },
 
+
+        relevanceScore: {
+
+          type:
+            Number,
+
+          default:
+            null,
+
+        },
+
+
+        sufficiencyScore: {
+
+          type:
+            Number,
+
+          default:
+            null,
+
+        },
+
+
         confidence: {
 
           type:
@@ -383,6 +474,7 @@ const complianceEvidenceSchema =
 
         },
 
+
         summary: {
 
           type:
@@ -392,6 +484,7 @@ const complianceEvidenceSchema =
             "",
 
         },
+
 
         findings: {
 
@@ -405,6 +498,44 @@ const complianceEvidenceSchema =
 
         },
 
+
+        matchedRequirements: {
+
+          type:
+            [
+              String
+            ],
+
+          default:
+            [],
+
+        },
+
+
+        missingRequirements: {
+
+          type:
+            [
+              String
+            ],
+
+          default:
+            [],
+
+        },
+
+
+        recommendation: {
+
+          type:
+            String,
+
+          default:
+            "",
+
+        },
+
+
         controlId: {
 
           type:
@@ -414,6 +545,7 @@ const complianceEvidenceSchema =
             null,
 
         },
+
 
         analysedAt: {
 
@@ -425,6 +557,7 @@ const complianceEvidenceSchema =
 
         },
 
+
         model: {
 
           type:
@@ -432,6 +565,17 @@ const complianceEvidenceSchema =
 
           default:
             null,
+
+        },
+
+
+        promptVersion: {
+
+          type:
+            String,
+
+          default:
+            "v1",
 
         },
 

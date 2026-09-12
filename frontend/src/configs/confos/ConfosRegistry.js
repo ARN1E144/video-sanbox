@@ -34,6 +34,9 @@ import remoteVideoGrid
 import groupCall
   from "./group_call.json";
 
+import chatTest
+  from "./chat-test.json";
+
 
 // =====================================================
 // CONFO REGISTRY
@@ -95,8 +98,15 @@ const ConfosRegistry = {
   "confo.compliance":
     compliance,
 
-};
 
+  // ===================================================
+  // CHAT
+  // ===================================================
+
+  "confo.chat_test":
+    chatTest,
+
+};
 
 
 // =====================================================

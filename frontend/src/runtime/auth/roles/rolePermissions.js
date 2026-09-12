@@ -62,6 +62,7 @@ export const ROLE_PERMISSIONS = {
   "ParticipantSelector",
   "IncomingGroupCallAlert",
   "GroupCallControls",
+  
 
   // -----------------------------------------------
   // REMOTE TRAINING
@@ -129,6 +130,30 @@ export const ROLE_PERMISSIONS = {
       "call.leaveGroupCall",
 
       "call.endGroupCall",
+
+       // =================================================
+      // CHAT
+      // =================================================
+
+      "chat.sendMessage",
+
+      "chat.loadMessages",
+
+      "chat.createConversation",
+
+      "chat.joinConversation",
+      
+      'chat.loadConversations',
+
+      "chat.leaveConversation",
+
+      'chat.markConversationRead',
+
+      'chat.editMessage',
+
+      "chat.deleteMessage",
+
+      "chat.closeConversation",
 
 
       // =================================================
@@ -288,6 +313,17 @@ export const ROLE_PERMISSIONS = {
 
       "call.endGroupCall",
 
+       // =================================================
+      // CHAT
+      // =================================================
+
+      "chat.sendMessage",
+
+      "chat.loadMessages",
+
+      "chat.createConversation",
+
+
       // =================================================
       // TRAINING
       // =================================================
@@ -391,6 +427,17 @@ export const ROLE_PERMISSIONS = {
 
       "call.endGroupCall",
 
+       // =================================================
+      // CHAT
+      // =================================================
+
+      "chat.sendMessage",
+
+      "chat.loadMessages",
+
+      "chat.createConversation",
+
+
       // =================================================
       // TRAINING
       // =================================================
@@ -487,6 +534,15 @@ export const ROLE_PERMISSIONS = {
       "call.refreshGroupCall",
 
       "call.leaveGroupCall",
+
+       // =================================================
+      // CHAT
+      // =================================================
+
+      "chat.sendMessage",
+
+      "chat.loadMessages",
+
 
       // =================================================
       // TRAINING

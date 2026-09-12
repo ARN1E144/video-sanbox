@@ -271,7 +271,2188 @@ export default function RuntimeTestPanel() {
       ) || []
   );
 
+    // =====================================================
+  // CHAT RUNTIME TEST STATE
+  // =====================================================
+ console.log(
+  "%c[CHAT PROJECT RUNTIME CHECK]%c",
+  "color: #059669; font-weight: bold;", // Emerald tag
+  "",
+  {
+    project: runtime.get?.("project"),
+    projectId: runtime.get?.("project.id"),
+    projectObjectId: runtime.get?.("project")?.id,
+    projectObjectName: runtime.get?.("project")?.name,
+  }
+);
 
+
+  const [
+    chatActionRunning,
+    setChatActionRunning,
+  ] = useState(false);
+  
+
+  const [
+    chatLifecycleRunning,
+    setChatLifecycleRunning,
+  ] = useState(false);
+
+  const [
+    chatCreateTitle,
+    setChatCreateTitle,
+  ] = useState(
+    "Runtime Chat Test"
+  );
+
+  const [
+    chatCreateParticipantInput,
+    setChatCreateParticipantInput,
+  ] = useState("");
+
+  const [
+    chatCreateType,
+    setChatCreateType,
+  ] = useState("group");
+
+  const [
+    chatSelectedConversationId,
+    setChatSelectedConversationId,
+  ] = useState("");
+
+  const [
+    chatMessageInput,
+    setChatMessageInput,
+  ] = useState(
+    "Hello from the Confo runtime test panel"
+  );
+
+  const [
+    chatEditMessageInput,
+    setChatEditMessageInput,
+  ] = useState(
+    "Edited message from the Confo runtime test panel"
+  );
+
+  const [
+    chatLifecycleLog,
+    setChatLifecycleLog,
+  ] = useState([]);
+
+  const [
+    chatRuntimeRevision,
+    setChatRuntimeRevision,
+  ] = useState(0);
+
+
+  // =====================================================
+  // CHAT RUNTIME SNAPSHOT
+  // =====================================================
+
+  const getChatRuntimeSnapshot = () => ({
+
+    conversations:
+      runtime.get?.(
+        "chat.conversations"
+      ) ||
+      [],
+      
+    projectId:
+      runtime.get?.(
+        "chat.projectId"
+      ) ||
+      runtimeProjectId ||
+      null,
+
+    conversationId:
+      runtime.get?.(
+        "chat.conversationId"
+      ) ||
+      null,
+
+    conversation:
+      runtime.get?.(
+        "chat.conversation"
+      ) ||
+      null,
+
+    conversationStatus:
+      runtime.get?.(
+        "chat.conversationStatus"
+      ) ||
+      null,
+
+    participants:
+      runtime.get?.(
+        "chat.participants"
+      ) ||
+      [],
+
+    joined:
+      Boolean(
+        runtime.get?.(
+          "chat.joined"
+        )
+      ),
+
+    messages:
+      runtime.get?.(
+        "chat.messages"
+      ) ||
+      [],
+
+    lastMessage:
+      runtime.get?.(
+        "chat.lastMessage"
+      ) ||
+      null,
+
+    messageId:
+      runtime.get?.(
+        "chat.messageId"
+      ) ||
+      null,
+
+    lastReadMessageId:
+      runtime.get?.(
+        "chat.lastReadMessageId"
+      ) ||
+      null,
+
+    lastReadAt:
+      runtime.get?.(
+        "chat.lastReadAt"
+      ) ||
+      null,
+
+    realtimeConnected:
+      runtime.get?.(
+        "chat.realtimeConnected"
+      ),
+  });
+
+
+  const chatRuntime =
+    getChatRuntimeSnapshot();
+
+
+  const chatConversations =
+    Array.isArray(
+      chatRuntime.conversations
+    )
+      ? chatRuntime.conversations
+      : [];
+
+
+  const activeChatConversationId =
+    chatSelectedConversationId ||
+    chatRuntime.conversationId ||
+    "";
+
+
+  const getChatMessageId = () => {
+
+    const runtimeMessageId =
+      runtime.get?.(
+        "chat.messageId"
+      );
+
+    const lastMessage =
+      runtime.get?.(
+        "chat.lastMessage"
+      ) ||
+      null;
+
+    return (
+      runtimeMessageId ||
+      lastMessage?.id ||
+      lastMessage?._id ||
+      null
+    );
+  };
+
+
+  // =====================================================
+  // CHAT STATE SUBSCRIPTIONS
+  // =====================================================
+
+  useEffect(() => {
+
+    const paths = [
+      "chat.projectId",
+      "chat.conversations",
+      "chat.conversationId",
+      "chat.conversation",
+      "chat.conversationStatus",
+      "chat.participants",
+      "chat.joined",
+      "chat.messages",
+      "chat.lastMessage",
+      "chat.messageId",
+      "chat.lastReadMessageId",
+      "chat.lastReadAt",
+      "chat.realtimeConnected",
+    ];
+
+
+    const unsubscribers =
+      paths.map(
+        path =>
+          runtime.subscribe?.(
+            path,
+            () => {
+              setChatRuntimeRevision(
+                value =>
+                  value + 1
+              );
+            }
+          )
+      );
+
+
+    return () => {
+
+      unsubscribers.forEach(
+        unsubscribe => {
+          unsubscribe?.();
+        }
+      );
+
+    };
+
+  }, [runtime]);
+
+
+  // Keep the selector aligned with a newly
+  // created or joined conversation.
+
+  useEffect(() => {
+
+    const runtimeConversationId =
+      runtime.get?.(
+        "chat.conversationId"
+      );
+
+
+    if (
+      runtimeConversationId &&
+      !chatSelectedConversationId
+    ) {
+
+      setChatSelectedConversationId(
+        String(
+          runtimeConversationId
+        )
+      );
+
+    }
+
+  }, [
+    runtime,
+    chatRuntimeRevision,
+    chatSelectedConversationId,
+  ]);
+
+
+  // =====================================================
+// CHAT RUNTIME HELPERS
+// =====================================================
+
+function getChatParticipantIds() {
+  return Array.from(
+    new Set(
+      String(chatCreateParticipantInput || "")
+        .split(/[\n,]+/)
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+
+// -----------------------------------------------------
+// CHAT ID NORMALISATION
+// -----------------------------------------------------
+
+function getChatConversationId(value) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return null;
+  }
+
+  if (
+    typeof value === "string" ||
+    typeof value === "number"
+  ) {
+    const id = String(value).trim();
+
+    return id || null;
+  }
+
+  if (
+    typeof value === "object"
+  ) {
+    return (
+      getChatConversationId(value.id) ||
+      getChatConversationId(value._id) ||
+      getChatConversationId(value.conversationId) ||
+      getChatConversationId(value.conversation_id) ||
+      getChatConversationId(value.conversation)
+    );
+  }
+
+  return null;
+}
+
+
+function getChatMessageIdFromValue(value) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return null;
+  }
+
+  if (
+    typeof value === "string" ||
+    typeof value === "number"
+  ) {
+    const id = String(value).trim();
+
+    return id || null;
+  }
+
+  if (
+    typeof value === "object"
+  ) {
+    return (
+      getChatMessageIdFromValue(value.id) ||
+      getChatMessageIdFromValue(value._id) ||
+      getChatMessageIdFromValue(value.messageId) ||
+      getChatMessageIdFromValue(value.message_id) ||
+      getChatMessageIdFromValue(value.message)
+    );
+  }
+
+  return null;
+}
+
+
+// -----------------------------------------------------
+// CONVERSATION RESOLUTION
+// -----------------------------------------------------
+
+function resolveChatConversationId(
+  result = null
+) {
+  const runtimeConversationId =
+    getChatConversationId(
+      runtime.get?.("chat.conversationId")
+    );
+
+  if (runtimeConversationId) {
+    return runtimeConversationId;
+  }
+
+  const resultConversationId =
+    getChatConversationId(
+      result?.result?.conversationId
+    );
+
+  if (resultConversationId) {
+    return resultConversationId;
+  }
+
+  const nestedConversationId =
+    getChatConversationId(
+      result?.result?.conversation
+    );
+
+  if (nestedConversationId) {
+    return nestedConversationId;
+  }
+
+  const directConversationId =
+    getChatConversationId(
+      result?.conversationId
+    );
+
+  if (directConversationId) {
+    return directConversationId;
+  }
+
+  const directConversation =
+    getChatConversationId(
+      result?.conversation
+    );
+
+  if (directConversation) {
+    return directConversation;
+  }
+
+  return null;
+}
+
+
+function resolveChatMessageId(
+  result = null
+) {
+  const runtimeMessageId =
+    getChatMessageIdFromValue(
+      runtime.get?.("chat.messageId")
+    );
+
+  if (runtimeMessageId) {
+    return runtimeMessageId;
+  }
+
+  const runtimeLastMessage =
+    runtime.get?.("chat.lastMessage");
+
+  const lastMessageId =
+    getChatMessageIdFromValue(
+      runtimeLastMessage
+    );
+
+  if (lastMessageId) {
+    return lastMessageId;
+  }
+
+  const resultMessageId =
+    getChatMessageIdFromValue(
+      result?.result?.messageId
+    );
+
+  if (resultMessageId) {
+    return resultMessageId;
+  }
+
+  const resultMessage =
+    getChatMessageIdFromValue(
+      result?.result?.message
+    );
+
+  if (resultMessage) {
+    return resultMessage;
+  }
+
+  return null;
+}
+
+
+// -----------------------------------------------------
+// CONVERSATION SELECTION
+// -----------------------------------------------------
+
+function selectChatConversation(
+  conversationId,
+  options = {}
+) {
+  const id = getChatConversationId(
+    conversationId
+  );
+
+  if (!id) {
+    console.warn(
+      "[Chat Runtime] Cannot select conversation without an ID."
+    );
+
+    return false;
+  }
+
+  setChatSelectedConversationId(id);
+
+  runtime.set?.(
+    "chat.conversationId",
+    id
+  );
+
+  if (!options.silent) {
+    recordChatLifecycle(
+      "chat.conversationSelected",
+      {
+        ok: true,
+        conversationId: id
+      }
+    );
+  }
+
+  return true;
+}
+
+
+// -----------------------------------------------------
+// LIFECYCLE LOGGING
+// -----------------------------------------------------
+
+function recordChatLifecycle(
+  step,
+  result,
+  meta = {}
+) {
+  const snapshot =
+    getChatRuntimeSnapshot();
+
+  const entry = {
+    id:
+      `${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+
+    step,
+
+    timestamp:
+      new Date().toISOString(),
+
+    ok:
+      result?.ok !== false,
+
+    result,
+
+    meta,
+
+    snapshot
+  };
+
+  setChatLifecycleLog(
+    (previous) => [
+      entry,
+      ...previous
+    ].slice(0, 50)
+  );
+
+  console.log(
+    `[Chat Runtime] ${step}`,
+    entry
+  );
+
+  return entry;
+}
+
+
+// -----------------------------------------------------
+// ACTION EXECUTION
+// -----------------------------------------------------
+
+async function runChatAction(
+  action,
+  params = {},
+  lifecycleStep = action
+) {
+  if (chatActionRunning) {
+    console.warn(
+      "[Chat Runtime] Another Chat action is already running."
+    );
+
+    return {
+      ok: false,
+      error: "Another Chat action is already running."
+    };
+  }
+
+  setChatActionRunning(true);
+
+  try {
+    const result =
+      await runAction(
+        action,
+        params
+      );
+
+    recordChatLifecycle(
+      lifecycleStep,
+      result,
+      {
+        action,
+        params
+      }
+    );
+
+    return result;
+
+  } catch (error) {
+
+    const result = {
+      ok: false,
+      error:
+        error?.message ||
+        String(error)
+    };
+
+    recordChatLifecycle(
+      lifecycleStep,
+      result,
+      {
+        action,
+        params
+      }
+    );
+
+    console.error(
+      `[Chat Runtime] ${action} failed`,
+      error
+    );
+
+    return result;
+
+  } finally {
+    setChatActionRunning(false);
+  }
+}
+
+
+// -----------------------------------------------------
+// REQUIRED IDs
+// -----------------------------------------------------
+
+function requireChatConversationId(
+  operation
+) {
+  const id =
+    getChatConversationId(
+      chatSelectedConversationId
+    ) ||
+    getChatConversationId(
+      runtime.get?.("chat.conversationId")
+    );
+
+  if (!id) {
+    console.warn(
+      `[Chat Runtime] ${operation} requires a conversation ID.`
+    );
+
+    return null;
+  }
+
+  return id;
+}
+
+
+function requireChatMessageId(
+  operation
+) {
+  const id =
+    resolveChatMessageId();
+
+  if (!id) {
+    console.warn(
+      `[Chat Runtime] ${operation} requires a message ID.`
+    );
+
+    return null;
+  }
+
+  return id;
+}
+
+
+  // =====================================================
+  // CHAT: LOAD CONVERSATIONS
+  // =====================================================
+
+  async function testChatLoadConversations() {
+    const result =
+      await runChatAction(
+        "chat.loadConversations",
+        {},
+        "chat.conversationsLoaded"
+      );
+
+    if (result?.ok === false) {
+      return;
+    }
+
+    const conversations =
+      runtime.get?.(
+        "chat.conversations"
+      );
+
+    const valid =
+      Array.isArray(
+        conversations
+      );
+
+    recordChatLifecycle(
+      "chat.conversationsVerified",
+      {
+        ok: valid,
+
+        conversationCount:
+          Array.isArray(conversations)
+            ? conversations.length
+            : 0,
+
+        error:
+          valid
+            ? null
+            : "chat.conversations is not an array."
+      }
+    );
+  }
+
+
+  // =====================================================
+  // CHAT: CREATE CONVERSATION
+  // =====================================================
+
+  async function testChatCreateConversation() {
+  const participantIds =
+    getChatParticipantIds();
+
+  if (!participantIds.length) {
+    console.warn(
+      "[Chat Runtime] Add at least one participant ID before creating a conversation."
+    );
+
+    recordChatLifecycle(
+      "chat.createConversation.validation",
+      {
+        ok: false,
+        error: "At least one participant ID is required."
+      }
+    );
+
+    return;
+  }
+
+  const result =
+    await runChatAction(
+      "chat.createConversation",
+      {
+        title:
+          chatCreateTitle.trim() ||
+          "Runtime Chat Test",
+
+        participantIds,
+
+        type:
+          chatCreateType
+      },
+      "chat.conversationCreated"
+    );
+
+  if (result?.ok === false) {
+    return;
+  }
+
+  // ---------------------------------------------------
+  // Resolve the newly-created conversation
+  // ---------------------------------------------------
+
+  const createdConversationId =
+    resolveChatConversationId(
+      result
+    );
+
+  if (!createdConversationId) {
+    console.warn(
+      "[Chat Runtime] Conversation was created but no conversation ID was returned."
+    );
+
+    recordChatLifecycle(
+      "chat.createConversation.resolveId",
+      {
+        ok: false,
+        error:
+          "Conversation created but conversation ID could not be resolved."
+      }
+    );
+
+    return;
+  }
+
+  // ---------------------------------------------------
+  // Make the new conversation the active runtime
+  // conversation immediately.
+  // ---------------------------------------------------
+
+  selectChatConversation(
+    createdConversationId,
+    {
+      silent: true
+    }
+  );
+
+  recordChatLifecycle(
+    "chat.conversationSelected",
+    {
+      ok: true,
+      conversationId:
+        createdConversationId
+    },
+    {
+      source:
+        "chat.createConversation"
+    }
+  );
+
+  // ---------------------------------------------------
+  // IMPORTANT:
+  // Refresh the conversation collection.
+  //
+  // Previously createConversation updated the runtime
+  // conversation ID but did not refresh
+  // chat.conversations, meaning the new conversation
+  // could be missing from the selector.
+  // ---------------------------------------------------
+
+  const reloadResult =
+    await runChatAction(
+      "chat.loadConversations",
+      {},
+      "chat.conversationsReloadedAfterCreate"
+    );
+
+  if (reloadResult?.ok === false) {
+    return;
+  }
+
+  // ---------------------------------------------------
+  // Re-select the created conversation after the reload.
+  // ---------------------------------------------------
+
+  selectChatConversation(
+    createdConversationId,
+    {
+      silent: true
+    }
+  );
+
+  recordChatLifecycle(
+    "chat.conversationReady",
+    {
+      ok: true,
+      conversationId:
+        createdConversationId
+    },
+    {
+      source:
+        "chat.createConversation",
+      conversationsReloaded:
+        true
+    }
+  );
+}
+
+
+  // =====================================================
+  // CHAT: SELECT RUNTIME CONVERSATION
+  // =====================================================
+
+  async function testChatSelectRuntimeConversation() {
+  const conversationId =
+    getChatConversationId(
+      runtime.get?.(
+        "chat.conversationId"
+      )
+    );
+
+  if (!conversationId) {
+    console.warn(
+      "[Chat Runtime] No runtime conversation ID is available."
+    );
+
+    recordChatLifecycle(
+      "chat.conversationSelection.validation",
+      {
+        ok: false,
+        error:
+          "No runtime conversation ID is available."
+      }
+    );
+
+    return;
+  }
+
+  selectChatConversation(
+    conversationId
+  );
+}
+
+
+  // =====================================================
+  // CHAT: ACCEPT INVITATION
+  // =====================================================
+
+  const testChatAcceptInvitation =
+    async () => {
+
+      const conversationId =
+        requireChatConversationId(
+          "Accept Invitation"
+        );
+
+
+      if (
+        !conversationId
+      ) {
+        return;
+      }
+
+
+      await runChatAction(
+        "chat.acceptConversationInvitation",
+        {
+          conversationId,
+        },
+        "chat.conversationAccepted"
+      );
+
+    };
+
+
+  // =====================================================
+  // CHAT: DECLINE INVITATION
+  // =====================================================
+
+  const testChatDeclineInvitation =
+    async () => {
+
+      const conversationId =
+        requireChatConversationId(
+          "Decline Invitation"
+        );
+
+
+      if (
+        !conversationId
+      ) {
+        return;
+      }
+
+
+      await runChatAction(
+        "chat.declineConversationInvitation",
+        {
+          conversationId,
+        },
+        "chat.conversationDeclined"
+      );
+
+    };
+
+
+  // =====================================================
+  // CHAT: JOIN
+  // =====================================================
+
+  async function testChatJoinConversation() {
+  const conversationId =
+    requireChatConversationId(
+      "chat.joinConversation"
+    );
+
+  if (!conversationId) {
+    return;
+  }
+
+  const result =
+    await runChatAction(
+      "chat.joinConversation",
+      {
+        conversationId
+      },
+      "chat.conversationJoined"
+    );
+
+  if (result?.ok === false) {
+    return;
+  }
+
+  const joined =
+    Boolean(
+      runtime.get?.(
+        "chat.joined"
+      )
+    );
+
+  recordChatLifecycle(
+    "chat.joinConversationVerified",
+    {
+      ok: joined,
+
+      conversationId,
+
+      joined,
+
+      error:
+        joined
+          ? null
+          : "Runtime state does not report the conversation as joined."
+    }
+  );
+}
+
+
+  // =====================================================
+  // CHAT: LOAD MESSAGES
+  // =====================================================
+
+  async function testChatLoadMessages() {
+  const conversationId =
+    requireChatConversationId(
+      "chat.loadMessages"
+    );
+
+  if (!conversationId) {
+    return;
+  }
+
+  const result =
+    await runChatAction(
+      "chat.loadMessages",
+      {
+        conversationId
+      },
+      "chat.messagesLoaded"
+    );
+
+  if (result?.ok === false) {
+    return;
+  }
+
+  const messages =
+    runtime.get?.(
+      "chat.messages"
+    );
+
+  recordChatLifecycle(
+    "chat.messagesLoadVerified",
+    {
+      ok:
+        Array.isArray(
+          messages
+        ),
+
+      conversationId,
+
+      messageCount:
+        Array.isArray(messages)
+          ? messages.length
+          : 0,
+
+      error:
+        Array.isArray(messages)
+          ? null
+          : "chat.messages is not an array."
+    }
+  );
+}
+
+
+  // =====================================================
+  // CHAT: SEND MESSAGE
+  // =====================================================
+
+  async function testChatSendMessage() {
+  const conversationId =
+    requireChatConversationId(
+      "chat.sendMessage"
+    );
+
+  if (!conversationId) {
+    return;
+  }
+
+  const text =
+    String(
+      chatMessageInput || ""
+    ).trim();
+
+  if (!text) {
+    console.warn(
+      "[Chat Runtime] Enter a message before sending."
+    );
+
+    return;
+  }
+
+  const result =
+    await runChatAction(
+      "chat.sendMessage",
+      {
+        conversationId,
+        text
+      },
+      "chat.messageSent"
+    );
+
+  if (result?.ok === false) {
+    return;
+  }
+
+  const messageId =
+    resolveChatMessageId(
+      result
+    );
+
+  recordChatLifecycle(
+    "chat.messageSendVerified",
+    {
+      ok:
+        Boolean(messageId),
+
+      conversationId,
+
+      messageId,
+
+      lastMessage:
+        runtime.get?.(
+          "chat.lastMessage"
+        ),
+
+      error:
+        messageId
+          ? null
+          : "No message ID was produced after sending the message."
+    }
+  );
+
+  if (
+    result?.ok !== false
+  ) {
+    setChatMessageInput("");
+  }
+}
+
+
+  // =====================================================
+  // CHAT: EDIT MESSAGE
+  // =====================================================
+
+  const testChatEditMessage =
+    async () => {
+
+      const conversationId =
+        requireChatConversationId(
+          "Edit Message"
+        );
+
+      const messageId =
+        requireChatMessageId(
+          "Edit Message"
+        );
+
+      const text =
+        chatEditMessageInput.trim();
+
+
+      if (
+        !conversationId ||
+        !messageId
+      ) {
+        return;
+      }
+
+
+      if (
+        !text
+      ) {
+
+        console.warn(
+          "[RuntimeTest][CHAT] Edited message text is empty"
+        );
+
+        return;
+
+      }
+
+
+      await runChatAction(
+        "chat.editMessage",
+        {
+          conversationId,
+          messageId,
+          text,
+        },
+        "chat.messageEdited"
+      );
+
+    };
+
+
+  // =====================================================
+  // CHAT: DELETE MESSAGE
+  // =====================================================
+
+  const testChatDeleteMessage =
+    async () => {
+
+      const conversationId =
+        requireChatConversationId(
+          "Delete Message"
+        );
+
+      const messageId =
+        requireChatMessageId(
+          "Delete Message"
+        );
+
+
+      if (
+        !conversationId ||
+        !messageId
+      ) {
+        return;
+      }
+
+
+      await runChatAction(
+        "chat.deleteMessage",
+        {
+          conversationId,
+          messageId,
+        },
+        "chat.messageDeleted"
+      );
+
+    };
+
+
+  // =====================================================
+  // CHAT: MARK READ
+  // =====================================================
+
+  async function testChatMarkRead() {
+  const conversationId =
+    requireChatConversationId(
+      "chat.markConversationRead"
+    );
+
+  if (!conversationId) {
+    return;
+  }
+
+  const messageId =
+    requireChatMessageId(
+      "chat.markConversationRead"
+    );
+
+  if (!messageId) {
+    return;
+  }
+
+  const result =
+    await runChatAction(
+      "chat.markConversationRead",
+      {
+        conversationId,
+        messageId
+      },
+      "chat.conversationMarkedRead"
+    );
+
+  if (result?.ok === false) {
+    return;
+  }
+
+  const lastReadMessageId =
+    getChatMessageIdFromValue(
+      runtime.get?.(
+        "chat.lastReadMessageId"
+      )
+    );
+
+  recordChatLifecycle(
+    "chat.conversationReadVerified",
+    {
+      ok:
+        Boolean(
+          lastReadMessageId
+        ),
+
+      conversationId,
+
+      messageId,
+
+      lastReadMessageId,
+
+      error:
+        lastReadMessageId
+          ? null
+          : "chat.lastReadMessageId was not populated."
+    }
+  );
+}
+
+
+  // =====================================================
+  // CHAT: LEAVE
+  // =====================================================
+
+  async function testChatLeaveConversation() {
+  const conversationId =
+    requireChatConversationId(
+      "chat.leaveConversation"
+    );
+
+  if (!conversationId) {
+    return;
+  }
+
+  const result =
+    await runChatAction(
+      "chat.leaveConversation",
+      {
+        conversationId
+      },
+      "chat.conversationLeft"
+    );
+
+  if (result?.ok === false) {
+    return;
+  }
+
+  const joined =
+    Boolean(
+      runtime.get?.(
+        "chat.joined"
+      )
+    );
+
+  recordChatLifecycle(
+    "chat.leaveConversationVerified",
+    {
+      ok:
+        !joined,
+
+      conversationId,
+
+      joined,
+
+      error:
+        joined
+          ? "Runtime still reports the conversation as joined."
+          : null
+    }
+  );
+}
+
+
+  // =====================================================
+  // CHAT: CLOSE
+  // =====================================================
+
+  async function testChatCloseConversation() {
+  const conversationId =
+    requireChatConversationId(
+      "chat.closeConversation"
+    );
+
+  if (!conversationId) {
+    return;
+  }
+
+  const result =
+    await runChatAction(
+      "chat.closeConversation",
+      {
+        conversationId
+      },
+      "chat.conversationClosed"
+    );
+
+  if (result?.ok === false) {
+    return;
+  }
+
+  const status =
+    runtime.get?.(
+      "chat.conversationStatus"
+    );
+
+  recordChatLifecycle(
+    "chat.closeConversationVerified",
+    {
+      ok:
+        Boolean(status),
+
+      conversationId,
+
+      conversationStatus:
+        status,
+
+      error:
+        status
+          ? null
+          : "chat.conversationStatus was not populated."
+    }
+  );
+}
+
+
+  // =====================================================
+  // CHAT: FULL ACTIVE-CONVERSATION LIFECYCLE
+  // =====================================================
+
+  /*
+   * This tests the real runtime action pipeline.
+   *
+   * Invitation accept/decline remain manual because they
+   * are mutually exclusive membership outcomes.
+   *
+   * Sequence:
+   *
+   *   load conversations
+   *   select conversation
+   *   join if necessary
+   *   load messages
+   *   send message
+   *   mark read
+   *   edit message
+   *   delete message
+   *   leave conversation
+   *   close conversation
+   */
+
+  async function runChatActiveConversationLifecycle() {
+  if (
+    chatLifecycleRunning ||
+    chatActionRunning
+  ) {
+    console.warn(
+      "[Chat Runtime] Chat lifecycle is already running."
+    );
+
+    return;
+  }
+
+  setChatLifecycleRunning(true);
+
+  setChatLifecycleLog([]);
+
+  console.log(
+    "[Chat Runtime] Starting full active conversation lifecycle."
+  );
+
+  try {
+
+    // =================================================
+    // INTERNAL LIFECYCLE STEP RUNNER
+    // =================================================
+
+    const runStep = async (
+      action,
+      params,
+      lifecycleStep
+    ) => {
+      setChatActionRunning(true);
+
+      try {
+
+        const result =
+          await runAction(
+            action,
+            params
+          );
+
+        recordChatLifecycle(
+          lifecycleStep,
+          result,
+          {
+            action,
+            params
+          }
+        );
+
+        if (
+          result?.ok === false
+        ) {
+          throw new Error(
+            result?.error ||
+            `${action} failed`
+          );
+        }
+
+        return result;
+
+      } catch (error) {
+
+        const result = {
+          ok: false,
+          error:
+            error?.message ||
+            String(error)
+        };
+
+        recordChatLifecycle(
+          lifecycleStep,
+          result,
+          {
+            action,
+            params
+          }
+        );
+
+        throw error;
+
+      } finally {
+        setChatActionRunning(false);
+      }
+    };
+
+
+    const verify = (
+      condition,
+      step,
+      details = {}
+    ) => {
+
+      const result = {
+        ok:
+          Boolean(condition),
+
+        ...details
+      };
+
+      recordChatLifecycle(
+        step,
+        result
+      );
+
+      if (!condition) {
+        throw new Error(
+          details.error ||
+          `${step} verification failed.`
+        );
+      }
+
+      return result;
+    };
+
+
+    // =================================================
+    // STEP 1
+    // LOAD CONVERSATIONS
+    // =================================================
+
+    await runStep(
+      "chat.loadConversations",
+      {},
+      "chat.lifecycle.loadConversations"
+    );
+
+    const conversations =
+      runtime.get?.(
+        "chat.conversations"
+      );
+
+    verify(
+      Array.isArray(
+        conversations
+      ),
+      "chat.lifecycle.verifyConversations",
+      {
+        conversationCount:
+          Array.isArray(conversations)
+            ? conversations.length
+            : 0,
+
+        error:
+          "chat.conversations is not an array."
+      }
+    );
+
+
+    // =================================================
+    // STEP 2
+    // RESOLVE ACTIVE CONVERSATION
+    // =================================================
+
+    let conversationId =
+      getChatConversationId(
+        chatSelectedConversationId
+      ) ||
+      getChatConversationId(
+        runtime.get?.(
+          "chat.conversationId"
+        )
+      );
+
+
+    // -------------------------------------------------
+    // If no active conversation exists, use the first
+    // conversation returned by loadConversations.
+    // -------------------------------------------------
+
+    if (!conversationId) {
+
+      const firstConversation =
+        Array.isArray(
+          conversations
+        )
+          ? conversations[0]
+          : null;
+
+      conversationId =
+        getChatConversationId(
+          firstConversation
+        );
+    }
+
+
+    if (!conversationId) {
+
+      verify(
+        false,
+        "chat.lifecycle.verifyActiveConversation",
+        {
+          error:
+            "No active conversation exists and no conversation was returned by chat.loadConversations."
+        }
+      );
+    }
+
+
+    // -------------------------------------------------
+    // Set the active runtime conversation.
+    // -------------------------------------------------
+
+    selectChatConversation(
+      conversationId,
+      {
+        silent: true
+      }
+    );
+
+    verify(
+      getChatConversationId(
+        runtime.get?.(
+          "chat.conversationId"
+        )
+      ) === conversationId,
+
+      "chat.lifecycle.verifyConversationSelection",
+
+      {
+        conversationId,
+
+        runtimeConversationId:
+          runtime.get?.(
+            "chat.conversationId"
+          ),
+
+        error:
+          "Runtime conversation ID does not match the selected conversation."
+      }
+    );
+
+
+    // =================================================
+    // STEP 3
+    // JOIN IF NECESSARY
+    // =================================================
+
+    const joinedBefore =
+      Boolean(
+        runtime.get?.(
+          "chat.joined"
+        )
+      );
+
+    if (!joinedBefore) {
+
+      await runStep(
+        "chat.joinConversation",
+        {
+          conversationId
+        },
+        "chat.lifecycle.joinConversation"
+      );
+    } else {
+
+      recordChatLifecycle(
+        "chat.lifecycle.joinConversationSkipped",
+        {
+          ok: true,
+          reason:
+            "Conversation is already joined."
+        }
+      );
+    }
+
+
+    // -------------------------------------------------
+    // Verify membership
+    // -------------------------------------------------
+
+    const joinedAfter =
+      Boolean(
+        runtime.get?.(
+          "chat.joined"
+        )
+      );
+
+    verify(
+      joinedAfter,
+      "chat.lifecycle.verifyJoined",
+      {
+        conversationId,
+
+        joined:
+          joinedAfter,
+
+        error:
+          "Conversation is not joined after chat.joinConversation."
+      }
+    );
+
+
+    // =================================================
+    // STEP 4
+    // LOAD MESSAGES
+    // =================================================
+
+    await runStep(
+      "chat.loadMessages",
+      {
+        conversationId
+      },
+      "chat.lifecycle.loadMessages"
+    );
+
+    const messages =
+      runtime.get?.(
+        "chat.messages"
+      );
+
+    verify(
+      Array.isArray(
+        messages
+      ),
+      "chat.lifecycle.verifyMessages",
+      {
+        messageCount:
+          Array.isArray(messages)
+            ? messages.length
+            : 0,
+
+        error:
+          "chat.messages is not an array."
+      }
+    );
+
+
+    // =================================================
+    // STEP 5
+    // SEND MESSAGE
+    // =================================================
+
+    const messageText =
+      String(
+        chatMessageInput || ""
+      ).trim();
+
+    if (!messageText) {
+
+      verify(
+        false,
+        "chat.lifecycle.verifyMessageInput",
+        {
+          error:
+            "Chat message input is empty."
+        }
+      );
+    }
+
+
+    const sendResult =
+      await runStep(
+        "chat.sendMessage",
+        {
+          conversationId,
+          text: messageText
+        },
+        "chat.lifecycle.sendMessage"
+      );
+
+
+    // -------------------------------------------------
+    // Resolve message ID from runtime/result.
+    // -------------------------------------------------
+
+    const messageId =
+      resolveChatMessageId(
+        sendResult
+      );
+
+
+    verify(
+      Boolean(
+        messageId
+      ),
+      "chat.lifecycle.verifySentMessage",
+      {
+        messageId,
+
+        runtimeMessageId:
+          runtime.get?.(
+            "chat.messageId"
+          ),
+
+        lastMessage:
+          runtime.get?.(
+            "chat.lastMessage"
+          ),
+
+        error:
+          "chat.sendMessage completed but no message ID was available in runtime state or action result."
+      }
+    );
+
+
+    // =================================================
+    // STEP 6
+    // MARK CONVERSATION READ
+    // =================================================
+
+    await runStep(
+      "chat.markConversationRead",
+      {
+        conversationId,
+        messageId
+      },
+      "chat.lifecycle.markConversationRead"
+    );
+
+
+    const lastReadMessageId =
+      getChatMessageIdFromValue(
+        runtime.get?.(
+          "chat.lastReadMessageId"
+        )
+      );
+
+
+    verify(
+      Boolean(
+        lastReadMessageId
+      ),
+      "chat.lifecycle.verifyConversationRead",
+      {
+        messageId,
+
+        lastReadMessageId,
+
+        error:
+          "Conversation was marked read but chat.lastReadMessageId was not populated."
+      }
+    );
+
+
+    // =================================================
+    // STEP 7
+    // EDIT MESSAGE
+    // =================================================
+
+    const editText =
+      String(
+        chatEditMessageInput || ""
+      ).trim();
+
+    if (editText) {
+
+      await runStep(
+        "chat.editMessage",
+        {
+          conversationId,
+          messageId,
+          text: editText
+        },
+        "chat.lifecycle.editMessage"
+      );
+
+
+      const messagesAfterEdit =
+        runtime.get?.(
+          "chat.messages"
+        );
+
+      const editedMessage =
+        Array.isArray(
+          messagesAfterEdit
+        )
+          ? messagesAfterEdit.find(
+              (message) =>
+                getChatMessageIdFromValue(
+                  message
+                ) === messageId
+            )
+          : null;
+
+
+      recordChatLifecycle(
+        "chat.lifecycle.verifyEditedMessage",
+        {
+          ok:
+            Boolean(
+              editedMessage
+            ),
+
+          messageId,
+
+          editedMessage,
+
+          messageCount:
+            Array.isArray(
+              messagesAfterEdit
+            )
+              ? messagesAfterEdit.length
+              : 0
+        }
+      );
+
+    } else {
+
+      recordChatLifecycle(
+        "chat.lifecycle.editMessageSkipped",
+        {
+          ok: true,
+
+          reason:
+            "Edit message input is empty."
+        }
+      );
+    }
+
+
+    // =================================================
+    // STEP 8
+    // DELETE MESSAGE
+    // =================================================
+
+    await runStep(
+      "chat.deleteMessage",
+      {
+        conversationId,
+        messageId
+      },
+      "chat.lifecycle.deleteMessage"
+    );
+
+
+    const messagesAfterDelete =
+      runtime.get?.(
+        "chat.messages"
+      );
+
+
+    const deletedMessageStillPresent =
+      Array.isArray(
+        messagesAfterDelete
+      )
+        ? messagesAfterDelete.some(
+            (message) =>
+              getChatMessageIdFromValue(
+                message
+              ) === messageId
+          )
+        : false;
+
+
+    recordChatLifecycle(
+      "chat.lifecycle.verifyDeletedMessage",
+      {
+        ok:
+          !deletedMessageStillPresent,
+
+        messageId,
+
+        messageStillPresent:
+          deletedMessageStillPresent,
+
+        messageCount:
+          Array.isArray(
+            messagesAfterDelete
+          )
+            ? messagesAfterDelete.length
+            : 0,
+
+        error:
+          deletedMessageStillPresent
+            ? "Deleted message is still present in chat.messages."
+            : null
+      }
+    );
+
+
+    // =================================================
+    // STEP 9
+    // LEAVE CONVERSATION
+    // =================================================
+
+    await runStep(
+      "chat.leaveConversation",
+      {
+        conversationId
+      },
+      "chat.lifecycle.leaveConversation"
+    );
+
+
+    const joinedAfterLeave =
+      Boolean(
+        runtime.get?.(
+          "chat.joined"
+        )
+      );
+
+
+    verify(
+      !joinedAfterLeave,
+      "chat.lifecycle.verifyLeftConversation",
+      {
+        conversationId,
+
+        joined:
+          joinedAfterLeave,
+
+        error:
+          "chat.joinConversation state still reports joined after chat.leaveConversation."
+      }
+    );
+
+
+    // =================================================
+    // STEP 10
+    // CLOSE CONVERSATION
+    // =================================================
+
+    await runStep(
+      "chat.closeConversation",
+      {
+        conversationId
+      },
+      "chat.lifecycle.closeConversation"
+    );
+
+
+    const finalStatus =
+      runtime.get?.(
+        "chat.conversationStatus"
+      );
+
+
+    recordChatLifecycle(
+      "chat.lifecycle.verifyClosedConversation",
+      {
+        ok:
+          Boolean(
+            finalStatus
+          ),
+
+        conversationId,
+
+        conversationStatus:
+          finalStatus,
+
+        error:
+          finalStatus
+            ? null
+            : "chat.conversationStatus was not populated after close."
+      }
+    );
+
+
+    // =================================================
+    // COMPLETE
+    // =================================================
+
+    recordChatLifecycle(
+      "chat.lifecycle.complete",
+      {
+        ok: true,
+
+        conversationId,
+
+        messageId,
+
+        finalStatus,
+
+        summary:
+          "Full Chat runtime lifecycle completed."
+      }
+    );
+
+    console.log(
+      "[Chat Runtime] Full lifecycle completed successfully."
+    );
+
+  } catch (error) {
+
+    recordChatLifecycle(
+      "chat.lifecycle.failed",
+      {
+        ok: false,
+
+        error:
+          error?.message ||
+          String(error)
+      }
+    );
+
+    console.error(
+      "[Chat Runtime] Full lifecycle failed.",
+      error
+    );
+
+  } finally {
+
+    setChatActionRunning(false);
+
+    setChatLifecycleRunning(false);
+  }
+}
+
+
+  // =====================================================
+  // CHAT: CLEAR TEST LOG
+  // =====================================================
+
+  const clearChatLifecycleLog =
+    () => {
+
+      setChatLifecycleLog(
+        []
+      );
+
+    };
+
+
+  // =====================================================
+  // CHAT: DUMP RUNTIME
+  // =====================================================
+
+  const dumpChatRuntime =
+    () => {
+
+      console.group(
+        "CHAT RUNTIME SNAPSHOT"
+      );
+
+
+      console.log(
+        getChatRuntimeSnapshot()
+      );
+
+
+      console.log(
+        "Selected conversation:",
+        activeChatConversationId
+      );
+
+
+      console.log(
+        "Lifecycle log:",
+        chatLifecycleLog
+      );
+
+
+      console.groupEnd();
+
+    };
   // ===================================================
   // GROUP CALL TEST INPUT
   // ===================================================
@@ -2964,6 +5145,1508 @@ const testUpdateControlStatus =
         <CallControlsPanel />
 
         <hr />
+
+
+        {/* =================================================
+            CHAT RUNTIME LIFECYCLE TESTS
+        ================================================= */}
+
+        <div>
+
+          <div
+            style={{
+              fontWeight:
+                "bold",
+
+              marginBottom:
+                8,
+
+              fontSize:
+                13,
+            }}
+          >
+            Chat Runtime Lifecycle
+          </div>
+
+
+          <div
+            style={{
+              fontSize:
+                10,
+
+              color:
+                "#888",
+
+              lineHeight:
+                1.5,
+
+              marginBottom:
+                10,
+            }}
+          >
+            Developer-only runtime tests. These controls exercise
+            the Chat action contract directly before the rendered
+            Chat components are built on top of it.
+          </div>
+
+
+          {/* ---------------------------------------------
+              RUNTIME STATUS
+          --------------------------------------------- */}
+
+          <div
+            style={{
+              padding:
+                10,
+
+              border:
+                "1px solid #292929",
+
+              borderRadius:
+                8,
+
+              background:
+                "#111",
+
+              marginBottom:
+                10,
+
+              fontSize:
+                10,
+
+              lineHeight:
+                1.6,
+            }}
+          >
+
+            <div>
+              Project ID:{" "}
+              <strong>
+                {
+                  chatRuntime.projectId ||
+                  "none"
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              Conversation ID:{" "}
+              <strong>
+                {
+                  chatRuntime.conversationId ||
+                  "none"
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              Status:{" "}
+              <strong>
+                {
+                  chatRuntime.conversationStatus ||
+                  "none"
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              Joined:{" "}
+              <strong>
+                {
+                  chatRuntime.joined
+                    ? "true"
+                    : "false"
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              Participants:{" "}
+              <strong>
+                {
+                  Array.isArray(
+                    chatRuntime.participants
+                  )
+                    ? chatRuntime.participants.length
+                    : 0
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              Messages:{" "}
+              <strong>
+                {
+                  Array.isArray(
+                    chatRuntime.messages
+                  )
+                    ? chatRuntime.messages.length
+                    : 0
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              Last Message:{" "}
+              <strong>
+                {
+                  chatRuntime.lastMessage?.id ||
+                  chatRuntime.lastMessage?._id ||
+                  "none"
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              Message ID:{" "}
+              <strong>
+                {
+                  chatRuntime.messageId ||
+                  "none"
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              Last Read Message:{" "}
+              <strong>
+                {
+                  chatRuntime.lastReadMessageId ||
+                  "none"
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              Realtime:{" "}
+              <strong>
+                {
+                  chatRuntime.realtimeConnected === undefined
+                    ? "not exposed by runtime"
+                    : chatRuntime.realtimeConnected
+                      ? "connected"
+                      : "disconnected"
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              Runtime Revision:{" "}
+              <strong>
+                {chatRuntimeRevision}
+              </strong>
+            </div>
+
+          </div>
+
+
+          {/* ---------------------------------------------
+              CONVERSATION SETUP
+          --------------------------------------------- */}
+
+          <div
+            style={{
+              padding:
+                10,
+
+              border:
+                "1px solid #292929",
+
+              borderRadius:
+                8,
+
+              background:
+                "#151515",
+
+              marginBottom:
+                10,
+            }}
+          >
+
+            <div
+              style={{
+                fontWeight:
+                  "bold",
+
+                fontSize:
+                  11,
+
+                marginBottom:
+                  8,
+              }}
+            >
+              1. Conversation Setup
+            </div>
+
+
+            <label
+              style={{
+                display:
+                  "block",
+
+                color:
+                  "#aaa",
+
+                marginBottom:
+                  5,
+
+                fontSize:
+                  10,
+              }}
+            >
+              Conversation title
+            </label>
+
+
+            <input
+              value={
+                chatCreateTitle
+              }
+
+              onChange={
+                event =>
+                  setChatCreateTitle(
+                    event.target.value
+                  )
+              }
+
+              placeholder="Conversation title"
+
+              style={{
+                width:
+                  "100%",
+
+                boxSizing:
+                  "border-box",
+
+                padding:
+                  8,
+
+                marginBottom:
+                  8,
+
+                background:
+                  "#111",
+
+                color:
+                  "#fff",
+
+                border:
+                  "1px solid #333",
+
+                borderRadius:
+                  7,
+
+                fontFamily:
+                  "monospace",
+
+                fontSize:
+                  10,
+              }}
+            />
+
+
+            <label
+              style={{
+                display:
+                  "block",
+
+                color:
+                  "#aaa",
+
+                marginBottom:
+                  5,
+
+                fontSize:
+                  10,
+              }}
+            >
+              Participant User IDs
+            </label>
+
+
+            <textarea
+              value={
+                chatCreateParticipantInput
+              }
+
+              onChange={
+                event =>
+                  setChatCreateParticipantInput(
+                    event.target.value
+                  )
+              }
+
+              placeholder="Paste participant IDs separated by commas or new lines"
+
+              rows={
+                3
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                boxSizing:
+                  "border-box",
+
+                resize:
+                  "vertical",
+
+                padding:
+                  8,
+
+                marginBottom:
+                  8,
+
+                background:
+                  "#111",
+
+                color:
+                  "#fff",
+
+                border:
+                  "1px solid #333",
+
+                borderRadius:
+                  7,
+
+                fontFamily:
+                  "monospace",
+
+                fontSize:
+                  10,
+              }}
+            />
+
+
+            <div
+              style={{
+                fontSize:
+                  10,
+
+                color:
+                  "#777",
+
+                marginBottom:
+                  8,
+              }}
+            >
+              Parsed participants:{" "}
+              {
+                getChatParticipantIds().length
+              }
+            </div>
+
+
+            <select
+              value={
+                chatCreateType
+              }
+
+              onChange={
+                event =>
+                  setChatCreateType(
+                    event.target.value
+                  )
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                minHeight:
+                  34,
+
+                marginBottom:
+                  8,
+
+                background:
+                  "#111",
+
+                color:
+                  "#fff",
+
+                border:
+                  "1px solid #333",
+
+                borderRadius:
+                  7,
+
+                fontFamily:
+                  "monospace",
+
+                fontSize:
+                  10,
+              }}
+            >
+
+              <option value="group">
+                group
+              </option>
+
+              <option value="direct">
+                direct
+              </option>
+
+            </select>
+
+
+            <button
+              onClick={
+                testChatCreateConversation
+              }
+
+              disabled={
+                getChatParticipantIds().length === 0 ||
+                chatActionRunning
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                minHeight:
+                  36,
+
+                marginBottom:
+                  8,
+
+                cursor:
+                  getChatParticipantIds().length > 0 &&
+                  !chatActionRunning
+                    ? "pointer"
+                    : "not-allowed",
+
+                opacity:
+                  getChatParticipantIds().length > 0 &&
+                  !chatActionRunning
+                    ? 1
+                    : 0.55,
+              }}
+            >
+              {
+                chatActionRunning
+                  ? "Running..."
+                  : "Create Conversation"
+              }
+            </button>
+
+
+            <button
+              onClick={
+                testChatLoadConversations
+              }
+
+              disabled={
+                chatActionRunning
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                minHeight:
+                  34,
+
+                cursor:
+                  chatActionRunning
+                    ? "not-allowed"
+                    : "pointer",
+              }}
+            >
+              Load Conversations
+            </button>
+
+
+            <div
+              style={{
+                marginTop:
+                  8,
+
+                marginBottom:
+                  8,
+              }}
+            >
+
+              <label
+                style={{
+                  display:
+                    "block",
+
+                  color:
+                    "#aaa",
+
+                  marginBottom:
+                    5,
+
+                  fontSize:
+                    10,
+                }}
+              >
+                Selected Conversation
+              </label>
+
+
+              <select
+                value={
+                  activeChatConversationId
+                }
+
+                onChange={
+                  event =>
+                    selectChatConversation(
+                      event.target.value
+                    )
+                }
+
+                disabled={
+                  chatActionRunning ||
+                  chatLifecycleRunning
+                }
+
+                style={{
+                  width:
+                    "100%",
+
+                  minHeight:
+                    34,
+
+                  background:
+                    "#111",
+
+                  color:
+                    "#fff",
+
+                  border:
+                    "1px solid #333",
+
+                  borderRadius:
+                    7,
+
+                  fontFamily:
+                    "monospace",
+
+                  fontSize:
+                    10,
+                }}
+              >
+
+                <option value="">
+                  Select a conversation
+                </option>
+
+
+                {chatConversations.map((conversation) => {
+                  const conversationId =
+                    getChatConversationId(
+                      conversation
+                    );
+
+                  if (!conversationId) {
+                    return null;
+                  }
+
+                  const title =
+                    conversation.title ||
+                    conversation.name ||
+                    conversation.subject ||
+                    `Conversation ${conversationId}`;
+
+                  const status =
+                    conversation.status ||
+                    conversation.conversationStatus ||
+                    "";
+
+                  return (
+                    <option
+                      key={conversationId}
+                      value={conversationId}
+                    >
+                      {title}
+                      {status ? ` — ${status}` : ""}
+                    </option>
+                  );
+                })}
+
+              </select>
+
+
+              <div
+                style={{
+                  marginTop:
+                    5,
+
+                  fontSize:
+                    9,
+
+                  color:
+                    "#666",
+
+                  wordBreak:
+                    "break-all",
+                }}
+              >
+                ID:{" "}
+                {
+                  activeChatConversationId ||
+                  "none"
+                }
+              </div>
+
+            </div>
+
+
+            <button
+              onClick={
+                testChatSelectRuntimeConversation
+              }
+
+              disabled={
+                !chatRuntime.conversationId ||
+                chatActionRunning ||
+                chatLifecycleRunning
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                minHeight:
+                  32,
+
+                marginBottom:
+                  8,
+
+                cursor:
+                  chatRuntime.conversationId &&
+                  !chatActionRunning &&
+                  !chatLifecycleRunning
+                    ? "pointer"
+                    : "not-allowed",
+              }}
+            >
+              Use Runtime Conversation
+            </button>
+
+
+            <button
+              onClick={
+                runChatActiveConversationLifecycle
+              }
+
+              disabled={
+                chatActionRunning ||
+                chatLifecycleRunning ||
+                !activeChatConversationId
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                minHeight:
+                  40,
+
+                marginBottom:
+                  8,
+
+                cursor:
+                  !chatActionRunning &&
+                  !chatLifecycleRunning &&
+                  activeChatConversationId
+                    ? "pointer"
+                    : "not-allowed",
+
+                fontWeight:
+                  "bold",
+              }}
+            >
+              {
+                chatLifecycleRunning
+                  ? "Running Chat Lifecycle..."
+                  : "Run Full Active Conversation Lifecycle"
+              }
+            </button>
+
+          </div>
+
+
+          {/* ---------------------------------------------
+              INVITATION / MEMBERSHIP
+          --------------------------------------------- */}
+
+          <div
+            style={{
+              padding:
+                10,
+
+              border:
+                "1px solid #292929",
+
+              borderRadius:
+                8,
+
+              background:
+                "#151515",
+
+              marginBottom:
+                10,
+            }}
+          >
+
+            <div
+              style={{
+                fontWeight:
+                  "bold",
+
+                fontSize:
+                  11,
+
+                marginBottom:
+                  8,
+              }}
+            >
+              2. Invitation & Membership
+            </div>
+
+
+            <div
+              style={{
+                fontSize:
+                  10,
+
+                color:
+                  "#777",
+
+                lineHeight:
+                  1.5,
+
+                marginBottom:
+                  8,
+              }}
+            >
+              Invitees must be active before Join Conversation
+              can mark the runtime as joined. The creator is
+              already active when the conversation is created.
+            </div>
+
+
+            <div
+              style={{
+                display:
+                  "grid",
+
+                gridTemplateColumns:
+                  "1fr 1fr",
+
+                gap:
+                  8,
+
+                marginBottom:
+                  8,
+              }}
+            >
+
+              <button
+                onClick={
+                  testChatAcceptInvitation
+                }
+
+                disabled={
+                  !chatRuntime.conversationId ||
+                  chatActionRunning ||
+                  chatLifecycleRunning
+                }
+
+                style={{
+                  minHeight:
+                    34,
+
+                  cursor:
+                    chatRuntime.conversationId &&
+                    !chatActionRunning &&
+                    !chatLifecycleRunning
+                      ? "pointer"
+                      : "not-allowed",
+                }}
+              >
+                Accept Invitation
+              </button>
+
+
+              <button
+                onClick={
+                  testChatDeclineInvitation
+                }
+
+                disabled={
+                  !chatRuntime.conversationId ||
+                  chatActionRunning ||
+                  chatLifecycleRunning
+                }
+
+                style={{
+                  minHeight:
+                    34,
+
+                  cursor:
+                    chatRuntime.conversationId &&
+                    !chatActionRunning &&
+                    !chatLifecycleRunning
+                      ? "pointer"
+                      : "not-allowed",
+                }}
+              >
+                Decline Invitation
+              </button>
+
+            </div>
+
+
+            <div
+              style={{
+                display:
+                  "grid",
+
+                gridTemplateColumns:
+                  "1fr 1fr",
+
+                gap:
+                  8,
+              }}
+            >
+
+              <button
+                onClick={
+                  testChatJoinConversation
+                }
+
+                disabled={
+                  !chatRuntime.conversationId ||
+                  chatActionRunning ||
+                  chatLifecycleRunning
+                }
+
+                style={{
+                  minHeight:
+                    34,
+
+                  cursor:
+                    chatRuntime.conversationId &&
+                    !chatActionRunning &&
+                    !chatLifecycleRunning
+                      ? "pointer"
+                      : "not-allowed",
+                }}
+              >
+                Join Conversation
+              </button>
+
+
+              <button
+                onClick={
+                  testChatLeaveConversation
+                }
+
+                disabled={
+                  !chatRuntime.conversationId ||
+                  chatActionRunning ||
+                  chatLifecycleRunning
+                }
+
+                style={{
+                  minHeight:
+                    34,
+
+                  cursor:
+                    chatRuntime.conversationId &&
+                    !chatActionRunning &&
+                    !chatLifecycleRunning
+                      ? "pointer"
+                      : "not-allowed",
+                }}
+              >
+                Leave Conversation
+              </button>
+
+            </div>
+
+          </div>
+
+
+          {/* ---------------------------------------------
+              MESSAGING
+          --------------------------------------------- */}
+
+          <div
+            style={{
+              padding:
+                10,
+
+              border:
+                "1px solid #292929",
+
+              borderRadius:
+                8,
+
+              background:
+                "#151515",
+
+              marginBottom:
+                10,
+            }}
+          >
+
+            <div
+              style={{
+                fontWeight:
+                  "bold",
+
+                fontSize:
+                  11,
+
+                marginBottom:
+                  8,
+              }}
+            >
+              3. Messaging
+            </div>
+
+
+            <button
+              onClick={
+                testChatLoadMessages
+              }
+
+              disabled={
+                !chatRuntime.conversationId ||
+                chatActionRunning ||
+                chatLifecycleRunning
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                minHeight:
+                  34,
+
+                marginBottom:
+                  8,
+
+                cursor:
+                  chatRuntime.conversationId &&
+                  !chatActionRunning &&
+                  !chatLifecycleRunning
+                    ? "pointer"
+                    : "not-allowed",
+              }}
+            >
+              Load Messages
+            </button>
+
+
+            <textarea
+              value={
+                chatMessageInput
+              }
+
+              onChange={
+                event =>
+                  setChatMessageInput(
+                    event.target.value
+                  )
+              }
+
+              placeholder="Test message"
+
+              rows={
+                3
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                boxSizing:
+                  "border-box",
+
+                resize:
+                  "vertical",
+
+                padding:
+                  8,
+
+                marginBottom:
+                  8,
+
+                background:
+                  "#111",
+
+                color:
+                  "#fff",
+
+                border:
+                  "1px solid #333",
+
+                borderRadius:
+                  7,
+
+                fontFamily:
+                  "monospace",
+
+                fontSize:
+                  10,
+              }}
+            />
+
+
+            <button
+              onClick={
+                testChatSendMessage
+              }
+
+              disabled={
+                !chatRuntime.conversationId ||
+                !chatMessageInput.trim() ||
+                chatActionRunning ||
+                chatLifecycleRunning
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                minHeight:
+                  34,
+
+                marginBottom:
+                  8,
+
+                cursor:
+                  chatRuntime.conversationId &&
+                  chatMessageInput.trim() &&
+                  !chatActionRunning &&
+                  !chatLifecycleRunning
+                    ? "pointer"
+                    : "not-allowed",
+              }}
+            >
+              Send Message
+            </button>
+
+
+            <textarea
+              value={
+                chatEditMessageInput
+              }
+
+              onChange={
+                event =>
+                  setChatEditMessageInput(
+                    event.target.value
+                  )
+              }
+
+              placeholder="Edited message"
+
+              rows={
+                2
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                boxSizing:
+                  "border-box",
+
+                resize:
+                  "vertical",
+
+                padding:
+                  8,
+
+                marginBottom:
+                  8,
+
+                background:
+                  "#111",
+
+                color:
+                  "#fff",
+
+                border:
+                  "1px solid #333",
+
+                borderRadius:
+                  7,
+
+                fontFamily:
+                  "monospace",
+
+                fontSize:
+                  10,
+              }}
+            />
+
+
+            <div
+              style={{
+                display:
+                  "grid",
+
+                gridTemplateColumns:
+                  "1fr 1fr",
+
+                gap:
+                  8,
+
+                marginBottom:
+                  8,
+              }}
+            >
+
+              <button
+                onClick={
+                  testChatEditMessage
+                }
+
+                disabled={
+                  !chatRuntime.conversationId ||
+                  !getChatMessageId() ||
+                  chatActionRunning ||
+                  chatLifecycleRunning
+                }
+
+                style={{
+                  minHeight:
+                    34,
+
+                  cursor:
+                    !chatActionRunning &&
+                    !chatLifecycleRunning
+                      ? "pointer"
+                      : "not-allowed",
+                }}
+              >
+                Edit Last Message
+              </button>
+
+
+              <button
+                onClick={
+                  testChatDeleteMessage
+                }
+
+                disabled={
+                  !chatRuntime.conversationId ||
+                  !getChatMessageId() ||
+                  chatActionRunning ||
+                  chatLifecycleRunning
+                }
+
+                style={{
+                  minHeight:
+                    34,
+
+                  cursor:
+                    !chatActionRunning &&
+                    !chatLifecycleRunning
+                      ? "pointer"
+                      : "not-allowed",
+                }}
+              >
+                Delete Last Message
+              </button>
+
+            </div>
+
+
+            <button
+              onClick={
+                testChatMarkRead
+              }
+
+              disabled={
+                !chatRuntime.conversationId ||
+                !getChatMessageId() ||
+                chatActionRunning ||
+                chatLifecycleRunning
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                minHeight:
+                  34,
+
+                cursor:
+                  !chatActionRunning &&
+                  !chatLifecycleRunning
+                    ? "pointer"
+                    : "not-allowed",
+              }}
+            >
+              Mark Conversation Read
+            </button>
+
+          </div>
+
+
+          {/* ---------------------------------------------
+              CLOSE / LIFECYCLE LOG
+          --------------------------------------------- */}
+
+          <div
+            style={{
+              padding:
+                10,
+
+              border:
+                "1px solid #292929",
+
+              borderRadius:
+                8,
+
+              background:
+                "#151515",
+
+              marginBottom:
+                10,
+            }}
+          >
+
+            <div
+              style={{
+                fontWeight:
+                  "bold",
+
+                fontSize:
+                  11,
+
+                marginBottom:
+                  8,
+              }}
+            >
+              4. Close & Lifecycle Verification
+            </div>
+
+
+            <button
+              onClick={
+                testChatCloseConversation
+              }
+
+              disabled={
+                !chatRuntime.conversationId ||
+                chatActionRunning ||
+                chatLifecycleRunning
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                minHeight:
+                  34,
+
+                marginBottom:
+                  8,
+
+                cursor:
+                  chatRuntime.conversationId &&
+                  !chatActionRunning &&
+                  !chatLifecycleRunning
+                    ? "pointer"
+                    : "not-allowed",
+              }}
+            >
+              Close Conversation
+            </button>
+
+
+            <div
+              style={{
+                display:
+                  "grid",
+
+                gridTemplateColumns:
+                  "1fr 1fr",
+
+                gap:
+                  8,
+
+                marginBottom:
+                  8,
+              }}
+            >
+
+              <button
+                onClick={
+                  dumpChatRuntime
+                }
+
+                style={{
+                  minHeight:
+                    34,
+
+                  cursor:
+                    "pointer",
+                }}
+              >
+                Dump Chat Runtime
+              </button>
+
+
+              <button
+                onClick={
+                  clearChatLifecycleLog
+                }
+
+                style={{
+                  minHeight:
+                    34,
+
+                  cursor:
+                    "pointer",
+                }}
+              >
+                Clear Chat Log
+              </button>
+
+            </div>
+
+
+            <details>
+
+              <summary
+                style={{
+                  cursor:
+                    "pointer",
+
+                  color:
+                    "#aaa",
+
+                  fontSize:
+                    10,
+                }}
+              >
+                Chat Runtime Snapshot
+              </summary>
+
+
+              <pre
+                style={{
+                  background:
+                    "#101010",
+
+                  padding:
+                    10,
+
+                  borderRadius:
+                    6,
+
+                  overflow:
+                    "auto",
+
+                  fontSize:
+                    9,
+
+                  color:
+                    "#ccc",
+
+                  maxHeight:
+                    260,
+                }}
+              >
+                {
+                  JSON.stringify(
+                    chatRuntime,
+                    null,
+                    2
+                  )
+                }
+              </pre>
+
+            </details>
+
+
+            <details
+              style={{
+                marginTop:
+                  8,
+              }}
+            >
+
+              <summary
+                style={{
+                  cursor:
+                    "pointer",
+
+                  color:
+                    "#aaa",
+
+                  fontSize:
+                    10,
+                }}
+              >
+                Chat Lifecycle Log ({
+                  chatLifecycleLog.length
+                })
+              </summary>
+
+
+              <pre
+                style={{
+                  background:
+                    "#101010",
+
+                  padding:
+                    10,
+
+                  borderRadius:
+                    6,
+
+                  overflow:
+                    "auto",
+
+                  fontSize:
+                    9,
+
+                  color:
+                    "#ccc",
+
+                  maxHeight:
+                    300,
+                }}
+              >
+                {
+                  JSON.stringify(
+                    chatLifecycleLog,
+                    null,
+                    2
+                  )
+                }
+              </pre>
+
+            </details>
+
+          </div>
+
+        </div>
 
 
         {/* =================================================

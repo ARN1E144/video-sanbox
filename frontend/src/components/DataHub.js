@@ -113,7 +113,7 @@ const RESOURCE_META = {
       "🛡️",
 
     description:
-      "Compliance framework, controls, evidence and audit history.",
+      "Framework, controls, evidence and audit activity.",
 
   },
 
@@ -376,17 +376,11 @@ function getStatusStyle(
   ) {
 
     case "completed":
-
     case "uploaded":
-
     case "complete":
-
     case "success":
-
     case "accepted":
-
     case "compliant":
-
     case "verified":
 
       return {
@@ -404,7 +398,6 @@ function getStatusStyle(
 
 
     case "active":
-
     case "recording":
 
       return {
@@ -422,15 +415,10 @@ function getStatusStyle(
 
 
     case "uploading":
-
     case "processing":
-
     case "pending":
-
     case "requested":
-
     case "review_required":
-
     case "evidence_requested":
 
       return {
@@ -448,11 +436,8 @@ function getStatusStyle(
 
 
     case "failed":
-
     case "error":
-
     case "rejected":
-
     case "remediation":
 
       return {
@@ -485,6 +470,112 @@ function getStatusStyle(
       };
 
   }
+
+}
+
+
+// =====================================================
+// HUMAN FRIENDLY LABELS
+// =====================================================
+
+function humaniseEvent(
+  event
+) {
+
+  const map = {
+
+    "compliance.evidenceRequested":
+      "Evidence requested",
+
+    "compliance.evidenceUploaded":
+      "Evidence uploaded",
+
+    "compliance.evidenceReviewRequired":
+      "Evidence sent for review",
+
+    "compliance.evidenceAccepted":
+      "Evidence accepted",
+
+    "compliance.evidenceRejected":
+      "Evidence rejected",
+
+    "compliance.evidenceUpdated":
+      "Evidence updated",
+
+    "compliance.evidenceDeleted":
+      "Evidence deleted",
+
+  };
+
+
+  return (
+    map[event] ||
+    String(
+      event ||
+      "Compliance activity"
+    )
+      .replace(
+        /^compliance\./i,
+        ""
+      )
+      .replace(
+        /([a-z])([A-Z])/g,
+        "$1 $2"
+      )
+      .replace(
+        /[_-]/g,
+        " "
+      )
+      .replace(
+        /\b\w/g,
+        char =>
+          char.toUpperCase()
+      )
+  );
+
+}
+
+
+function getDecisionLabel(
+  decision
+) {
+
+  const map = {
+
+    sufficient:
+      "Sufficient",
+
+    partially_sufficient:
+      "Partially sufficient",
+
+    insufficient:
+      "Insufficient",
+
+    not_relevant:
+      "Not relevant",
+
+  };
+
+
+  return (
+    map[decision] ||
+    decision ||
+    "Not assessed"
+  );
+
+}
+
+
+function getActorName(
+  entry
+) {
+
+  return (
+    entry?.data?.reviewer?.name ||
+    entry?.reviewerName ||
+    entry?.reviewedByName ||
+    null
+  );
 
 }
 
@@ -676,6 +767,73 @@ function RawData({
 
 }
 
+// =====================================================
+// GENERIC RESOURCE CARD
+// =====================================================
+
+function GenericRecordCard({
+  record,
+}) {
+
+  return (
+
+    <div
+      style={{
+
+        padding:
+          14,
+
+        border:
+          "1px solid #292929",
+
+        borderRadius:
+          8,
+
+        background:
+          "#151515",
+
+      }}
+    >
+
+      <pre
+        style={{
+
+          margin:
+            0,
+
+          whiteSpace:
+            "pre-wrap",
+
+          wordBreak:
+            "break-word",
+
+          color:
+            "#aaa",
+
+          fontSize:
+            11,
+
+          fontFamily:
+            "monospace",
+
+        }}
+      >
+
+        {
+          JSON.stringify(
+            record,
+            null,
+            2
+          )
+        }
+
+      </pre>
+
+    </div>
+
+  );
+
+}
 
 // =====================================================
 // SUMMARY ITEM
@@ -864,11 +1022,13 @@ function SectionHeader({
 
       {
         right && (
+
           <div>
             {
               right
             }
           </div>
+
         )
       }
 
@@ -1003,6 +1163,243 @@ function ActionButton({
 
 
 // =====================================================
+// FIELD
+// =====================================================
+
+function Field({
+  label,
+  children,
+}) {
+
+  return (
+
+    <label
+      style={{
+
+        display:
+          "block",
+
+        marginTop:
+          12,
+
+      }}
+    >
+
+      <div
+        style={{
+
+          color:
+            "#666",
+
+          fontSize:
+            10,
+
+          fontWeight:
+            700,
+
+          textTransform:
+            "uppercase",
+
+          marginBottom:
+            6,
+
+        }}
+      >
+
+        {
+          label
+        }
+
+      </div>
+
+
+      {
+        children
+      }
+
+    </label>
+
+  );
+
+}
+
+
+const inputStyle = {
+
+  width:
+    "100%",
+
+  boxSizing:
+    "border-box",
+
+  padding:
+    "8px 10px",
+
+  border:
+    "1px solid #333",
+
+  borderRadius:
+    7,
+
+  background:
+    "#0f0f0f",
+
+  color:
+    "#ddd",
+
+  outline:
+    "none",
+
+  fontSize:
+    11,
+
+};
+
+
+// =====================================================
+// EVALUATION LIST
+// =====================================================
+
+function EvaluationList({
+  title,
+  items,
+}) {
+
+  const values =
+    normaliseArray(
+      items
+    );
+
+
+  if (
+    values.length ===
+    0
+  ) {
+
+    return null;
+
+  }
+
+
+  return (
+
+    <div
+      style={{
+        marginTop:
+          14,
+      }}
+    >
+
+      <div
+        style={{
+
+          color:
+            "#666",
+
+          fontSize:
+            10,
+
+          fontWeight:
+            700,
+
+          textTransform:
+            "uppercase",
+
+          marginBottom:
+            7,
+
+        }}
+      >
+
+        {
+          title
+        }
+
+      </div>
+
+
+      <div
+        style={{
+
+          display:
+            "flex",
+
+          flexDirection:
+            "column",
+
+          gap:
+            6,
+
+        }}
+      >
+
+        {
+          values.map(
+            (
+              item,
+              index
+            ) => (
+
+              <div
+                key={
+                  index
+                }
+
+                style={{
+
+                  padding:
+                    "8px 10px",
+
+                  borderRadius:
+                    7,
+
+                  background:
+                    "#111",
+
+                  color:
+                    "#aaa",
+
+                  fontSize:
+                    11,
+
+                  lineHeight:
+                    1.5,
+
+                }}
+              >
+
+                {
+                  typeof item ===
+                  "string"
+
+                    ? item
+
+                    : (
+                        item?.text ||
+                        item?.description ||
+                        item?.feedback ||
+                        JSON.stringify(
+                          item
+                        )
+                      )
+                }
+
+              </div>
+
+            )
+          )
+        }
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+// =====================================================
 // INTERVIEW CARD
 // =====================================================
 
@@ -1047,11 +1444,6 @@ function InterviewRecordCard({
   const evaluation =
     record?.evaluation ||
     {};
-
-
-  const candidateName =
-    candidate?.name ||
-    "Unnamed candidate";
 
 
   return (
@@ -1120,7 +1512,8 @@ function InterviewRecordCard({
           >
 
             {
-              candidateName
+              candidate?.name ||
+              "Unnamed candidate"
             }
 
           </div>
@@ -1298,6 +1691,7 @@ function InterviewRecordCard({
 
                 <div
                   style={{
+
                     marginTop:
                       12,
 
@@ -1373,6 +1767,7 @@ function InterviewRecordCard({
 
                           <div
                             style={{
+
                               color:
                                 "#ddd",
 
@@ -1421,31 +1816,6 @@ function InterviewRecordCard({
                               answer?.text ||
                               answer?.transcript ||
                               "No answer recorded."
-                            }
-
-                          </div>
-
-
-                          <div
-                            style={{
-
-                              marginTop:
-                                8,
-
-                              color:
-                                "#555",
-
-                              fontSize:
-                                10,
-
-                            }}
-                          >
-
-                            Completed{" "}
-                            {
-                              formatDate(
-                                answer?.completedAt
-                              )
                             }
 
                           </div>
@@ -1568,11 +1938,13 @@ function RecordingRecordCard({
 
           <div
             style={{
+
               fontSize:
                 14,
 
               fontWeight:
                 700,
+
             }}
           >
 
@@ -1589,6 +1961,7 @@ function RecordingRecordCard({
 
               <div
                 style={{
+
                   marginTop:
                     4,
 
@@ -1597,6 +1970,7 @@ function RecordingRecordCard({
 
                   fontSize:
                     11,
+
                 }}
               >
 
@@ -1855,6 +2229,7 @@ function TranscriptionRecordCard({
 
     <div
       style={{
+
         padding:
           16,
 
@@ -1944,6 +2319,7 @@ function TranscriptionRecordCard({
 
       <div
         style={{
+
           marginTop:
             14,
 
@@ -1966,6 +2342,7 @@ function TranscriptionRecordCard({
 
           overflow:
             "hidden",
+
         }}
       >
 
@@ -2006,6 +2383,7 @@ function TranscriptionRecordCard({
 
       <div
         style={{
+
           marginTop:
             10,
 
@@ -2014,6 +2392,7 @@ function TranscriptionRecordCard({
 
           fontSize:
             10,
+
         }}
       >
 
@@ -2032,130 +2411,6 @@ function TranscriptionRecordCard({
           record
         }
       />
-
-    </div>
-
-  );
-
-}
-
-
-// =====================================================
-// EVALUATION LIST
-// =====================================================
-
-function EvaluationList({
-  title,
-  items,
-}) {
-
-  return (
-
-    <div
-      style={{
-        marginTop:
-          14,
-      }}
-    >
-
-      <div
-        style={{
-
-          color:
-            "#666",
-
-          fontSize:
-            10,
-
-          fontWeight:
-            700,
-
-          textTransform:
-            "uppercase",
-
-          marginBottom:
-            7,
-
-        }}
-      >
-
-        {
-          title
-        }
-
-      </div>
-
-
-      <div
-        style={{
-
-          display:
-            "flex",
-
-          flexDirection:
-            "column",
-
-          gap:
-            6,
-
-        }}
-      >
-
-        {
-          items.map(
-            (
-              item,
-              index
-            ) => (
-
-              <div
-                key={
-                  index
-                }
-
-                style={{
-
-                  padding:
-                    "8px 10px",
-
-                  borderRadius:
-                    7,
-
-                  background:
-                    "#111",
-
-                  color:
-                    "#aaa",
-
-                  fontSize:
-                    11,
-
-                  lineHeight:
-                    1.5,
-
-                }}
-              >
-
-                {
-                  typeof item ===
-                  "string"
-                    ? item
-                    : (
-                        item?.text ||
-                        item?.description ||
-                        JSON.stringify(
-                          item
-                        )
-                      )
-                }
-
-              </div>
-
-            )
-          )
-        }
-
-      </div>
 
     </div>
 
@@ -2425,32 +2680,20 @@ function EvaluationRecordCard({
       }
 
 
-      {
-        strengths.length > 0 && (
-
-          <EvaluationList
-            title="Strengths"
-            items={
-              strengths
-            }
-          />
-
-        )
-      }
+      <EvaluationList
+        title="Strengths"
+        items={
+          strengths
+        }
+      />
 
 
-      {
-        weaknesses.length > 0 && (
-
-          <EvaluationList
-            title="Areas to improve"
-            items={
-              weaknesses
-            }
-          />
-
-        )
-      }
+      <EvaluationList
+        title="Areas to improve"
+        items={
+          weaknesses
+        }
+      />
 
 
       {
@@ -2545,7 +2788,9 @@ function EvaluationRecordCard({
                       {
                         typeof item ===
                         "string"
+
                           ? item
+
                           : (
                               item?.feedback ||
                               item?.summary ||
@@ -2574,71 +2819,6 @@ function EvaluationRecordCard({
           record
         }
       />
-
-    </div>
-
-  );
-
-}
-
-
-// =====================================================
-// GENERIC RESOURCE CARD
-// =====================================================
-
-function GenericRecordCard({
-  record,
-}) {
-
-  return (
-
-    <div
-      style={{
-        padding:
-          14,
-
-        border:
-          "1px solid #292929",
-
-        borderRadius:
-          8,
-
-        background:
-          "#151515",
-      }}
-    >
-
-      <pre
-        style={{
-          margin:
-            0,
-
-          whiteSpace:
-            "pre-wrap",
-
-          wordBreak:
-            "break-word",
-
-          color:
-            "#aaa",
-
-          fontSize:
-            11,
-
-          fontFamily:
-            "monospace",
-        }}
-      >
-
-        {
-          JSON.stringify(
-            record,
-            null,
-            2
-          )
-        }
-
-      </pre>
 
     </div>
 
@@ -2734,13 +2914,13 @@ function getComplianceMetrics(
     ).length;
 
 
-  const requested =
+  const processing =
     evidence.filter(
       item =>
         item?.status ===
-        "requested" ||
+          "processing" ||
         item?.status ===
-        "processing"
+          "requested"
     ).length;
 
 
@@ -2752,14 +2932,55 @@ function getComplianceMetrics(
     ).length;
 
 
+  const overdueEvidence =
+    evidence.filter(
+      item => {
+
+        if (
+          !item?.dueDate
+        ) {
+
+          return false;
+
+        }
+
+
+        if (
+          [
+            "accepted",
+            "rejected",
+          ].includes(
+            item?.status
+          )
+        ) {
+
+          return false;
+
+        }
+
+
+        return (
+          new Date(
+            item.dueDate
+          ).getTime() <
+          Date.now()
+        );
+
+      }
+    ).length;
+
+
   const overallScore =
     controls.length > 0
+
       ? Math.round(
           (
             compliant /
             controls.length
-          ) * 100
+          ) *
+          100
         )
+
       : 0;
 
 
@@ -2786,9 +3007,11 @@ function getComplianceMetrics(
 
     rejected,
 
-    requested,
+    processing,
 
     openRisks,
+
+    overdueEvidence,
 
     actions:
       actions.length,
@@ -2828,6 +3051,12 @@ function ComplianceOverview({
   const controls =
     normaliseArray(
       compliance?.controls
+    );
+
+
+  const history =
+    normaliseArray(
+      compliance?.reviewHistory
     );
 
 
@@ -2878,12 +3107,39 @@ function ComplianceOverview({
       );
 
 
+  const recentHistory =
+    history
+      .slice()
+      .sort(
+        (
+          a,
+          b
+        ) =>
+          new Date(
+            b?.createdAt ||
+            0
+          ) -
+          new Date(
+            a?.createdAt ||
+            0
+          )
+      )
+      .slice(
+        0,
+        5
+      );
+
+
+  const readiness =
+    metrics.overallScore;
+
+
   return (
 
     <div>
 
       {/* =================================================
-          FRAMEWORK HEADER
+          HEADER
       ================================================= */}
 
       <div
@@ -2965,10 +3221,10 @@ function ComplianceOverview({
               }}
             >
 
-              Framework version{" "}
               {
-                framework?.version ||
-                "—"
+                framework?.version
+                  ? `Version ${framework.version}`
+                  : "Compliance framework"
               }
 
               {" · "}
@@ -2989,6 +3245,139 @@ function ComplianceOverview({
               "active"
             }
           />
+
+        </div>
+
+
+        <div
+          style={{
+
+            marginTop:
+              16,
+
+            display:
+              "grid",
+
+            gridTemplateColumns:
+              "minmax(180px, 1fr) auto",
+
+            gap:
+              16,
+
+            alignItems:
+              "center",
+
+          }}
+        >
+
+          <div>
+
+            <div
+              style={{
+
+                color:
+                  "#777",
+
+                fontSize:
+                  10,
+
+                textTransform:
+                  "uppercase",
+
+                fontWeight:
+                  700,
+
+              }}
+            >
+
+              Overall readiness
+
+            </div>
+
+
+            <div
+              style={{
+
+                marginTop:
+                  5,
+
+                color:
+                  "#fff",
+
+                fontSize:
+                  28,
+
+                fontWeight:
+                  800,
+
+              }}
+            >
+
+              {
+                readiness
+              }%
+
+            </div>
+
+          </div>
+
+
+          <div
+            style={{
+              width:
+                220,
+            }}
+          >
+
+            <div
+              style={{
+
+                height:
+                  9,
+
+                background:
+                  "#252525",
+
+                borderRadius:
+                  999,
+
+                overflow:
+                  "hidden",
+
+              }}
+            >
+
+              <div
+                style={{
+
+                  width:
+                    `${Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        readiness
+                      )
+                    )}%`,
+
+                  height:
+                    "100%",
+
+                  borderRadius:
+                    999,
+
+                  background:
+                    "#16a34a",
+
+                  transition:
+                    "width .25s ease",
+
+                }}
+
+              />
+
+            </div>
+
+          </div>
 
         </div>
 
@@ -3018,22 +3407,6 @@ function ComplianceOverview({
       >
 
         <SummaryItem
-          label="Readiness"
-          value={
-            `${metrics.overallScore}%`
-          }
-
-          valueColor={
-            metrics.overallScore >= 80
-              ? "#86efac"
-              : metrics.overallScore >= 50
-                ? "#fde68a"
-                : "#fca5a5"
-          }
-        />
-
-
-        <SummaryItem
           label="Compliant controls"
           value={
             `${metrics.compliant} / ${metrics.controlsTotal}`
@@ -3054,19 +3427,7 @@ function ComplianceOverview({
 
 
         <SummaryItem
-          label="Accepted"
-          value={
-            metrics.accepted
-          }
-
-          valueColor={
-            "#86efac"
-          }
-        />
-
-
-        <SummaryItem
-          label="Review required"
+          label="Awaiting review"
           value={
             metrics.reviewRequired
           }
@@ -3075,6 +3436,18 @@ function ComplianceOverview({
             metrics.reviewRequired > 0
               ? "#fde68a"
               : "#aaa"
+          }
+        />
+
+
+        <SummaryItem
+          label="Accepted"
+          value={
+            metrics.accepted
+          }
+
+          valueColor={
+            "#86efac"
           }
         />
 
@@ -3094,6 +3467,34 @@ function ComplianceOverview({
 
 
         <SummaryItem
+          label="Outstanding"
+          value={
+            metrics.outstanding
+          }
+
+          valueColor={
+            metrics.outstanding > 0
+              ? "#fde68a"
+              : "#86efac"
+          }
+        />
+
+
+        <SummaryItem
+          label="Overdue evidence"
+          value={
+            metrics.overdueEvidence
+          }
+
+          valueColor={
+            metrics.overdueEvidence > 0
+              ? "#fca5a5"
+              : "#aaa"
+          }
+        />
+
+
+        <SummaryItem
           label="Open risks"
           value={
             metrics.openRisks
@@ -3106,151 +3507,166 @@ function ComplianceOverview({
           }
         />
 
-
-        <SummaryItem
-          label="Corrective actions"
-          value={
-            metrics.actions
-          }
-        />
-
       </div>
 
 
       {/* =================================================
-          READINESS BAR
+          ATTENTION PANEL
       ================================================= */}
 
-      <div
-        style={{
-
-          padding:
-            14,
-
-          border:
-            "1px solid #292929",
-
-          borderRadius:
-            10,
-
-          background:
-            "#111",
-
-          marginBottom:
-            14,
-
-        }}
-      >
-
-        <div
-          style={{
-
-            display:
-              "flex",
-
-            justifyContent:
-              "space-between",
-
-            alignItems:
-              "center",
-
-          }}
-        >
+      {
+        (
+          metrics.reviewRequired > 0 ||
+          metrics.rejected > 0 ||
+          metrics.overdueEvidence > 0
+        ) && (
 
           <div
             style={{
 
-              color:
-                "#999",
+              marginBottom:
+                14,
 
-              fontSize:
-                11,
+              padding:
+                14,
 
-              fontWeight:
-                600,
-
-            }}
-          >
-
-            Compliance readiness
-
-          </div>
-
-
-          <div
-            style={{
-
-              color:
-                "#fff",
-
-              fontSize:
-                13,
-
-              fontWeight:
-                700,
-
-            }}
-          >
-
-            {
-              metrics.overallScore
-            }%
-
-          </div>
-
-        </div>
-
-
-        <div
-          style={{
-
-            marginTop:
-              8,
-
-            height:
-              8,
-
-            background:
-              "#252525",
-
-            borderRadius:
-              999,
-
-            overflow:
-              "hidden",
-
-          }}
-        >
-
-          <div
-            style={{
-
-              width:
-                `${metrics.overallScore}%`,
-
-              height:
-                "100%",
+              border:
+                "1px solid #3a3020",
 
               borderRadius:
-                999,
+                10,
 
               background:
-                "#16a34a",
-
-              transition:
-                "width .25s ease",
+                "#17140f",
 
             }}
+          >
 
-          />
+            <div
+              style={{
 
-        </div>
+                color:
+                  "#fde68a",
 
-      </div>
+                fontSize:
+                  11,
+
+                fontWeight:
+                  700,
+
+              }}
+            >
+
+              Attention required
+
+            </div>
+
+
+            <div
+              style={{
+
+                marginTop:
+                  6,
+
+                display:
+                  "flex",
+
+                flexWrap:
+                  "wrap",
+
+                gap:
+                  8,
+
+              }}
+            >
+
+              {
+                metrics.reviewRequired > 0 && (
+
+                  <span
+                    style={{
+                      color:
+                        "#ccc",
+
+                      fontSize:
+                        11,
+                    }}
+                  >
+
+                    {
+                      metrics.reviewRequired
+                    } evidence item
+                    {metrics.reviewRequired === 1
+                      ? ""
+                      : "s"} awaiting review.
+
+                  </span>
+
+                )
+              }
+
+
+              {
+                metrics.rejected > 0 && (
+
+                  <span
+                    style={{
+                      color:
+                        "#fca5a5",
+
+                      fontSize:
+                        11,
+                    }}
+                  >
+
+                    {
+                      metrics.rejected
+                    } rejected item
+                    {metrics.rejected === 1
+                      ? ""
+                      : "s"} need attention.
+
+                  </span>
+
+                )
+              }
+
+
+              {
+                metrics.overdueEvidence > 0 && (
+
+                  <span
+                    style={{
+                      color:
+                        "#fca5a5",
+
+                      fontSize:
+                        11,
+                    }}
+                  >
+
+                    {
+                      metrics.overdueEvidence
+                    } overdue evidence item
+                    {metrics.overdueEvidence === 1
+                      ? ""
+                      : "s"}.
+
+                  </span>
+
+                )
+              }
+
+            </div>
+
+          </div>
+
+        )
+      }
 
 
       {/* =================================================
-          RECENT ACTIVITY
+          LOWER DASHBOARD
       ================================================= */}
 
       <div
@@ -3267,6 +3683,10 @@ function ComplianceOverview({
 
         }}
       >
+
+        {/* ===============================================
+            RECENT EVIDENCE
+        =============================================== */}
 
         <div
           style={{
@@ -3298,6 +3718,7 @@ function ComplianceOverview({
 
               <div
                 style={{
+
                   color:
                     "#666",
 
@@ -3307,7 +3728,7 @@ function ComplianceOverview({
                 }}
               >
 
-                No evidence yet.
+                No evidence submitted yet.
 
               </div>
 
@@ -3317,6 +3738,7 @@ function ComplianceOverview({
 
           <div
             style={{
+
               display:
                 "flex",
 
@@ -3370,11 +3792,13 @@ function ComplianceOverview({
 
                     <div
                       style={{
+
                         minWidth:
                           0,
 
                         flex:
                           1,
+
                       }}
                     >
 
@@ -3428,7 +3852,20 @@ function ComplianceOverview({
 
                         {
                           item?.controlId ||
-                          "—"
+                          "Unassigned"
+                        }
+
+
+                        {
+                          item?.reviewedByName && (
+                            <>
+                              {" · "}
+                              Reviewed by{" "}
+                              {
+                                item.reviewedByName
+                              }
+                            </>
+                          )
                         }
 
                       </div>
@@ -3452,6 +3889,10 @@ function ComplianceOverview({
 
         </div>
 
+
+        {/* ===============================================
+            CONTROL REGISTER
+        =============================================== */}
 
         <div
           style={{
@@ -3537,11 +3978,13 @@ function ComplianceOverview({
 
                       <div
                         style={{
+
                           minWidth:
                             0,
 
                           flex:
                             1,
+
                         }}
                       >
 
@@ -3593,7 +4036,6 @@ function ComplianceOverview({
 
                           {
                             control.name ||
-                            control.title ||
                             "Control"
                           }
 
@@ -3644,6 +4086,217 @@ function ComplianceOverview({
                             control?.status
                           }
                         />
+
+                      </div>
+
+                    </div>
+
+                  );
+
+                }
+              )
+            }
+
+          </div>
+
+        </div>
+
+
+        {/* ===============================================
+            RECENT AUDIT ACTIVITY
+        =============================================== */}
+
+        <div
+          style={{
+
+            border:
+              "1px solid #292929",
+
+            borderRadius:
+              10,
+
+            background:
+              "#151515",
+
+            padding:
+              14,
+
+          }}
+        >
+
+          <SectionHeader
+            title="Recent activity"
+            description="Latest compliance decisions and changes."
+          />
+
+
+          {
+            recentHistory.length ===
+              0 && (
+
+              <div
+                style={{
+
+                  color:
+                    "#666",
+
+                  fontSize:
+                    11,
+
+                }}
+              >
+
+                No compliance activity yet.
+
+              </div>
+
+            )
+          }
+
+
+          <div
+            style={{
+
+              display:
+                "flex",
+
+              flexDirection:
+                "column",
+
+              gap:
+                8,
+
+            }}
+          >
+
+            {
+              recentHistory.map(
+                (
+                  entry,
+                  index
+                ) => {
+
+                  const actor =
+                    getActorName(
+                      entry
+                    );
+
+
+                  return (
+
+                    <div
+                      key={
+                        `${entry?.event || "event"}-${entry?.createdAt || index}-${index}`
+                      }
+
+                      style={{
+
+                        display:
+                          "flex",
+
+                        justifyContent:
+                          "space-between",
+
+                        alignItems:
+                          "flex-start",
+
+                        gap:
+                          12,
+
+                        padding:
+                          "8px 0",
+
+                        borderBottom:
+                          index <
+                          recentHistory.length - 1
+                            ? "1px solid #222"
+                            : "none",
+
+                      }}
+                    >
+
+                      <div
+                        style={{
+                          minWidth:
+                            0,
+                        }}
+                      >
+
+                        <div
+                          style={{
+
+                            color:
+                              "#bbb",
+
+                            fontSize:
+                              11,
+
+                            fontWeight:
+                              600,
+
+                          }}
+                        >
+
+                          {
+                            humaniseEvent(
+                              entry?.event
+                            )
+                          }
+
+                        </div>
+
+
+                        {
+                          actor && (
+
+                            <div
+                              style={{
+
+                                marginTop:
+                                  3,
+
+                                color:
+                                  "#666",
+
+                                fontSize:
+                                  10,
+
+                              }}
+                            >
+
+                              By{" "}
+                              {
+                                actor
+                              }
+
+                            </div>
+
+                          )
+                        }
+
+                      </div>
+
+
+                      <div
+                        style={{
+
+                          color:
+                            "#555",
+
+                          fontSize:
+                            10,
+
+                          whiteSpace:
+                            "nowrap",
+
+                        }}
+                      >
+
+                        {
+                          formatShortDate(
+                            entry?.createdAt
+                          )
+                        }
 
                       </div>
 
@@ -3813,11 +4466,12 @@ function ComplianceControls({
             "Search controls..."
 
           style={{
+
             flex:
               1,
 
             minWidth:
-              200,
+              220,
 
             padding:
               "9px 10px",
@@ -3833,9 +4487,6 @@ function ComplianceControls({
 
             color:
               "#ddd",
-
-            outline:
-              "none",
 
           }}
 
@@ -3857,7 +4508,7 @@ function ComplianceControls({
           style={{
 
             minWidth:
-              170,
+              180,
 
             padding:
               "9px 10px",
@@ -3925,243 +4576,247 @@ function ComplianceControls({
           background:
             "#151515",
 
+          overflowX:
+            "auto",
+
         }}
       >
 
         <div
           style={{
 
-            display:
-              "grid",
-
-            gridTemplateColumns:
-              "110px minmax(180px, 1.5fr) minmax(180px, 2fr) 110px 100px",
-
-            gap:
-              0,
-
-            padding:
-              "10px 12px",
-
-            background:
-              "#111",
-
-            borderBottom:
-              "1px solid #242424",
-
-            color:
-              "#666",
-
-            fontSize:
-              9,
-
-            fontWeight:
-              700,
-
-            textTransform:
-              "uppercase",
+            minWidth:
+              820,
 
           }}
         >
 
-          <div>
-            ID
+          <div
+            style={{
+
+              display:
+                "grid",
+
+              gridTemplateColumns:
+                "110px minmax(180px, 1.5fr) minmax(180px, 2fr) 100px 120px",
+
+              padding:
+                "10px 12px",
+
+              background:
+                "#111",
+
+              borderBottom:
+                "1px solid #242424",
+
+              color:
+                "#666",
+
+              fontSize:
+                9,
+
+              fontWeight:
+                700,
+
+              textTransform:
+                "uppercase",
+
+            }}
+          >
+
+            <div>ID</div>
+
+            <div>Control</div>
+
+            <div>Description</div>
+
+            <div>Evidence</div>
+
+            <div>Status</div>
+
           </div>
 
-          <div>
-            Control
-          </div>
 
-          <div>
-            Description
-          </div>
+          {
+            filteredControls.length ===
+              0 && (
 
-          <div>
-            Evidence
-          </div>
+              <div
+                style={{
 
-          <div>
-            Status
-          </div>
+                  padding:
+                    20,
 
-        </div>
+                  color:
+                    "#666",
 
+                  fontSize:
+                    11,
 
-        {
-          filteredControls.length ===
-            0 && (
+                }}
+              >
 
-            <div
-              style={{
-                padding:
-                  20,
+                No matching controls.
 
-                color:
-                  "#666",
+              </div>
 
-                fontSize:
-                  11,
-
-              }}
-            >
-
-              No matching controls.
-
-            </div>
-
-          )
-        }
+            )
+          }
 
 
-        {
-          filteredControls.map(
-            control => {
+          {
+            filteredControls.map(
+              control => {
 
-              const relatedEvidence =
-                getControlEvidence(
-                  control,
-                  evidence
-                );
+                const relatedEvidence =
+                  getControlEvidence(
+                    control,
+                    evidence
+                  );
 
 
-              return (
-
-                <div
-                  key={
-                    control.controlId
-                  }
-
-                  style={{
-
-                    display:
-                      "grid",
-
-                    gridTemplateColumns:
-                      "110px minmax(180px, 1.5fr) minmax(180px, 2fr) 110px 100px",
-
-                    gap:
-                      0,
-
-                    padding:
-                      "11px 12px",
-
-                    borderBottom:
-                      "1px solid #222",
-
-                    alignItems:
-                      "start",
-
-                  }}
-                >
+                return (
 
                   <div
-                    style={{
-
-                      color:
-                        "#93c5fd",
-
-                      fontSize:
-                        10,
-
-                      fontWeight:
-                        700,
-
-                    }}
-                  >
-
-                    {
+                    key={
                       control.controlId
                     }
 
-                  </div>
-
-
-                  <div
                     style={{
 
-                      color:
-                        "#ccc",
+                      display:
+                        "grid",
 
-                      fontSize:
-                        11,
+                      gridTemplateColumns:
+                        "110px minmax(180px, 1.5fr) minmax(180px, 2fr) 100px 120px",
 
-                      fontWeight:
-                        600,
+                      padding:
+                        "11px 12px",
 
-                      paddingRight:
-                        10,
+                      borderBottom:
+                        "1px solid #222",
+
+                      alignItems:
+                        "start",
+
+                      minHeight:
+                        58,
 
                     }}
                   >
 
-                    {
-                      control.name ||
-                      "Unnamed control"
-                    }
+                    <div
+                      style={{
 
-                  </div>
+                        color:
+                          "#93c5fd",
 
+                        fontSize:
+                          10,
 
-                  <div
-                    style={{
+                        fontWeight:
+                          700,
 
-                      color:
-                        "#777",
+                      }}
+                    >
 
-                      fontSize:
-                        10,
-
-                      lineHeight:
-                        1.5,
-
-                      paddingRight:
-                        10,
-
-                    }}
-                  >
-
-                    {
-                      control.description ||
-                      "No description."
-                    }
-
-                  </div>
-
-
-                  <div
-                    style={{
-                      color:
-                        "#aaa",
-
-                      fontSize:
-                        10,
-                    }}
-                  >
-
-                    {
-                      relatedEvidence.length
-                    }
-
-                  </div>
-
-
-                  <div>
-
-                    <StatusPill
-                      status={
-                        control.status
+                      {
+                        control.controlId
                       }
-                    />
+
+                    </div>
+
+
+                    <div
+                      style={{
+
+                        color:
+                          "#ccc",
+
+                        fontSize:
+                          11,
+
+                        fontWeight:
+                          600,
+
+                        paddingRight:
+                          10,
+
+                      }}
+                    >
+
+                      {
+                        control.name ||
+                        "Unnamed control"
+                      }
+
+                    </div>
+
+
+                    <div
+                      style={{
+
+                        color:
+                          "#777",
+
+                        fontSize:
+                          10,
+
+                        lineHeight:
+                          1.5,
+
+                        paddingRight:
+                          10,
+
+                      }}
+                    >
+
+                      {
+                        control.description ||
+                        "No description."
+                      }
+
+                    </div>
+
+
+                    <div
+                      style={{
+
+                        color:
+                          "#aaa",
+
+                        fontSize:
+                          10,
+
+                      }}
+                    >
+
+                      {
+                        relatedEvidence.length
+                      }
+
+                    </div>
+
+
+                    <div>
+
+                      <StatusPill
+                        status={
+                          control.status
+                        }
+                      />
+
+                    </div>
 
                   </div>
 
-                </div>
+                );
 
-              );
+              }
+            )
+          }
 
-            }
-          )
-        }
+        </div>
 
       </div>
 
@@ -4190,6 +4845,11 @@ function EvidenceRow({
     );
 
 
+  const ai =
+    evidence?.aiAssessment ||
+    null;
+
+
   return (
 
     <div
@@ -4205,7 +4865,7 @@ function EvidenceRow({
           "grid",
 
         gridTemplateColumns:
-          "minmax(180px, 1.5fr) 120px minmax(150px, 1fr) 110px 150px 100px",
+          "minmax(180px, 1.5fr) 120px minmax(150px, 1fr) 120px 180px 110px",
 
         gap:
           10,
@@ -4284,6 +4944,7 @@ function EvidenceRow({
 
         <div
           style={{
+
             color:
               "#93c5fd",
 
@@ -4292,6 +4953,7 @@ function EvidenceRow({
 
             fontWeight:
               700,
+
           }}
         >
 
@@ -4339,17 +5001,47 @@ function EvidenceRow({
 
       <div
         style={{
+
           color:
             "#888",
 
           fontSize:
             10,
+
         }}
       >
 
+        <div>
+          {
+            evidence?.type ||
+            "document"
+          }
+        </div>
+
+
         {
-          evidence?.type ||
-          "document"
+          ai?.relevanceScore !=
+            null && (
+
+            <div
+              style={{
+                marginTop:
+                  3,
+
+                color:
+                  "#666",
+
+              }}
+            >
+
+              AI relevance{" "}
+              {
+                ai.relevanceScore
+              }%
+
+            </div>
+
+          )
         }
 
       </div>
@@ -4381,51 +5073,75 @@ function EvidenceRow({
         {
           evidence?.reviewedByName
             ? (
-                <>
 
-                  <div
-                    style={{
+              <>
 
-                      color:
-                        "#bbb",
+                <div
+                  style={{
 
-                      fontWeight:
-                        600,
+                    color:
+                      "#bbb",
 
-                    }}
-                  >
+                    fontWeight:
+                      600,
 
-                    {
-                      evidence.reviewedByName
-                    }
+                  }}
+                >
 
-                  </div>
+                  {
+                    evidence.reviewedByName
+                  }
+
+                </div>
 
 
-                  <div
-                    style={{
-                      marginTop:
-                        2,
+                <div
+                  style={{
 
-                      color:
-                        "#555",
+                    marginTop:
+                      2,
 
-                    }}
-                  >
+                    color:
+                      "#555",
 
-                    {
-                      formatShortDate(
-                        evidence?.reviewedAt
-                      )
-                    }
+                  }}
+                >
 
-                  </div>
+                  {
+                    evidence.reviewDecision ===
+                    "accepted"
 
-                </>
-              )
+                      ? "Accepted"
+
+                      : evidence.reviewDecision ===
+                        "rejected"
+
+                        ? "Rejected"
+
+                        : "Reviewed"
+                  }
+
+
+                  {" · "}
+
+
+                  {
+                    formatShortDate(
+                      evidence.reviewedAt
+                    )
+                  }
+
+                </div>
+
+              </>
+
+            )
+
             : (
-                "Not reviewed"
-              )
+
+              "Awaiting review"
+
+            )
         }
 
       </div>
@@ -4433,6 +5149,7 @@ function EvidenceRow({
 
       <div
         style={{
+
           display:
             "flex",
 
@@ -4450,7 +5167,7 @@ function EvidenceRow({
           }
         >
 
-          View
+          View details
 
         </ActionButton>
 
@@ -4464,7 +5181,364 @@ function EvidenceRow({
 
 
 // =====================================================
-// EVIDENCE EDIT MODAL
+// AI ASSESSMENT PANEL
+// =====================================================
+
+function AIAssessmentPanel({
+  assessment,
+}) {
+
+  if (
+    !assessment
+  ) {
+
+    return (
+
+      <div
+        style={{
+
+          marginTop:
+            14,
+
+          padding:
+            12,
+
+          border:
+            "1px dashed #292929",
+
+          borderRadius:
+            8,
+
+          background:
+            "#111",
+
+        }}
+      >
+
+        <div
+          style={{
+
+            color:
+              "#666",
+
+            fontSize:
+              10,
+
+            fontWeight:
+              700,
+
+            textTransform:
+              "uppercase",
+
+          }}
+        >
+
+          AI assessment
+
+        </div>
+
+
+        <div
+          style={{
+
+            marginTop:
+              6,
+
+            color:
+              "#555",
+
+            fontSize:
+              11,
+
+          }}
+        >
+
+          No AI assessment has been run yet.
+
+        </div>
+
+      </div>
+
+    );
+
+  }
+
+
+  const findings =
+    normaliseArray(
+      assessment?.findings
+    );
+
+
+  const matchedRequirements =
+    normaliseArray(
+      assessment?.matchedRequirements
+    );
+
+
+  const gaps =
+    normaliseArray(
+      assessment?.gaps
+    );
+
+
+  const relevance =
+    Number(
+      assessment?.relevanceScore
+    );
+
+
+  const confidence =
+    Number(
+      assessment?.confidence
+    );
+
+
+  return (
+
+    <div
+      style={{
+
+        marginTop:
+          14,
+
+        padding:
+          14,
+
+        border:
+          "1px solid #292929",
+
+        borderRadius:
+          9,
+
+        background:
+          "#111",
+
+      }}
+    >
+
+      <div
+        style={{
+
+          display:
+            "flex",
+
+          justifyContent:
+            "space-between",
+
+          alignItems:
+            "center",
+
+          gap:
+            12,
+
+        }}
+      >
+
+        <div
+          style={{
+
+            color:
+              "#666",
+
+            fontSize:
+              10,
+
+            fontWeight:
+              700,
+
+            textTransform:
+              "uppercase",
+
+          }}
+        >
+
+          AI assessment
+
+        </div>
+
+
+        <StatusPill
+          status={
+            getDecisionLabel(
+              assessment?.decision
+            )
+          }
+        />
+
+      </div>
+
+
+      <div
+        style={{
+
+          display:
+            "grid",
+
+          gridTemplateColumns:
+            "repeat(auto-fit, minmax(140px, 1fr))",
+
+          gap:
+            10,
+
+          marginTop:
+            12,
+
+        }}
+      >
+
+        <SummaryItem
+          label="Relevance"
+          value={
+            Number.isFinite(
+              relevance
+            )
+              ? `${Math.round(
+                  relevance
+                )}%`
+              : "—"
+          }
+
+          valueColor={
+            relevance >= 70
+              ? "#86efac"
+              : relevance >= 40
+                ? "#fde68a"
+                : "#fca5a5"
+          }
+
+        />
+
+
+        <SummaryItem
+          label="Confidence"
+          value={
+            Number.isFinite(
+              confidence
+            )
+              ? `${Math.round(
+                  confidence * 100
+                )}%`
+              : "—"
+          }
+        />
+
+
+        <SummaryItem
+          label="Decision"
+          value={
+            getDecisionLabel(
+              assessment?.decision
+            )
+          }
+        />
+
+
+        <SummaryItem
+          label="Model"
+          value={
+            assessment?.model ||
+            "—"
+          }
+        />
+
+      </div>
+
+
+      {
+        assessment?.summary && (
+
+          <div
+            style={{
+
+              marginTop:
+                12,
+
+              color:
+                "#aaa",
+
+              fontSize:
+                11,
+
+              lineHeight:
+                1.6,
+
+            }}
+          >
+
+            {
+              assessment.summary
+            }
+
+          </div>
+
+        )
+      }
+
+
+      <EvaluationList
+        title="What the document supports"
+        items={
+          matchedRequirements
+        }
+      />
+
+
+      <EvaluationList
+        title="Gaps identified"
+        items={
+          gaps
+        }
+      />
+
+
+      <EvaluationList
+        title="AI findings"
+        items={
+          findings
+        }
+      />
+
+
+      {
+        assessment?.analysedAt && (
+
+          <div
+            style={{
+
+              marginTop:
+                10,
+
+              color:
+                "#555",
+
+              fontSize:
+                9,
+
+            }}
+          >
+
+            Analysed{" "}
+            {
+              formatDate(
+                assessment.analysedAt
+              )
+            }
+
+          </div>
+
+        )
+      }
+
+    </div>
+
+  );
+
+}
+
+
+// =====================================================
+// COMPLIANCE EVIDENCE MODAL
 // =====================================================
 
 function ComplianceEvidenceModal({
@@ -4603,7 +5677,7 @@ function ComplianceEvidenceModal({
 
       const confirmed =
         window.confirm(
-          "Delete this evidence permanently from the compliance record?"
+          "Delete this evidence from the compliance record? The audit history will be retained."
         );
 
 
@@ -4736,7 +5810,7 @@ function ComplianceEvidenceModal({
         style={{
 
           width:
-            "min(720px, 100%)",
+            "min(760px, 100%)",
 
           maxHeight:
             "90vh",
@@ -4895,6 +5969,9 @@ function ComplianceEvidenceModal({
               gap:
                 8,
 
+              flexWrap:
+                "wrap",
+
               marginBottom:
                 16,
 
@@ -4923,7 +6000,7 @@ function ComplianceEvidenceModal({
                   }}
                 >
 
-                  Decision:{" "}
+                  Human decision:{" "}
                   {
                     evidence.reviewDecision
                   }
@@ -5225,7 +6302,7 @@ function ComplianceEvidenceModal({
               }}
             >
 
-              File
+              Attached file
 
             </div>
 
@@ -5291,144 +6368,16 @@ function ComplianceEvidenceModal({
           </div>
 
 
-          {/* AI */}
+          {/* AI ASSESSMENT */}
 
-          {
-            evidence?.aiAssessment && (
-
-              <div
-                style={{
-
-                  marginTop:
-                    14,
-
-                  padding:
-                    12,
-
-                  border:
-                    "1px solid #292929",
-
-                  borderRadius:
-                    8,
-
-                  background:
-                    "#111",
-
-                }}
-              >
-
-                <div
-                  style={{
-
-                    color:
-                      "#666",
-
-                    fontSize:
-                      10,
-
-                    fontWeight:
-                      700,
-
-                    textTransform:
-                      "uppercase",
-
-                    marginBottom:
-                      8,
-
-                  }}
-                >
-
-                  AI assessment
-
-                </div>
+          <AIAssessmentPanel
+            assessment={
+              evidence?.aiAssessment
+            }
+          />
 
 
-                <div
-                  style={{
-
-                    display:
-                      "grid",
-
-                    gridTemplateColumns:
-                      "repeat(auto-fit, minmax(140px, 1fr))",
-
-                    gap:
-                      10,
-
-                  }}
-                >
-
-                  <SummaryItem
-                    label="Decision"
-                    value={
-                      evidence.aiAssessment.decision ||
-                      "—"
-                    }
-                  />
-
-
-                  <SummaryItem
-                    label="Confidence"
-                    value={
-                      evidence.aiAssessment.confidence != null
-                        ? `${Math.round(
-                            Number(
-                              evidence.aiAssessment.confidence
-                            ) * 100
-                          )}%`
-                        : "—"
-                    }
-                  />
-
-
-                  <SummaryItem
-                    label="Model"
-                    value={
-                      evidence.aiAssessment.model ||
-                      "—"
-                    }
-                  />
-
-                </div>
-
-
-                {
-                  evidence.aiAssessment.summary && (
-
-                    <div
-                      style={{
-
-                        marginTop:
-                          10,
-
-                        color:
-                          "#aaa",
-
-                        fontSize:
-                          11,
-
-                        lineHeight:
-                          1.6,
-
-                      }}
-                    >
-
-                      {
-                        evidence.aiAssessment.summary
-                      }
-
-                    </div>
-
-                  )
-                }
-
-              </div>
-
-            )
-          }
-
-
-          {/* REVIEWER */}
+          {/* HUMAN REVIEW */}
 
           {
             (
@@ -5503,7 +6452,7 @@ function ComplianceEvidenceModal({
                     label="Reviewed by"
                     value={
                       evidence.reviewedByName ||
-                      "Unknown"
+                      "Unknown reviewer"
                     }
                   />
 
@@ -5512,6 +6461,15 @@ function ComplianceEvidenceModal({
                     label="Email"
                     value={
                       evidence.reviewedByEmail ||
+                      "—"
+                    }
+                  />
+
+
+                  <SummaryItem
+                    label="Decision"
+                    value={
+                      evidence.reviewDecision ||
                       "—"
                     }
                   />
@@ -5551,7 +6509,7 @@ function ComplianceEvidenceModal({
             }}
           >
 
-            Created{" "}
+            Added{" "}
             {
               formatDate(
                 evidence.createdAt
@@ -5690,7 +6648,7 @@ function ComplianceEvidenceModal({
               }
             >
 
-              Delete
+              Delete evidence
 
             </ActionButton>
 
@@ -5705,100 +6663,6 @@ function ComplianceEvidenceModal({
   );
 
 }
-
-
-// =====================================================
-// FIELD
-// =====================================================
-
-function Field({
-  label,
-  children,
-}) {
-
-  return (
-
-    <label
-      style={{
-
-        display:
-          "block",
-
-        marginTop:
-          12,
-
-      }}
-    >
-
-      <div
-        style={{
-
-          color:
-            "#666",
-
-          fontSize:
-            10,
-
-          fontWeight:
-            700,
-
-          textTransform:
-            "uppercase",
-
-          marginBottom:
-            6,
-
-        }}
-      >
-
-        {
-          label
-        }
-
-      </div>
-
-
-      {
-        children
-      }
-
-    </label>
-
-  );
-
-}
-
-
-const inputStyle = {
-
-  width:
-    "100%",
-
-  boxSizing:
-    "border-box",
-
-  padding:
-    "8px 10px",
-
-  border:
-    "1px solid #333",
-
-  borderRadius:
-    7,
-
-  background:
-    "#0f0f0f",
-
-  color:
-    "#ddd",
-
-  outline:
-    "none",
-
-  fontSize:
-    11,
-
-};
 
 
 // =====================================================
@@ -5938,6 +6802,12 @@ function ComplianceEvidence({
     );
 
 
+  const getProjectId =
+    () =>
+      compliance?.projectId ||
+      null;
+
+
   const saveEvidence =
     async updates => {
 
@@ -5957,22 +6827,36 @@ function ComplianceEvidence({
 
       try {
 
+        const projectId =
+          getProjectId();
+
+
+        if (
+          !projectId
+        ) {
+
+          throw new Error(
+            "Project ID is missing."
+          );
+
+        }
+
+
         const response =
           await api.patch(
+
             `/compliance/evidence/${encodeURIComponent(
               selectedEvidence.evidenceId
             )}`,
 
             {
 
-              projectId:
-                compliance?.organisation?.id ||
-                compliance?.projectId ||
-                null,
+              projectId,
 
               ...updates,
 
             }
+
           );
 
 
@@ -6016,21 +6900,37 @@ function ComplianceEvidence({
 
       try {
 
+        const projectId =
+          getProjectId();
+
+
+        if (
+          !projectId
+        ) {
+
+          throw new Error(
+            "Project ID is missing."
+          );
+
+        }
+
+
         await api.delete(
+
           `/compliance/evidence/${encodeURIComponent(
             evidenceId
           )}`,
 
           {
+
             data: {
 
-              projectId:
-                compliance?.organisation?.id ||
-                compliance?.projectId ||
-                null,
+              projectId,
 
             },
+
           }
+
         );
 
 
@@ -6066,19 +6966,33 @@ function ComplianceEvidence({
 
       try {
 
+        const projectId =
+          getProjectId();
+
+
+        if (
+          !projectId
+        ) {
+
+          throw new Error(
+            "Project ID is missing."
+          );
+
+        }
+
+
         await api.post(
+
           `/compliance/evidence/${decision}`,
 
           {
 
-            projectId:
-              compliance?.organisation?.id ||
-              compliance?.projectId ||
-              null,
+            projectId,
 
             evidenceId,
 
           }
+
         );
 
 
@@ -6106,7 +7020,9 @@ function ComplianceEvidence({
     <div>
 
       <SectionHeader
+
         title="Evidence"
+
         description={
           `${filteredEvidence.length} of ${evidence.length} evidence records shown.`
         }
@@ -6202,8 +7118,9 @@ function ComplianceEvidence({
           }
 
           style={{
+
             minWidth:
-              170,
+              180,
 
             padding:
               "9px 10px",
@@ -6219,6 +7136,7 @@ function ComplianceEvidence({
 
             color:
               "#ccc",
+
           }}
         >
 
@@ -6235,7 +7153,7 @@ function ComplianceEvidence({
           </option>
 
           <option value="review_required">
-            Review required
+            Awaiting review
           </option>
 
           <option value="accepted">
@@ -6266,123 +7184,136 @@ function ComplianceEvidence({
           background:
             "#151515",
 
+          overflowX:
+            "auto",
+
         }}
       >
 
         <div
           style={{
-
-            display:
-              "grid",
-
-            gridTemplateColumns:
-              "minmax(180px, 1.5fr) 120px minmax(150px, 1fr) 110px 150px 100px",
-
-            gap:
-              10,
-
-            padding:
-              "10px 14px",
-
-            background:
-              "#111",
-
-            borderBottom:
-              "1px solid #242424",
-
-            color:
-              "#666",
-
-            fontSize:
-              9,
-
-            fontWeight:
-              700,
-
-            textTransform:
-              "uppercase",
-
+            minWidth:
+              940,
           }}
         >
 
-          <div>
-            Evidence
-          </div>
+          <div
+            style={{
 
-          <div>
-            Control
-          </div>
+              display:
+                "grid",
 
-          <div>
-            Type
-          </div>
+              gridTemplateColumns:
+                "minmax(180px, 1.5fr) 120px minmax(150px, 1fr) 120px 180px 110px",
 
-          <div>
-            Status
-          </div>
+              gap:
+                10,
 
-          <div>
-            Reviewer
-          </div>
+              padding:
+                "10px 14px",
 
-          <div />
+              background:
+                "#111",
 
-        </div>
+              borderBottom:
+                "1px solid #242424",
 
+              color:
+                "#666",
 
-        {
-          filteredEvidence.length ===
-            0 && (
+              fontSize:
+                9,
 
-            <div
-              style={{
-                padding:
-                  20,
+              fontWeight:
+                700,
 
-                color:
-                  "#666",
+              textTransform:
+                "uppercase",
 
-                fontSize:
-                  11,
+            }}
+          >
 
-              }}
-            >
-
-              No evidence records found.
-
+            <div>
+              Evidence
             </div>
 
-          )
-        }
+            <div>
+              Control
+            </div>
+
+            <div>
+              Type / AI
+            </div>
+
+            <div>
+              Status
+            </div>
+
+            <div>
+              Human review
+            </div>
+
+            <div />
+
+          </div>
 
 
-        {
-          filteredEvidence.map(
-            item => (
+          {
+            filteredEvidence.length ===
+              0 && (
 
-              <EvidenceRow
+              <div
+                style={{
 
-                key={
-                  item.evidenceId
-                }
+                  padding:
+                    20,
 
-                evidence={
-                  item
-                }
+                  color:
+                    "#666",
 
-                controls={
-                  controls
-                }
+                  fontSize:
+                    11,
 
-                onOpen={
-                  setSelectedEvidence
-                }
+                }}
+              >
 
-              />
+                No evidence records found.
+
+              </div>
 
             )
-          )
-        }
+          }
+
+
+          {
+            filteredEvidence.map(
+              item => (
+
+                <EvidenceRow
+
+                  key={
+                    item.evidenceId
+                  }
+
+                  evidence={
+                    item
+                  }
+
+                  controls={
+                    controls
+                  }
+
+                  onOpen={
+                    setSelectedEvidence
+                  }
+
+                />
+
+              )
+            )
+          }
+
+        </div>
 
       </div>
 
@@ -6465,8 +7396,12 @@ function ComplianceHistory({
     <div>
 
       <SectionHeader
+
         title="Audit history"
-        description="Persistent compliance activity for this project."
+
+        description=
+          "A permanent record of compliance decisions and changes."
+
       />
 
 
@@ -6526,156 +7461,230 @@ function ComplianceHistory({
             (
               entry,
               index
-            ) => (
+            ) => {
 
-              <div
-                key={
-                  `${entry?.evidenceId || "event"}-${entry?.createdAt || index}-${index}`
-                }
+              const actor =
+                getActorName(
+                  entry
+                );
 
-                style={{
 
-                  padding:
-                    13,
-
-                  border:
-                    "1px solid #292929",
-
-                  borderRadius:
-                    10,
-
-                  background:
-                    "#151515",
-
-                }}
-              >
+              return (
 
                 <div
+                  key={
+                    `${entry?.evidenceId || "event"}-${entry?.createdAt || index}-${index}`
+                  }
+
                   style={{
 
-                    display:
-                      "flex",
+                    padding:
+                      14,
 
-                    justifyContent:
-                      "space-between",
+                    border:
+                      "1px solid #292929",
 
-                    alignItems:
-                      "flex-start",
+                    borderRadius:
+                      10,
 
-                    gap:
-                      12,
+                    background:
+                      "#151515",
 
                   }}
                 >
 
                   <div
                     style={{
-                      minWidth:
-                        0,
 
-                      flex:
-                        1,
+                      display:
+                        "flex",
+
+                      justifyContent:
+                        "space-between",
+
+                      alignItems:
+                        "flex-start",
+
+                      gap:
+                        12,
+
                     }}
                   >
 
                     <div
                       style={{
 
-                        color:
-                          "#ddd",
-
-                        fontSize:
-                          11,
-
-                        fontWeight:
-                          700,
-
-                      }}
-                    >
-
-                      {
-                        entry?.event ||
-                        "Compliance event"
-                      }
-
-                    </div>
-
-
-                    <div
-                      style={{
-
-                        marginTop:
-                          5,
-
-                        color:
-                          "#666",
-
-                        fontSize:
-                          10,
-
-                      }}
-                    >
-
-                      {
-                        entry?.controlId
-                          ? `Control ${entry.controlId}`
-                          : ""
-                      }
-
-                      {
-                        entry?.evidenceId
-                          ? ` · Evidence ${entry.evidenceId}`
-                          : ""
-                      }
-
-                    </div>
-
-                  </div>
-
-
-                  <div
-                    style={{
-
-                      color:
-                        "#555",
-
-                      fontSize:
-                        10,
-
-                      whiteSpace:
-                        "nowrap",
-
-                    }}
-                  >
-
-                    {
-                      formatDate(
-                        entry?.createdAt
-                      )
-                    }
-
-                  </div>
-
-                </div>
-
-
-                {
-                  entry?.data &&
-                  Object.keys(
-                    entry.data
-                  ).length > 0 && (
-
-                    <pre
-                      style={{
-
-                        marginTop:
-                          10,
-
-                        marginBottom:
+                        minWidth:
                           0,
 
+                        flex:
+                          1,
+
+                      }}
+                    >
+
+                      <div
+                        style={{
+
+                          color:
+                            "#ddd",
+
+                          fontSize:
+                            12,
+
+                          fontWeight:
+                            700,
+
+                        }}
+                      >
+
+                        {
+                          humaniseEvent(
+                            entry?.event
+                          )
+                        }
+
+                      </div>
+
+
+                      <div
+                        style={{
+
+                          marginTop:
+                            5,
+
+                          color:
+                            "#666",
+
+                          fontSize:
+                            10,
+
+                        }}
+                      >
+
+                        {
+                          entry?.controlId
+                            ? `Control ${entry.controlId}`
+                            : "Compliance activity"
+                        }
+
+
+                        {
+                          entry?.evidenceId
+                            ? ` · Evidence ${entry.evidenceId}`
+                            : ""
+                        }
+
+                      </div>
+
+
+                      {
+                        actor && (
+
+                          <div
+                            style={{
+
+                              marginTop:
+                                6,
+
+                              color:
+                                "#888",
+
+                              fontSize:
+                                10,
+
+                            }}
+                          >
+
+                            {
+                              (
+                                entry?.event ===
+                                  "compliance.evidenceAccepted" ||
+                                entry?.event ===
+                                  "compliance.evidenceRejected"
+                              )
+
+                                ? (
+                                    <>
+                                      Decision recorded by{" "}
+                                      <strong
+                                        style={{
+                                          color:
+                                            "#bbb",
+                                        }}
+                                      >
+                                        {
+                                          actor
+                                        }
+                                      </strong>
+                                    </>
+                                  )
+
+                                : (
+                                    <>
+                                      Changed by{" "}
+                                      <strong
+                                        style={{
+                                          color:
+                                            "#bbb",
+                                        }}
+                                      >
+                                        {
+                                          actor
+                                        }
+                                      </strong>
+                                    </>
+                                  )
+                            }
+
+                          </div>
+
+                        )
+                      }
+
+                    </div>
+
+
+                    <div
+                      style={{
+
+                        color:
+                          "#555",
+
+                        fontSize:
+                          10,
+
+                        whiteSpace:
+                          "nowrap",
+
+                      }}
+                    >
+
+                      {
+                        formatDate(
+                          entry?.createdAt
+                        )
+                      }
+
+                    </div>
+
+                  </div>
+
+
+                  {
+                    entry?.data &&
+                    Object.keys(
+                      entry.data
+                    ).length > 0 && (
+
+                    <div
+                      style={{
+
+                        marginTop:
+                          10,
+
                         padding:
-                          9,
+                          10,
 
                         background:
                           "#101010",
@@ -6686,37 +7695,139 @@ function ComplianceHistory({
                         borderRadius:
                           7,
 
-                        color:
-                          "#777",
-
-                        fontSize:
-                          9,
-
-                        whiteSpace:
-                          "pre-wrap",
-
-                        wordBreak:
-                          "break-word",
-
                       }}
                     >
 
                       {
-                        JSON.stringify(
-                          entry.data,
-                          null,
-                          2
+                        entry?.data?.decision && (
+
+                          <div
+                            style={{
+
+                              color:
+                                "#bbb",
+
+                              fontSize:
+                                11,
+
+                              lineHeight:
+                                1.5,
+
+                            }}
+                          >
+
+                            Decision:{" "}
+                            {
+                              getDecisionLabel(
+                                entry.data.decision
+                              )
+                            }
+
+                          </div>
+
                         )
                       }
 
-                    </pre>
 
-                  )
-                }
+                      {
+                        entry?.data?.changedFields?.length > 0 && (
 
-              </div>
+                          <div
+                            style={{
 
-            )
+                              color:
+                                "#777",
+
+                              fontSize:
+                                10,
+
+                              marginTop:
+                                4,
+
+                            }}
+                          >
+
+                            Updated fields:{" "}
+                            {
+                              entry.data.changedFields
+                                .join(
+                                  ", "
+                                )
+                            }
+
+                          </div>
+
+                        )
+                      }
+
+
+                      {
+                        entry?.data?.fileName && (
+
+                          <div
+                            style={{
+
+                              color:
+                                "#777",
+
+                              fontSize:
+                                10,
+
+                              marginTop:
+                                4,
+
+                            }}
+                          >
+
+                            File:{" "}
+                            {
+                              entry.data.fileName
+                            }
+
+                          </div>
+
+                        )
+                      }
+
+
+                      {
+                        entry?.data?.relevanceScore !=
+                          null && (
+
+                          <div
+                            style={{
+
+                              color:
+                                "#777",
+
+                              fontSize:
+                                10,
+
+                              marginTop:
+                                4,
+
+                            }}
+                          >
+
+                            AI relevance:{" "}
+                            {
+                              entry.data.relevanceScore
+                            }%
+
+                          </div>
+
+                        )
+                      }
+
+                    </div>
+
+                  )}
+
+                </div>
+
+              );
+
+            }
           )
         }
 
@@ -6772,7 +7883,6 @@ function ComplianceWorkspace({
 
   const projectId =
     compliance?.projectId ||
-    compliance?.organisation?.id ||
     null;
 
 
@@ -6806,16 +7916,20 @@ function ComplianceWorkspace({
 
           const response =
             await api.get(
+
               `/compliance/history?projectId=${encodeURIComponent(
                 projectId
               )}`
+
             );
 
 
           setHistory(
+
             normaliseArray(
               response?.data?.history
             )
+
           );
 
         }
@@ -6830,10 +7944,15 @@ function ComplianceWorkspace({
 
 
           setHistoryError(
+
             historyLoadError?.response?.data?.error ||
+
             historyLoadError?.response?.data?.message ||
+
             historyLoadError?.message ||
+
             "Failed to load compliance history."
+
           );
 
         }
@@ -7046,7 +8165,7 @@ function ComplianceWorkspace({
     <div>
 
       {/* =================================================
-          COMPLIANCE NAVIGATION
+          NAVIGATION
       ================================================= */}
 
       <div
@@ -7191,13 +8310,13 @@ function ComplianceWorkspace({
         activeTab ===
         "overview" && (
 
-        <ComplianceOverview
-          compliance={
-            compliance
-          }
-        />
+          <ComplianceOverview
+            compliance={
+              compliance
+            }
+          />
 
-      )
+        )
       }
 
 
@@ -7205,13 +8324,13 @@ function ComplianceWorkspace({
         activeTab ===
         "controls" && (
 
-        <ComplianceControls
-          compliance={
-            compliance
-          }
-        />
+          <ComplianceControls
+            compliance={
+              compliance
+            }
+          />
 
-      )
+        )
       }
 
 
@@ -7219,19 +8338,19 @@ function ComplianceWorkspace({
         activeTab ===
         "evidence" && (
 
-        <ComplianceEvidence
+          <ComplianceEvidence
 
-          compliance={
-            compliance
-          }
+            compliance={
+              compliance
+            }
 
-          onRefresh={
-            onRefresh
-          }
+            onRefresh={
+              onRefresh
+            }
 
-        />
+          />
 
-      )
+        )
       }
 
 
@@ -7239,28 +8358,7 @@ function ComplianceWorkspace({
         activeTab ===
         "history" && (
 
-        historyLoading
-
-          ? (
-
-            <div
-              style={{
-                padding:
-                  20,
-
-                color:
-                  "#666",
-
-              }}
-            >
-
-              Loading audit history...
-
-            </div>
-
-          )
-
-          : historyError
+          historyLoading
 
             ? (
 
@@ -7268,44 +8366,66 @@ function ComplianceWorkspace({
                 style={{
 
                   padding:
-                    14,
-
-                  borderRadius:
-                    8,
-
-                  background:
-                    "#321515",
-
-                  border:
-                    "1px solid #6b1d1d",
+                    20,
 
                   color:
-                    "#fca5a5",
+                    "#666",
 
                 }}
               >
 
-                {
-                  historyError
-                }
+                Loading audit history...
 
               </div>
 
             )
 
-            : (
+            : historyError
 
-              <ComplianceHistory
-                history={
-                  history.length > 0
-                    ? history
-                    : compliance.reviewHistory
-                }
-              />
+              ? (
 
-            )
+                <div
+                  style={{
 
-      )
+                    padding:
+                      14,
+
+                    borderRadius:
+                      8,
+
+                    background:
+                      "#321515",
+
+                    border:
+                      "1px solid #6b1d1d",
+
+                    color:
+                      "#fca5a5",
+
+                  }}
+                >
+
+                  {
+                    historyError
+                  }
+
+                </div>
+
+              )
+
+              : (
+
+                <ComplianceHistory
+                  history={
+                    history.length > 0
+                      ? history
+                      : compliance.reviewHistory
+                  }
+                />
+
+              )
+
+        )
       }
 
     </div>
@@ -7316,7 +8436,7 @@ function ComplianceWorkspace({
 
 
 // =====================================================
-// COMPLIANCE RESPONSE NORMALISER
+// NORMALISE COMPLIANCE RESPONSE
 // =====================================================
 
 function normaliseComplianceResponse(
@@ -7541,9 +8661,11 @@ export default function DataHub() {
 
           const response =
             await api.get(
+
               `/compliance?projectId=${encodeURIComponent(
                 nextProjectId
               )}`
+
             );
 
 
@@ -7588,10 +8710,15 @@ export default function DataHub() {
 
 
           setComplianceError(
+
             error?.response?.data?.error ||
+
             error?.response?.data?.message ||
+
             error?.message ||
+
             "Failed to load compliance data."
+
           );
 
 
@@ -7612,7 +8739,7 @@ export default function DataHub() {
 
 
   // ===================================================
-  // LOAD PROJECT SUMMARY
+  // LOAD PROJECT DATA
   // ===================================================
 
   const loadProjectData =
@@ -7692,7 +8819,9 @@ export default function DataHub() {
 
           const projectResponse =
             await api.get(
+
               `/data/projects/${nextProjectId}`
+
             );
 
 
@@ -7707,12 +8836,6 @@ export default function DataHub() {
           );
 
 
-          /*
-           * Load Compliance separately because it has its
-           * own business-data API and is not dependent on
-           * the generic DataHub resource API.
-           */
-
           await loadCompliance(
             nextProjectId
           );
@@ -7721,10 +8844,12 @@ export default function DataHub() {
           console.log(
             "[DataHub] Active project loaded",
             {
+
               projectId:
                 nextProjectId,
 
               project,
+
             }
           );
 
@@ -7745,10 +8870,15 @@ export default function DataHub() {
 
 
           setProjectDataError(
+
             error?.response?.data?.error ||
+
             error?.response?.data?.message ||
+
             error?.message ||
+
             "Failed to load project data."
+
           );
 
         }
@@ -7914,9 +9044,7 @@ export default function DataHub() {
 
 
         /*
-         * Compliance is intentionally injected from the
-         * dedicated compliance API rather than relying on a
-         * stale generic resource count.
+         * Compliance is injected from its dedicated API.
          */
 
         if (
@@ -7989,37 +9117,24 @@ export default function DataHub() {
         }
 
 
-        const filtered =
-          normalised.filter(
-            resource =>
-              resource?.type &&
-              resource?.view !==
-                false &&
-              Number(
-                resource?.count
-              ) > 0
-          );
+        return normalised.filter(
+          resource =>
 
+            resource?.type &&
 
-        console.log(
-          "[DataHub] Viewable resources",
-          {
-            projectId,
+            resource?.view !==
+              false &&
 
-            resources:
-              filtered,
+            Number(
+              resource?.count
+            ) > 0
 
-          }
         );
-
-
-        return filtered;
 
       },
       [
         projectData,
         complianceData,
-        projectId,
       ]
     );
 
@@ -8053,10 +9168,6 @@ export default function DataHub() {
           null
         );
 
-
-        /*
-         * Compliance uses its own dedicated workspace.
-         */
 
         if (
           resourceType ===
@@ -8092,7 +9203,9 @@ export default function DataHub() {
 
           const response =
             await api.get(
+
               `/data/projects/${projectId}/${resourceType}`
+
             );
 
 
@@ -8100,7 +9213,9 @@ export default function DataHub() {
             Array.isArray(
               response?.data?.records
             )
+
               ? response.data.records
+
               : [];
 
 
@@ -8125,10 +9240,15 @@ export default function DataHub() {
 
 
           setResourceError(
+
             error?.response?.data?.error ||
+
             error?.response?.data?.message ||
+
             error?.message ||
+
             "Failed to load resource."
+
           );
 
         }
@@ -8639,6 +9759,10 @@ export default function DataHub() {
         }
 
 
+        {/* =================================================
+            LOADING
+        ================================================= */}
+
         {
           projectId &&
           projectDataLoading && (
@@ -8687,6 +9811,10 @@ export default function DataHub() {
         }
 
 
+        {/* =================================================
+            ERROR
+        ================================================= */}
+
         {
           projectId &&
           projectDataError && (
@@ -8721,6 +9849,10 @@ export default function DataHub() {
           )
         }
 
+
+        {/* =================================================
+            PROJECT CONTENT
+        ================================================= */}
 
         {
           projectId &&
@@ -8968,7 +10100,7 @@ export default function DataHub() {
 
 
               {/* =========================================
-                  COMPLIANCE WORKSPACE
+                  COMPLIANCE
               ========================================= */}
 
               {
@@ -9009,7 +10141,7 @@ export default function DataHub() {
 
 
               {/* =========================================
-                  GENERIC RESOURCE RECORDS
+                  GENERIC RESOURCES
               ========================================= */}
 
               {

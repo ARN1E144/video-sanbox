@@ -1,0 +1,375 @@
+{
+"id": "confo.chat_test",
+"name": "Chat Test",
+"version": 1,
+"type": "confo",
+"description": "Runtime chat test application for project-scoped conversations, invitations, realtime messaging and chat lifecycle.",
+"capabilities": [
+"chat"
+],
+"tree": {
+"id": "chat-test-root",
+"type": "Container",
+"props": {
+"layout": "vertical",
+"style": {
+"width": "100%",
+"height": "100%",
+"padding": 20,
+"gap": 12,
+"backgroundColor": "#111",
+"boxSizing": "border-box",
+"overflow": "hidden"
+}
+},
+"children": [
+{
+"id": "chat-test-title",
+"type": "TextLabel",
+"props": {
+"text": "Chat Test",
+"style": {
+"fontSize": 20,
+"fontWeight": 700,
+"color": "#fff"
+}
+}
+},
+
+  {
+    "id": "chat-test-description",
+    "type": "TextLabel",
+    "props": {
+      "text": "Create or select a conversation, invite users, then test realtime messaging.",
+      "style": {
+        "fontSize": 11,
+        "color": "#777"
+      }
+    }
+  },
+
+  {
+    "id": "chat-test-create-section",
+    "type": "Container",
+    "props": {
+      "layout": "vertical",
+      "style": {
+        "width": "100%",
+        "padding": 12,
+        "gap": 8,
+        "backgroundColor": "#151515",
+        "border": "1px solid #292929",
+        "borderRadius": 8,
+        "boxSizing": "border-box"
+      }
+    },
+    "children": [
+      {
+        "id": "chat-test-create-label",
+        "type": "TextLabel",
+        "props": {
+          "text": "Create conversation",
+          "style": {
+            "fontSize": 13,
+            "fontWeight": 700,
+            "color": "#fff"
+          }
+        }
+      },
+
+      {
+        "id": "chat-test-title-input",
+        "type": "TextBox",
+        "props": {
+          "placeholder": "Conversation title...",
+          "bindKey": "chat.create.title",
+          "style": {
+            "width": "100%"
+          }
+        }
+      },
+
+      {
+        "id": "chat-test-participants",
+        "type": "ParticipantSelector",
+        "props": {
+          "bindKey": "chat.create.participantIds",
+          "multiSelect": true,
+          "placeholder": "Select participants...",
+          "style": {
+            "width": "100%",
+            "minHeight": 44
+          }
+        }
+      },
+
+      {
+        "id": "chat-test-create-button",
+        "type": "ControlButton",
+        "props": {
+          "label": "Create Conversation",
+          "action": "chat.createConversation",
+          "params": {
+            "title": "{{chat.create.title}}",
+            "participantIds": "{{chat.create.participantIds}}"
+          }
+        }
+      }
+    ]
+  },
+
+  {
+    "id": "chat-test-conversation-section",
+    "type": "Container",
+    "props": {
+      "layout": "horizontal",
+      "style": {
+        "width": "100%",
+        "gap": 8,
+        "alignItems": "center",
+        "boxSizing": "border-box"
+      }
+    },
+    "children": [
+      {
+        "id": "chat-test-conversation-select",
+        "type": "Select",
+        "props": {
+          "bindKey": "chat.conversationId",
+          "placeholder": "Select conversation...",
+          "style": {
+            "flex": 1,
+            "minWidth": 0
+          }
+        }
+      },
+
+      {
+        "id": "chat-test-load-conversations",
+        "type": "ControlButton",
+        "props": {
+          "label": "Load Conversations",
+          "action": "chat.loadConversations"
+        }
+      }
+    ]
+  },
+
+  {
+    "id": "chat-test-invitation-actions",
+    "type": "Container",
+    "props": {
+      "layout": "horizontal",
+      "style": {
+        "width": "100%",
+        "gap": 8,
+        "alignItems": "center",
+        "flexWrap": "wrap",
+        "boxSizing": "border-box"
+      }
+    },
+    "children": [
+      {
+        "id": "chat-test-accept",
+        "type": "ControlButton",
+        "props": {
+          "label": "Accept Invitation",
+          "action": "chat.acceptConversationInvitation",
+          "params": {
+            "conversationId": "{{chat.conversationId}}"
+          }
+        }
+      },
+
+      {
+        "id": "chat-test-decline",
+        "type": "ControlButton",
+        "props": {
+          "label": "Decline Invitation",
+          "action": "chat.declineConversationInvitation",
+          "params": {
+            "conversationId": "{{chat.conversationId}}"
+          }
+        }
+      }
+    ]
+  },
+
+  {
+    "id": "chat-test-actions",
+    "type": "Container",
+    "props": {
+      "layout": "horizontal",
+      "style": {
+        "width": "100%",
+        "gap": 8,
+        "alignItems": "center",
+        "flexWrap": "wrap",
+        "boxSizing": "border-box"
+      }
+    },
+    "children": [
+      {
+        "id": "chat-test-join",
+        "type": "ControlButton",
+        "props": {
+          "label": "Join Chat",
+          "action": "chat.joinConversation",
+          "params": {
+            "conversationId": "{{chat.conversationId}}"
+          }
+        }
+      },
+
+      {
+        "id": "chat-test-load",
+        "type": "ControlButton",
+        "props": {
+          "label": "Load Messages",
+          "action": "chat.loadMessages",
+          "params": {
+            "conversationId": "{{chat.conversationId}}"
+          },
+          "targetId": "chat-test-panel"
+        }
+      },
+
+      {
+        "id": "chat-test-leave",
+        "type": "ControlButton",
+        "props": {
+          "label": "Leave Chat",
+          "action": "chat.leaveConversation",
+          "params": {
+            "conversationId": "{{chat.conversationId}}"
+          }
+        }
+      },
+
+      {
+        "id": "chat-test-close",
+        "type": "ControlButton",
+        "props": {
+          "label": "Close Conversation",
+          "action": "chat.closeConversation",
+          "params": {
+            "conversationId": "{{chat.conversationId}}"
+          }
+        }
+      }
+    ]
+  },
+
+  {
+    "id": "chat-test-panel-container",
+    "type": "Container",
+    "props": {
+      "layout": "vertical",
+      "style": {
+        "width": "100%",
+        "flex": 1,
+        "minHeight": 300,
+        "minWidth": 0,
+        "backgroundColor": "#151515",
+        "border": "1px solid #292929",
+        "borderRadius": 8,
+        "padding": 8,
+        "boxSizing": "border-box",
+        "overflow": "hidden"
+      }
+    },
+    "children": [
+      {
+        "id": "chat-test-panel",
+        "type": "ChatPanel",
+        "props": {
+          "bindKey": "chat.messages",
+          "conversationIdBindKey": "chat.conversationId",
+          "title": "Chat",
+          "style": {
+            "width": "100%",
+            "height": "100%",
+            "minHeight": 0,
+            "minWidth": 0,
+            "backgroundColor": "#181818",
+            "color": "#fff",
+            "borderRadius": 6,
+            "boxSizing": "border-box"
+          }
+        }
+      }
+    ]
+  },
+
+  {
+    "id": "chat-test-input-row",
+    "type": "Container",
+    "props": {
+      "layout": "horizontal",
+      "style": {
+        "width": "100%",
+        "gap": 8,
+        "alignItems": "center",
+        "boxSizing": "border-box"
+      }
+    },
+    "children": [
+      {
+        "id": "chat-test-input",
+        "type": "TextBox",
+        "props": {
+          "placeholder": "Type a message...",
+          "bindKey": "chat.input",
+          "style": {
+            "flex": 1,
+            "minWidth": 0
+          }
+        }
+      },
+
+      {
+        "id": "chat-test-send",
+        "type": "ControlButton",
+        "props": {
+          "label": "Send",
+          "action": "chat.sendMessage",
+          "params": {
+            "conversationId": "{{chat.conversationId}}",
+            "text": "{{chat.input}}"
+          },
+          "targetId": "chat-test-panel"
+        }
+      }
+    ]
+  },
+
+  {
+    "id": "chat-test-typing",
+    "type": "ControlPanel",
+    "props": {
+      "layout": "horizontal",
+      "style": {
+        "width": "100%",
+        "height": 48,
+        "minHeight": 48,
+        "boxSizing": "border-box"
+      }
+    },
+    "children": [
+      {
+        "id": "chat-test-lifecycle-label",
+        "type": "TextLabel",
+        "props": {
+          "text": "Chat lifecycle: create → invite → accept → join → messages → realtime → leave → close",
+          "style": {
+            "fontSize": 11,
+            "color": "#888"
+          }
+        }
+      }
+    ]
+  }
+]
+
+}
+}

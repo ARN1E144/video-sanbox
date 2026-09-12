@@ -1,5 +1,3 @@
-// src/runtime/project/ProjectTreeLoader.js
-
 /*
 ========================================================
 PROJECT TREE → CANVAS ELEMENTS
@@ -9,8 +7,9 @@ Project tree:
 
 App
 ├── AgoraFeed
-├── ControlPanel
-│   ├── ControlButton
+├── Container
+│   ├── ParticipantSelector
+│   ├── TextBox
 │   └── ControlButton
 └── ChatPanel
 
@@ -19,14 +18,17 @@ becomes Canvas elements:
 AgoraFeed
   parentId: null
 
-ControlPanel
+Container
   parentId: null
 
-ControlButton
-  parentId: ControlPanel.id
+ParticipantSelector
+  parentId: Container.id
+
+TextBox
+  parentId: Container.id
 
 ControlButton
-  parentId: ControlPanel.id
+  parentId: Container.id
 
 ChatPanel
   parentId: null
@@ -41,35 +43,63 @@ It is NOT a Canvas element.
 Real components such as Container / ControlPanel
 ARE Canvas elements.
 
-POSITION CONTRACT:
+
+========================================================
+POSITION CONTRACT
+========================================================
 
 Top-level element:
 
   x/y = relative to Canvas stage
 
-Child element:
+
+Child of Container layout="free":
 
   x/y = relative to immediate parent
 
-This matches Canvas.js where child elements are rendered
-inside their parent's coordinate space.
 
-This loader is responsible for:
+Child of Container layout="vertical":
 
-- flattening the project tree
-- preserving hierarchy
-- resolving default sizes
-- calculating default positions
-- respecting explicit x/y/width/height
-- respecting vertical/horizontal/grid layout
-- preserving roles
-- preserving metadata
+  x/y are layout-managed.
+
+  Child order controls vertical position.
+
+
+Child of Container layout="horizontal":
+
+  x/y are layout-managed.
+
+  Child order controls horizontal position.
+
+
+Child of ControlPanel:
+
+  x/y are layout-managed by ControlPanel.
+
+
+========================================================
+RESPONSIBILITIES
+========================================================
+
+This loader:
+
+- flattens the project tree
+- preserves hierarchy
+- resolves default sizes
+- calculates sensible fallback positions
+- preserves explicit dimensions
+- preserves free-container coordinates
+- preserves roles
+- preserves metadata
+- validates hierarchy
 
 It does NOT:
 
 - modify the source Confo
 - install the Confo
 - render components
+
+
 ========================================================
 */
 
@@ -86,8 +116,8 @@ const DEFAULT_ELEMENT_SIZE = {
   },
 
   Container: {
-    width: 1000,
-    height: 700,
+    width: 600,
+    height: 400,
   },
 
   AgoraFeed: {
@@ -95,59 +125,74 @@ const DEFAULT_ELEMENT_SIZE = {
     height: 450,
   },
 
-  ControlPanel: {
-    width: 300,
-    height: 120,
-  },
-
-  ControlButton: {
-    width: 140,
-    height: 44,
-  },
-
-  Text: {
-    width: 250,
-    height: 50,
-  },
-
-  TextLabel: {
-    width: 320,
-    height: 50,
-  },
-
-  TextBox: {
-    width: 400,
-    height: 44,
-  },
-
-  Select: {
-    width: 260,
-    height: 44,
-  },
-
-  ChatPanel: {
-    width: 300,
-    height: 300,
-  },
-
   VideoFeed: {
     width: 800,
     height: 450,
   },
 
-  AvailabilityButton: {
-    width: 160,
-    height: 44,
+  RemoteVideoGrid: {
+    width: 800,
+    height: 500,
+  },
+
+  MediaFeed: {
+    width: 600,
+    height: 400,
+  },
+
+  FilePreview: {
+    width: 500,
+    height: 350,
+  },
+
+  ChatPanel: {
+    width: 420,
+    height: 360,
+  },
+
+  ParticipantSelector: {
+    width: 280,
+    height: 180,
+  },
+
+  ControlPanel: {
+    width: 520,
+    height: 72,
+  },
+
+  ControlButton: {
+    width: 120,
+    height: 40,
   },
 
   MicButton: {
-    width: 140,
-    height: 44,
+    width: 120,
+    height: 40,
+  },
+
+  AvailabilityButton: {
+    width: 150,
+    height: 40,
+  },
+
+  TextBox: {
+    width: 320,
+    height: 40,
+  },
+
+  Select: {
+    width: 220,
+    height: 40,
+  },
+
+  Input: {
+    width: 320,
+    height: 40,
   },
 
   FileUpload: {
     width: 300,
-    height: 80,
+    height: 70,
   },
 
   ComplianceEvidence: {
@@ -155,9 +200,24 @@ const DEFAULT_ELEMENT_SIZE = {
     height: 300,
   },
 
+  InterviewPanel: {
+    width: 600,
+    height: 400,
+  },
+
+  Text: {
+    width: 250,
+    height: 40,
+  },
+
+  TextLabel: {
+    width: 280,
+    height: 32,
+  },
+
   default: {
-    width: 300,
-    height: 150,
+    width: 280,
+    height: 120,
   },
 
 };
@@ -170,23 +230,29 @@ const DEFAULT_ELEMENT_SIZE = {
 const DEFAULT_START_X =
   40;
 
+
 const DEFAULT_START_Y =
   20;
+
 
 const DEFAULT_LAYOUT_GAP =
   12;
 
+
 const DEFAULT_CONTAINER_PADDING =
-  20;
+  16;
+
 
 const DEFAULT_GRID_COLUMNS =
   2;
 
+
 const DEFAULT_GRID_COLUMN_GAP =
-  20;
+  12;
+
 
 const DEFAULT_GRID_ROW_GAP =
-  20;
+  12;
 
 
 // =====================================================
@@ -213,13 +279,23 @@ function normaliseId(
     ).trim();
 
 
-  return id || null;
+  return id ||
+    null;
 
 }
 
 
 // =====================================================
 // LAYOUT NORMALISATION
+// =====================================================
+//
+// Supported:
+//
+//   free
+//   vertical
+//   horizontal
+//   grid
+//
 // =====================================================
 
 function normaliseLayout(
@@ -231,7 +307,7 @@ function normaliseLayout(
     "string"
   ) {
 
-    return "vertical";
+    return "free";
 
   }
 
@@ -240,6 +316,16 @@ function normaliseLayout(
     value
       .toLowerCase()
       .trim();
+
+
+  if (
+    layout ===
+    "free"
+  ) {
+
+    return "free";
+
+  }
 
 
   if (
@@ -262,7 +348,45 @@ function normaliseLayout(
   }
 
 
-  return "vertical";
+  if (
+    layout ===
+    "vertical"
+  ) {
+
+    return "vertical";
+
+  }
+
+
+  return "free";
+
+}
+
+
+// =====================================================
+// GET NODE LAYOUT
+// =====================================================
+
+function getNodeLayout(
+  node
+) {
+
+  if (
+    !node ||
+    typeof node !==
+      "object"
+  ) {
+
+    return "free";
+
+  }
+
+
+  return normaliseLayout(
+    node.props?.layout ??
+    node.meta?.layout ??
+    "free"
+  );
 
 }
 
@@ -299,27 +423,31 @@ function resolveSize(
     );
 
 
+  const explicitWidth =
+    Number(
+      node?.width
+    );
+
+
+  const explicitHeight =
+    Number(
+      node?.height
+    );
+
+
   const width =
     Number.isFinite(
-      Number(
-        node?.width
-      )
+      explicitWidth
     )
-      ? Number(
-          node.width
-        )
+      ? explicitWidth
       : defaults.width;
 
 
   const height =
     Number.isFinite(
-      Number(
-        node?.height
-      )
+      explicitHeight
     )
-      ? Number(
-          node.height
-        )
+      ? explicitHeight
       : defaults.height;
 
 
@@ -351,24 +479,34 @@ function resolveCoordinate(
   fallback
 ) {
 
+  const numericValue =
+    Number(
+      value
+    );
+
+
   if (
     Number.isFinite(
-      Number(
-        value
-      )
+      numericValue
     )
   ) {
 
-    return Number(
-      value
-    );
+    return numericValue;
 
   }
 
 
-  return Number(
-    fallback
-  ) || 0;
+  const numericFallback =
+    Number(
+      fallback
+    );
+
+
+  return Number.isFinite(
+    numericFallback
+  )
+    ? numericFallback
+    : 0;
 
 }
 
@@ -383,6 +521,7 @@ function createElement(
     x,
     y,
     parentId,
+    layoutManaged = false,
   }
 ) {
 
@@ -446,27 +585,38 @@ function createElement(
 
     // -------------------------------------------------
     // POSITION
+    // -------------------------------------------------
     //
-    // IMPORTANT:
+    // Free-layout elements retain explicit x/y.
     //
-    // x/y are LOCAL to parent.
+    // Layout-managed children receive the calculated
+    // position generated by the loader.
     //
-    // For top-level elements:
-    // x/y are local to Canvas stage.
+    // Canvas ignores x/y for flex-managed children.
     //
     // -------------------------------------------------
 
     x:
-      resolveCoordinate(
-        node.x,
-        x
-      ),
+      layoutManaged
+        ? resolveCoordinate(
+            x,
+            0
+          )
+        : resolveCoordinate(
+            node.x,
+            x
+          ),
 
     y:
-      resolveCoordinate(
-        node.y,
-        y
-      ),
+      layoutManaged
+        ? resolveCoordinate(
+            y,
+            0
+          )
+        : resolveCoordinate(
+            node.y,
+            y
+          ),
 
 
     // -------------------------------------------------
@@ -529,47 +679,203 @@ function createElement(
 
 
 // =====================================================
-// RESOLVE CHILD POSITION
-// =====================================================
-//
-// Child positions are ALWAYS local to parent.
-//
-// Therefore:
-//
-// vertical child:
-//
-//   x = padding
-//   y = currentY
-//
-// NOT:
-//
-//   x = parentX + padding
-//
-// Canvas adds the parent's position during rendering.
-//
+// PROCESS NODE
 // =====================================================
 
-function resolveChildPosition(
-  child,
-  fallbackX,
-  fallbackY
+function processNode(
+  node,
+  {
+    parentId = null,
+    fallbackX =
+      DEFAULT_START_X,
+    fallbackY =
+      DEFAULT_START_Y,
+    layoutManaged = false,
+    result,
+  }
 ) {
 
-  return {
+  if (
+    !node ||
+    typeof node !==
+      "object"
+  ) {
 
-    x:
-      resolveCoordinate(
-        child?.x,
-        fallbackX
-      ),
+    return null;
 
-    y:
-      resolveCoordinate(
-        child?.y,
-        fallbackY
-      ),
+  }
 
-  };
+
+  // ===================================================
+  // APP ROOT
+  // ===================================================
+
+  if (
+    node.type ===
+    "App"
+  ) {
+
+    const rootLayout =
+      normaliseLayout(
+        node.props?.layout ||
+        node.meta?.confoLayout ||
+        "vertical"
+      );
+
+
+    const rootWidth =
+      Number.isFinite(
+        Number(
+          node.width
+        )
+      )
+        ? Number(
+            node.width
+          )
+        : DEFAULT_ELEMENT_SIZE.App.width;
+
+
+    layoutChildren(
+      node.children,
+      {
+
+        parentId:
+          null,
+
+        parentWidth:
+          rootWidth,
+
+        parentLayout:
+          rootLayout,
+
+        result,
+
+      }
+    );
+
+
+    return null;
+
+  }
+
+
+  // ===================================================
+  // REAL CANVAS ELEMENT
+  // ===================================================
+
+  const canonicalParentId =
+    normaliseId(
+      parentId
+    );
+
+
+  const element =
+    createElement(
+      node,
+      {
+
+        x:
+          fallbackX,
+
+        y:
+          fallbackY,
+
+        parentId:
+          canonicalParentId,
+
+        layoutManaged,
+
+      }
+    );
+
+
+  if (!element) {
+
+    return null;
+
+  }
+
+
+  // ---------------------------------------------------
+  // Duplicate protection
+  // ---------------------------------------------------
+
+  const duplicate =
+    result.some(
+      existing =>
+        existing.id ===
+        element.id
+    );
+
+
+  if (
+    duplicate
+  ) {
+
+    console.warn(
+      "[ProjectTreeLoader] Duplicate element ID skipped",
+      {
+
+        id:
+          element.id,
+
+        type:
+          element.type,
+
+      }
+    );
+
+
+    return null;
+
+  }
+
+
+  result.push(
+    element
+  );
+
+
+  // ===================================================
+  // CHILDREN
+  // ===================================================
+
+  if (
+    Array.isArray(
+      node.children
+    ) &&
+    node.children.length >
+      0
+  ) {
+
+    const childLayout =
+      getNodeLayout(
+        node
+      );
+
+
+    layoutChildren(
+      node.children,
+      {
+
+        parentId:
+          element.id,
+
+        parentWidth:
+          element.width,
+
+        parentLayout:
+          childLayout,
+
+        result,
+
+      }
+    );
+
+  }
+
+
+  return element;
 
 }
 
@@ -607,21 +913,27 @@ function layoutChildren(
     );
 
 
-  const padding =
-    DEFAULT_CONTAINER_PADDING;
-
-
   // ===================================================
-  // VERTICAL
+  // FREE
+  // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // No artificial layout is imposed.
+  //
+  // Explicit child x/y values are retained.
+  //
+  // Missing x/y values fall back to a sensible position.
+  //
   // ===================================================
 
   if (
     layout ===
-    "vertical"
+    "free"
   ) {
 
-    let currentY =
-      padding;
+    let fallbackY =
+      DEFAULT_CONTAINER_PADDING;
 
 
     children.forEach(
@@ -644,44 +956,156 @@ function layoutChildren(
           );
 
 
-        const fallbackX =
-          padding;
-
-
-        const fallbackY =
-          currentY;
-
-
-        const position =
-          resolveChildPosition(
-            child,
-            fallbackX,
-            fallbackY
+        const explicitX =
+          Number(
+            child?.x
           );
 
 
-        processNode(
-          child,
-          {
+        const explicitY =
+          Number(
+            child?.y
+          );
 
-            parentId,
 
-            fallbackX:
-              position.x,
+        const hasExplicitX =
+          Number.isFinite(
+            explicitX
+          );
 
-            fallbackY:
-              position.y,
 
-            result,
+        const hasExplicitY =
+          Number.isFinite(
+            explicitY
+          );
 
-          }
-        );
+
+        const childX =
+          hasExplicitX
+            ? explicitX
+            : DEFAULT_CONTAINER_PADDING;
+
+
+        const childY =
+          hasExplicitY
+            ? explicitY
+            : fallbackY;
 
 
         const created =
-          result[
-            result.length - 1
-          ];
+          processNode(
+            child,
+            {
+
+              parentId,
+
+              fallbackX:
+                childX,
+
+              fallbackY:
+                childY,
+
+              layoutManaged:
+                false,
+
+              result,
+
+            }
+          );
+
+
+        if (
+          created &&
+          created.parentId ===
+            parentId
+        ) {
+
+          fallbackY =
+            Math.max(
+              fallbackY,
+              created.y +
+                created.height +
+                DEFAULT_LAYOUT_GAP
+            );
+
+        }
+        else {
+
+          fallbackY +=
+            childSize.height +
+            DEFAULT_LAYOUT_GAP;
+
+        }
+
+      }
+    );
+
+
+    return;
+
+  }
+
+
+  // ===================================================
+  // VERTICAL
+  // ===================================================
+  //
+  // The loader establishes ordering and sensible
+  // coordinates, but Canvas uses flex layout at runtime.
+  //
+  // Explicit x/y values are intentionally ignored.
+  //
+  // ===================================================
+
+  if (
+    layout ===
+    "vertical"
+  ) {
+
+    let currentY =
+      DEFAULT_CONTAINER_PADDING;
+
+
+    children.forEach(
+      child => {
+
+        if (
+          !child ||
+          typeof child !==
+            "object"
+        ) {
+
+          return;
+
+        }
+
+
+        const childSize =
+          resolveSize(
+            child
+          );
+
+
+        const created =
+          processNode(
+            child,
+            {
+
+              parentId,
+
+              fallbackX:
+                DEFAULT_CONTAINER_PADDING,
+
+              fallbackY:
+                currentY,
+
+              layoutManaged:
+                true,
+
+              result,
+
+            }
+          );
 
 
         if (
@@ -693,8 +1117,8 @@ function layoutChildren(
           currentY =
             Math.max(
               currentY,
-              created.y +
-                created.height +
+              created.height +
+                currentY +
                 DEFAULT_LAYOUT_GAP
             );
 
@@ -726,11 +1150,7 @@ function layoutChildren(
   ) {
 
     let currentX =
-      padding;
-
-
-    let currentY =
-      padding;
+      DEFAULT_CONTAINER_PADDING;
 
 
     children.forEach(
@@ -753,44 +1173,26 @@ function layoutChildren(
           );
 
 
-        const fallbackX =
-          currentX;
-
-
-        const fallbackY =
-          currentY;
-
-
-        const position =
-          resolveChildPosition(
-            child,
-            fallbackX,
-            fallbackY
-          );
-
-
-        processNode(
-          child,
-          {
-
-            parentId,
-
-            fallbackX:
-              position.x,
-
-            fallbackY:
-              position.y,
-
-            result,
-
-          }
-        );
-
-
         const created =
-          result[
-            result.length - 1
-          ];
+          processNode(
+            child,
+            {
+
+              parentId,
+
+              fallbackX:
+                currentX,
+
+              fallbackY:
+                DEFAULT_CONTAINER_PADDING,
+
+              layoutManaged:
+                true,
+
+              result,
+
+            }
+          );
 
 
         if (
@@ -802,8 +1204,8 @@ function layoutChildren(
           currentX =
             Math.max(
               currentX,
-              created.x +
-                created.width +
+              created.width +
+                currentX +
                 DEFAULT_LAYOUT_GAP
             );
 
@@ -843,7 +1245,8 @@ function layoutChildren(
 
         parentWidth -
           (
-            padding * 2
+            DEFAULT_CONTAINER_PADDING *
+            2
           ) -
           (
             DEFAULT_GRID_COLUMN_GAP *
@@ -902,8 +1305,17 @@ function layoutChildren(
           );
 
 
-        const rowY =
-          padding +
+        const fallbackX =
+          DEFAULT_CONTAINER_PADDING +
+          column *
+          (
+            columnWidth +
+            DEFAULT_GRID_COLUMN_GAP
+          );
+
+
+        const fallbackY =
+          DEFAULT_CONTAINER_PADDING +
           row *
           (
             (
@@ -916,49 +1328,24 @@ function layoutChildren(
           );
 
 
-        const fallbackX =
-          padding +
-          column *
-          (
-            columnWidth +
-            DEFAULT_GRID_COLUMN_GAP
-          );
-
-
-        const fallbackY =
-          rowY;
-
-
-        const position =
-          resolveChildPosition(
-            child,
-            fallbackX,
-            fallbackY
-          );
-
-
-        processNode(
-          child,
-          {
-
-            parentId,
-
-            fallbackX:
-              position.x,
-
-            fallbackY:
-              position.y,
-
-            result,
-
-          }
-        );
-
-
         const created =
-          result[
-            result.length - 1
-          ];
+          processNode(
+            child,
+            {
+
+              parentId,
+
+              fallbackX,
+
+              fallbackY,
+
+              layoutManaged:
+                true,
+
+              result,
+
+            }
+          );
 
 
         if (
@@ -1003,199 +1390,6 @@ function layoutChildren(
 
 
 // =====================================================
-// PROCESS NODE
-// =====================================================
-
-function processNode(
-  node,
-  {
-    parentId = null,
-    fallbackX =
-      DEFAULT_START_X,
-    fallbackY =
-      DEFAULT_START_Y,
-    result,
-  }
-) {
-
-  if (
-    !node ||
-    typeof node !==
-      "object"
-  ) {
-
-    return;
-
-  }
-
-
-  // ===================================================
-  // APP ROOT
-  // ===================================================
-
-  if (
-    node.type ===
-    "App"
-  ) {
-
-    const rootLayout =
-      node.props?.layout ||
-      node.meta?.confoLayout ||
-      "vertical";
-
-
-    const rootWidth =
-      Number.isFinite(
-        Number(
-          node.width
-        )
-      )
-        ? Number(
-            node.width
-          )
-        : DEFAULT_ELEMENT_SIZE.App.width;
-
-
-    layoutChildren(
-      node.children,
-      {
-
-        parentId:
-          null,
-
-        parentWidth:
-          rootWidth,
-
-        parentLayout:
-          rootLayout,
-
-        result,
-
-      }
-    );
-
-
-    return;
-
-  }
-
-
-  // ===================================================
-  // REAL CANVAS ELEMENT
-  // ===================================================
-
-  const canonicalParentId =
-    normaliseId(
-      parentId
-    );
-
-
-  const element =
-    createElement(
-      node,
-      {
-
-        x:
-          fallbackX,
-
-        y:
-          fallbackY,
-
-        parentId:
-          canonicalParentId,
-
-      }
-    );
-
-
-  if (!element) {
-
-    return;
-
-  }
-
-
-  // ---------------------------------------------------
-  // Duplicate protection
-  // ---------------------------------------------------
-
-  const duplicate =
-    result.some(
-      existing =>
-        existing.id ===
-        element.id
-    );
-
-
-  if (
-    duplicate
-  ) {
-
-    console.warn(
-      "[ProjectTreeLoader] Duplicate element ID skipped",
-      {
-        id:
-          element.id,
-
-        type:
-          element.type,
-
-      }
-    );
-
-
-    return;
-
-  }
-
-
-  result.push(
-    element
-  );
-
-
-  // ===================================================
-  // CHILDREN
-  // ===================================================
-
-  if (
-    Array.isArray(
-      node.children
-    ) &&
-    node.children.length >
-      0
-  ) {
-
-    const childLayout =
-      node.props?.layout ||
-      node.meta?.layout ||
-      "vertical";
-
-
-    layoutChildren(
-      node.children,
-      {
-
-        parentId:
-          element.id,
-
-        parentWidth:
-          element.width,
-
-        parentLayout:
-          childLayout,
-
-        result,
-
-      }
-    );
-
-  }
-
-}
-
-
-// =====================================================
 // FLATTEN TREE
 // =====================================================
 
@@ -1219,6 +1413,9 @@ function flattenTree(
 
       fallbackY:
         DEFAULT_START_Y,
+
+      layoutManaged:
+        false,
 
       result,
 
@@ -1296,13 +1493,16 @@ function validateHierarchy(
 
           circular.push(
             {
+
               id:
                 element.id,
 
               parentId:
                 current.parentId,
+
             }
           );
+
 
           break;
 
@@ -1361,8 +1561,11 @@ function validateHierarchy(
 
 
   return {
+
     orphaned,
+
     circular,
+
   };
 
 }
@@ -1424,6 +1627,10 @@ export function projectTreeToElements(
         height:
           element.height,
 
+        layout:
+          element.props?.layout ||
+          null,
+
       })
     )
   );
@@ -1439,5 +1646,7 @@ export function projectTreeToElements(
 // =====================================================
 
 export default {
+
   projectTreeToElements,
+
 };

@@ -56,6 +56,23 @@ function normaliseId(
 
 
 // =====================================================
+// NORMALISE ARRAY
+// =====================================================
+
+function normaliseArray(
+  value
+) {
+
+  return Array.isArray(
+    value
+  )
+    ? value
+    : [];
+
+}
+
+
+// =====================================================
 // CURRENT USER ID
 // =====================================================
 
@@ -123,6 +140,361 @@ function resolveCurrentUserId(
 
 
 // =====================================================
+// CHAT MESSAGE ID
+// =====================================================
+
+function resolveChatMessageId(
+  message
+) {
+
+  return (
+    normaliseId(
+      message?.messageId
+    ) ||
+
+    normaliseId(
+      message?.id
+    ) ||
+
+    normaliseId(
+      message?._id
+    )
+  );
+
+}
+
+
+// =====================================================
+// NORMALISE CHAT MESSAGE
+// =====================================================
+
+function normaliseChatMessage(
+  message,
+  fallbackConversationId = null
+) {
+
+  if (
+    !message ||
+    typeof message !==
+      "object"
+  ) {
+
+    return null;
+
+  }
+
+
+  const conversationId =
+    normaliseId(
+      message?.conversationId ||
+      fallbackConversationId
+    );
+
+
+  const messageId =
+    resolveChatMessageId(
+      message
+    );
+
+
+  return {
+
+    ...message,
+
+    conversationId,
+
+    messageId,
+
+    senderUserId:
+      normaliseId(
+        message?.senderUserId ||
+        message?.userId
+      ),
+
+  };
+
+}
+
+
+// =====================================================
+// MERGE CHAT MESSAGE
+// =====================================================
+//
+// Socket events can race with:
+//
+//   HTTP send response
+//   runtime state updates
+//   reconnects
+//
+// Therefore we deduplicate primarily by messageId.
+//
+// =====================================================
+
+function mergeChatMessage(
+  messages,
+  incomingMessage
+) {
+
+  const current =
+    normaliseArray(
+      messages
+    );
+
+
+  const message =
+    normaliseChatMessage(
+      incomingMessage
+    );
+
+
+  if (
+    !message
+  ) {
+
+    return current;
+
+  }
+
+
+  const incomingMessageId =
+    message.messageId;
+
+
+  if (
+    incomingMessageId
+  ) {
+
+    const existingIndex =
+      current.findIndex(
+        item =>
+          resolveChatMessageId(
+            item
+          ) ===
+          incomingMessageId
+      );
+
+
+    if (
+      existingIndex >= 0
+    ) {
+
+      const next =
+        [...current];
+
+
+      next[
+        existingIndex
+      ] = {
+
+        ...next[
+          existingIndex
+        ],
+
+        ...message,
+
+      };
+
+
+      return next;
+
+    }
+
+  }
+
+
+  return [
+
+    ...current,
+
+    message,
+
+  ];
+
+}
+
+
+// =====================================================
+// REMOVE CHAT MESSAGE
+// =====================================================
+
+function removeChatMessage(
+  messages,
+  messageId
+) {
+
+  const resolvedId =
+    normaliseId(
+      messageId
+    );
+
+
+  if (
+    !resolvedId
+  ) {
+
+    return normaliseArray(
+      messages
+    );
+
+  }
+
+
+  return normaliseArray(
+    messages
+  ).filter(
+    message =>
+      resolveChatMessageId(
+        message
+      ) !==
+      resolvedId
+  );
+
+}
+
+
+// =====================================================
+// UPDATE CHAT MESSAGE
+// =====================================================
+
+function updateChatMessage(
+  messages,
+  incomingMessage
+) {
+
+  const current =
+    normaliseArray(
+      messages
+    );
+
+
+  const message =
+    normaliseChatMessage(
+      incomingMessage
+    );
+
+
+  if (
+    !message
+  ) {
+
+    return current;
+
+  }
+
+
+  const messageId =
+    message.messageId;
+
+
+  if (
+    !messageId
+  ) {
+
+    return current;
+
+  }
+
+
+  return current.map(
+    item => {
+
+      const itemId =
+        resolveChatMessageId(
+          item
+        );
+
+
+      if (
+        itemId !==
+        messageId
+      ) {
+
+        return item;
+
+      }
+
+
+      return {
+
+        ...item,
+
+        ...message,
+
+      };
+
+    }
+  );
+
+}
+
+
+// =====================================================
+// TYPING USER MAP
+// =====================================================
+
+function updateTypingUser(
+  typingUsers,
+  userId,
+  isTyping
+) {
+
+  const id =
+    normaliseId(
+      userId
+    );
+
+
+  if (
+    !id
+  ) {
+
+    return {
+      ...(
+        typingUsers &&
+        typeof typingUsers ===
+          "object"
+          ? typingUsers
+          : {}
+      ),
+    };
+
+  }
+
+
+  const current = {
+
+    ...(
+      typingUsers &&
+      typeof typingUsers ===
+        "object"
+        ? typingUsers
+        : {}
+    ),
+
+  };
+
+
+  if (
+    isTyping
+  ) {
+
+    current[id] =
+      true;
+
+  }
+  else {
+
+    delete current[id];
+
+  }
+
+
+  return current;
+
+}
+
+
+// =====================================================
 // COMPONENT
 // =====================================================
 //
@@ -130,6 +502,7 @@ function resolveCurrentUserId(
 //
 //   Group Calls
 //   Remote Training
+//   Chat
 //
 // Responsibilities:
 //
@@ -137,6 +510,7 @@ function resolveCurrentUserId(
 //   - join appropriate realtime rooms
 //   - reconcile realtime events with runtime state
 //   - clean up Agora when server ends a session
+//   - maintain realtime Chat state
 //
 // NOT responsible for:
 //
@@ -144,6 +518,13 @@ function resolveCurrentUserId(
 //   - socket implementation
 //   - REST route implementation
 //   - Agora implementation
+//   - Chat message persistence
+//
+// IMPORTANT:
+//
+// The socket service remains the transport layer.
+//
+// REST/domain routes remain authoritative for persistence.
 //
 // =====================================================
 
@@ -267,67 +648,146 @@ export default function GroupCallSocketRuntime() {
   );
 
 
-// ===================================================
-// REFS
-// ===================================================
+  // ===================================================
+  // CHAT STATE
+  // ===================================================
 
-const mountedRef =
-  useRef(false);
-
-
-// ---------------------------------------------------
-// Group Call
-// ---------------------------------------------------
-
-const callIdRef =
-  useRef(callId);
-
-const callTypeRef =
-  useRef(callType);
-
-const callJoinedRef =
-  useRef(callJoined);
-
-
-// ---------------------------------------------------
-// Training
-// ---------------------------------------------------
-
-const trainingSessionIdRef =
-  useRef(trainingSessionId);
-
-const trainingJoinedRef =
-  useRef(trainingJoined);
+  const [
+    chatConversationId,
+    setChatConversationId,
+  ] =
+  useState(
+    () =>
+      normaliseId(
+        runtime.get?.(
+          "chat.conversationId"
+        ) ||
+        runtime.get?.(
+          "chat.id"
+        )
+      )
+  );
 
 
-// ---------------------------------------------------
-// Connection
-// ---------------------------------------------------
-
-const connectedRef =
-  useRef(false);
-
-
-// ---------------------------------------------------
-// Cleanup locks
-// ---------------------------------------------------
-
-const groupCallCleanupRunningRef =
-  useRef(false);
-
-const trainingCleanupRunningRef =
-  useRef(false);
+  const [
+    chatJoined,
+    setChatJoined,
+  ] =
+  useState(
+    () =>
+      runtime.get?.(
+        "chat.joined"
+      ) === true
+  );
 
 
-// ---------------------------------------------------
-// Invitation refresh locks
-// ---------------------------------------------------
+  // ===================================================
+  // CHAT MESSAGE STATE
+  // ===================================================
 
-const groupInvitationRefreshRef =
-  useRef(false);
+  const [
+    chatMessages,
+    setChatMessages,
+  ] =
+  useState(
+    () =>
+      normaliseArray(
+        runtime.get?.(
+          "chat.messages"
+        )
+      )
+  );
 
-const trainingInvitationRefreshRef =
-  useRef(false);
+
+  // ===================================================
+  // REFS
+  // ===================================================
+
+  const mountedRef =
+    useRef(false);
+
+
+  // ---------------------------------------------------
+  // Group Call
+  // ---------------------------------------------------
+
+  const callIdRef =
+    useRef(callId);
+
+  const callTypeRef =
+    useRef(callType);
+
+  const callJoinedRef =
+    useRef(callJoined);
+
+
+  // ---------------------------------------------------
+  // Training
+  // ---------------------------------------------------
+
+  const trainingSessionIdRef =
+    useRef(trainingSessionId);
+
+  const trainingJoinedRef =
+    useRef(trainingJoined);
+
+
+  // ---------------------------------------------------
+  // Chat
+  // ---------------------------------------------------
+
+  const chatConversationIdRef =
+    useRef(
+      chatConversationId
+    );
+
+  const chatJoinedRef =
+    useRef(
+      chatJoined
+    );
+
+
+  // ---------------------------------------------------
+  // Connection
+  // ---------------------------------------------------
+
+  const connectedRef =
+    useRef(false);
+
+
+  // ---------------------------------------------------
+  // Cleanup locks
+  // ---------------------------------------------------
+
+  const groupCallCleanupRunningRef =
+    useRef(false);
+
+  const trainingCleanupRunningRef =
+    useRef(false);
+
+  const chatCleanupRunningRef =
+    useRef(false);
+
+
+  // ---------------------------------------------------
+  // Invitation refresh locks
+  // ---------------------------------------------------
+
+  const groupInvitationRefreshRef =
+    useRef(false);
+
+  const trainingInvitationRefreshRef =
+    useRef(false);
+
+
+  // ---------------------------------------------------
+  // Refs for current chat state
+  // ---------------------------------------------------
+
+  const chatMessagesRef =
+    useRef(
+      chatMessages
+    );
 
 
   // ===================================================
@@ -354,6 +814,18 @@ const trainingInvitationRefreshRef =
     trainingJoined;
 
 
+  chatConversationIdRef.current =
+    chatConversationId;
+
+
+  chatJoinedRef.current =
+    chatJoined;
+
+
+  chatMessagesRef.current =
+    chatMessages;
+
+
   // ===================================================
   // RUNTIME SUBSCRIPTIONS
   // ===================================================
@@ -363,6 +835,10 @@ const trainingInvitationRefreshRef =
     mountedRef.current =
       true;
 
+
+    // =================================================
+    // INITIAL GROUP CALL STATE
+    // =================================================
 
     setCallId(
       normaliseId(
@@ -387,6 +863,10 @@ const trainingInvitationRefreshRef =
     );
 
 
+    // =================================================
+    // INITIAL TRAINING STATE
+    // =================================================
+
     setTrainingSessionId(
       normaliseId(
         runtime.get?.(
@@ -403,9 +883,41 @@ const trainingInvitationRefreshRef =
     );
 
 
-    // -------------------------------------------------
-    // Group Call ID
-    // -------------------------------------------------
+    // =================================================
+    // INITIAL CHAT STATE
+    // =================================================
+
+    setChatConversationId(
+      normaliseId(
+        runtime.get?.(
+          "chat.conversationId"
+        ) ||
+        runtime.get?.(
+          "chat.id"
+        )
+      )
+    );
+
+
+    setChatJoined(
+      runtime.get?.(
+        "chat.joined"
+      ) === true
+    );
+
+
+    setChatMessages(
+      normaliseArray(
+        runtime.get?.(
+          "chat.messages"
+        )
+      )
+    );
+
+
+    // =================================================
+    // GROUP CALL ID
+    // =================================================
 
     const unsubscribeCallId =
       runtime.subscribe?.(
@@ -430,9 +942,9 @@ const trainingInvitationRefreshRef =
       );
 
 
-    // -------------------------------------------------
-    // Call Type
-    // -------------------------------------------------
+    // =================================================
+    // CALL TYPE
+    // =================================================
 
     const unsubscribeCallType =
       runtime.subscribe?.(
@@ -459,9 +971,9 @@ const trainingInvitationRefreshRef =
       );
 
 
-    // -------------------------------------------------
-    // Call Joined
-    // -------------------------------------------------
+    // =================================================
+    // CALL JOINED
+    // =================================================
 
     const unsubscribeCallJoined =
       runtime.subscribe?.(
@@ -484,9 +996,9 @@ const trainingInvitationRefreshRef =
       );
 
 
-    // -------------------------------------------------
-    // Training Session
-    // -------------------------------------------------
+    // =================================================
+    // TRAINING SESSION
+    // =================================================
 
     const unsubscribeTrainingSessionId =
       runtime.subscribe?.(
@@ -511,9 +1023,9 @@ const trainingInvitationRefreshRef =
       );
 
 
-    // -------------------------------------------------
-    // Training Joined
-    // -------------------------------------------------
+    // =================================================
+    // TRAINING JOINED
+    // =================================================
 
     const unsubscribeTrainingJoined =
       runtime.subscribe?.(
@@ -536,6 +1048,121 @@ const trainingInvitationRefreshRef =
       );
 
 
+    // =================================================
+    // CHAT CONVERSATION ID
+    // =================================================
+
+    const unsubscribeChatConversationId =
+      runtime.subscribe?.(
+        "chat.conversationId",
+        value => {
+
+          const next =
+            normaliseId(
+              value
+            );
+
+
+          chatConversationIdRef.current =
+            next;
+
+
+          setChatConversationId(
+            next
+          );
+
+        }
+      );
+
+
+    // =================================================
+    // CHAT LEGACY ID FALLBACK
+    // =================================================
+
+    const unsubscribeChatId =
+      runtime.subscribe?.(
+        "chat.id",
+        value => {
+
+          const next =
+            normaliseId(
+              value
+            );
+
+
+          if (
+            chatConversationIdRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          chatConversationIdRef.current =
+            next;
+
+
+          setChatConversationId(
+            next
+          );
+
+        }
+      );
+
+
+    // =================================================
+    // CHAT JOINED
+    // =================================================
+
+    const unsubscribeChatJoined =
+      runtime.subscribe?.(
+        "chat.joined",
+        value => {
+
+          const next =
+            value === true;
+
+
+          chatJoinedRef.current =
+            next;
+
+
+          setChatJoined(
+            next
+          );
+
+        }
+      );
+
+
+    // =================================================
+    // CHAT MESSAGES
+    // =================================================
+
+    const unsubscribeChatMessages =
+      runtime.subscribe?.(
+        "chat.messages",
+        value => {
+
+          const next =
+            normaliseArray(
+              value
+            );
+
+
+          chatMessagesRef.current =
+            next;
+
+
+          setChatMessages(
+            next
+          );
+
+        }
+      );
+
+
     return () => {
 
       mountedRef.current =
@@ -551,6 +1178,14 @@ const trainingInvitationRefreshRef =
       unsubscribeTrainingSessionId?.();
 
       unsubscribeTrainingJoined?.();
+
+      unsubscribeChatConversationId?.();
+
+      unsubscribeChatId?.();
+
+      unsubscribeChatJoined?.();
+
+      unsubscribeChatMessages?.();
 
     };
 
@@ -675,6 +1310,30 @@ const trainingInvitationRefreshRef =
 
             groupCallSocket.joinTrainingSession(
               activeTrainingSessionId
+            );
+
+          }
+
+
+          // ---------------------------------------------
+          // CHAT
+          // ---------------------------------------------
+
+          const activeChatConversationId =
+            chatConversationIdRef.current;
+
+
+          const activeChatJoined =
+            chatJoinedRef.current;
+
+
+          if (
+            activeChatConversationId &&
+            activeChatJoined
+          ) {
+
+            groupCallSocket.joinChat(
+              activeChatConversationId
             );
 
           }
@@ -1124,6 +1783,1251 @@ const trainingInvitationRefreshRef =
 
 
   // ===================================================
+  // CHAT ROOM SYNC
+  // ===================================================
+  //
+  // Chat is independent of Agora/call lifecycle.
+  //
+  // A user may have a chat open without being in:
+  //
+  //   a Group Call
+  //   a Training Session
+  //
+  // ===================================================
+
+  useEffect(() => {
+
+    if (
+      !chatConversationId ||
+      !chatJoined
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      !groupCallSocket.isConnected()
+    ) {
+
+      return;
+
+    }
+
+
+    console.log(
+      "[GroupCallSocketRuntime] joining chat conversation",
+      {
+
+        conversationId:
+          chatConversationId,
+
+      }
+    );
+
+
+    groupCallSocket.joinChat(
+      chatConversationId
+    );
+
+  }, [
+    chatConversationId,
+    chatJoined,
+  ]);
+
+
+  // ===================================================
+  // CHAT JOINED
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "CHAT_JOINED",
+        payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const joinedConversationId =
+            normaliseId(
+              payload?.conversationId
+            );
+
+
+          const activeConversationId =
+            chatConversationIdRef.current;
+
+
+          if (
+            joinedConversationId &&
+            activeConversationId &&
+            joinedConversationId !==
+              activeConversationId
+          ) {
+
+            return;
+
+          }
+
+
+          console.log(
+            "[GroupCallSocketRuntime] CHAT_JOINED",
+            {
+
+              conversationId:
+                joinedConversationId,
+
+            }
+          );
+
+
+          chatJoinedRef.current =
+            true;
+
+
+          setChatJoined(
+            true
+          );
+
+
+          runtime.patch?.(
+            "chat",
+            {
+
+              conversationId:
+                joinedConversationId ||
+                activeConversationId,
+
+              joined:
+                true,
+
+              connected:
+                true,
+
+            }
+          );
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    runtime,
+  ]);
+
+
+  // ===================================================
+  // CHAT INVITATION
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "CHAT_INVITED",
+        payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const invitationUserId =
+            normaliseId(
+              payload?.userId
+            );
+
+
+          const invitationConversationId =
+            normaliseId(
+              payload?.conversationId
+            );
+
+
+          if (
+            !currentUserId
+          ) {
+
+            console.warn(
+              "[GroupCallSocketRuntime] chat invitation received without current user",
+              {
+                payload,
+              }
+            );
+
+
+            return;
+
+          }
+
+
+          if (
+            invitationUserId &&
+            invitationUserId !==
+              currentUserId
+          ) {
+
+            return;
+
+          }
+
+
+          console.log(
+            "[GroupCallSocketRuntime] CHAT_INVITED",
+            {
+
+              conversationId:
+                invitationConversationId,
+
+              userId:
+                invitationUserId,
+
+              invitedBy:
+                payload?.invitedBy,
+
+            }
+          );
+
+
+          const currentInvitations =
+            normaliseArray(
+              runtime.get?.(
+                "chat.invitations"
+              )
+            );
+
+
+          const invitationExists =
+            currentInvitations.some(
+              invitation =>
+                normaliseId(
+                  invitation?.conversationId
+                ) ===
+                invitationConversationId
+            );
+
+
+          if (
+            invitationExists
+          ) {
+
+            return;
+
+          }
+
+
+          runtime.set?.(
+            "chat.invitations",
+            [
+
+              ...currentInvitations,
+
+              {
+
+                ...payload,
+
+                conversationId:
+                  invitationConversationId,
+
+                projectId:
+                  normaliseId(
+                    payload?.projectId
+                  ),
+
+                invitedBy:
+                  normaliseId(
+                    payload?.invitedBy
+                  ),
+
+                receivedAt:
+                  new Date().toISOString(),
+
+                status:
+                  "invited",
+
+              },
+
+            ]
+          );
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    currentUserId,
+    runtime,
+  ]);
+
+
+  // ===================================================
+  // CHAT MESSAGE
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "CHAT_MESSAGE",
+        payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const eventConversationId =
+            normaliseId(
+              payload?.conversationId ||
+              payload?.message?.conversationId
+            );
+
+
+          const activeConversationId =
+            chatConversationIdRef.current;
+
+
+          if (
+            !activeConversationId ||
+            (
+              eventConversationId &&
+              eventConversationId !==
+                activeConversationId
+            )
+          ) {
+
+            return;
+
+          }
+
+
+          const incomingMessage =
+            normaliseChatMessage(
+              payload?.message ||
+              payload,
+              activeConversationId
+            );
+
+
+          if (
+            !incomingMessage
+          ) {
+
+            return;
+
+          }
+
+
+          const mergedMessages =
+            mergeChatMessage(
+              chatMessagesRef.current,
+              incomingMessage
+            );
+
+
+          chatMessagesRef.current =
+            mergedMessages;
+
+
+          setChatMessages(
+            mergedMessages
+          );
+
+
+          runtime.set?.(
+            "chat.messages",
+            mergedMessages
+          );
+
+
+          console.log(
+            "[GroupCallSocketRuntime] CHAT_MESSAGE",
+            {
+
+              conversationId:
+                activeConversationId,
+
+              messageId:
+                incomingMessage.messageId,
+
+              senderUserId:
+                incomingMessage.senderUserId,
+
+            }
+          );
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    runtime,
+  ]);
+
+
+  // ===================================================
+  // CHAT MESSAGE UPDATED
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "CHAT_MESSAGE_UPDATED",
+        payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const eventConversationId =
+            normaliseId(
+              payload?.conversationId ||
+              payload?.message?.conversationId
+            );
+
+
+          const activeConversationId =
+            chatConversationIdRef.current;
+
+
+          if (
+            !activeConversationId ||
+            (
+              eventConversationId &&
+              eventConversationId !==
+                activeConversationId
+            )
+          ) {
+
+            return;
+
+          }
+
+
+          const updatedMessage =
+            normaliseChatMessage(
+              payload?.message ||
+              payload,
+              activeConversationId
+            );
+
+
+          if (
+            !updatedMessage
+          ) {
+
+            return;
+
+          }
+
+
+          const updatedMessages =
+            updateChatMessage(
+              chatMessagesRef.current,
+              updatedMessage
+            );
+
+
+          chatMessagesRef.current =
+            updatedMessages;
+
+
+          setChatMessages(
+            updatedMessages
+          );
+
+
+          runtime.set?.(
+            "chat.messages",
+            updatedMessages
+          );
+
+
+          console.log(
+            "[GroupCallSocketRuntime] CHAT_MESSAGE_UPDATED",
+            {
+
+              conversationId:
+                activeConversationId,
+
+              messageId:
+                updatedMessage.messageId,
+
+            }
+          );
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    runtime,
+  ]);
+
+
+  // ===================================================
+  // CHAT MESSAGE DELETED
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "CHAT_MESSAGE_DELETED",
+        payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const eventConversationId =
+            normaliseId(
+              payload?.conversationId
+            );
+
+
+          const activeConversationId =
+            chatConversationIdRef.current;
+
+
+          if (
+            !activeConversationId ||
+            (
+              eventConversationId &&
+              eventConversationId !==
+                activeConversationId
+            )
+          ) {
+
+            return;
+
+          }
+
+
+          const messageId =
+            normaliseId(
+              payload?.messageId
+            );
+
+
+          if (
+            !messageId
+          ) {
+
+            return;
+
+          }
+
+
+          const updatedMessages =
+            chatMessagesRef.current.map(
+              message => {
+
+                const itemId =
+                  resolveChatMessageId(
+                    message
+                  );
+
+
+                if (
+                  itemId !==
+                  messageId
+                ) {
+
+                  return message;
+
+                }
+
+
+                return {
+
+                  ...message,
+
+                  deletedAt:
+                    payload?.deletedAt ||
+                    new Date().toISOString(),
+
+                  deleted:
+                    true,
+
+                  text:
+                    "",
+
+                };
+
+              }
+            );
+
+
+          chatMessagesRef.current =
+            updatedMessages;
+
+
+          setChatMessages(
+            updatedMessages
+          );
+
+
+          runtime.set?.(
+            "chat.messages",
+            updatedMessages
+          );
+
+
+          console.log(
+            "[GroupCallSocketRuntime] CHAT_MESSAGE_DELETED",
+            {
+
+              conversationId:
+                activeConversationId,
+
+              messageId,
+
+            }
+          );
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    runtime,
+  ]);
+
+
+  // ===================================================
+  // CHAT READ
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "CHAT_READ",
+        payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const eventConversationId =
+            normaliseId(
+              payload?.conversationId
+            );
+
+
+          const activeConversationId =
+            chatConversationIdRef.current;
+
+
+          if (
+            !activeConversationId ||
+            (
+              eventConversationId &&
+              eventConversationId !==
+                activeConversationId
+            )
+          ) {
+
+            return;
+
+          }
+
+
+          const userId =
+            normaliseId(
+              payload?.userId
+            );
+
+
+          if (
+            !userId
+          ) {
+
+            return;
+
+          }
+
+
+          const currentReadState =
+            runtime.get?.(
+              "chat.readBy"
+            );
+
+
+          const nextReadState = {
+
+            ...(
+              currentReadState &&
+              typeof currentReadState ===
+                "object"
+                ? currentReadState
+                : {}
+            ),
+
+            [userId]: {
+
+              lastMessageId:
+                normaliseId(
+                  payload?.lastMessageId
+                ),
+
+              readAt:
+                payload?.readAt ||
+                new Date().toISOString(),
+
+            },
+
+          };
+
+
+          runtime.set?.(
+            "chat.readBy",
+            nextReadState
+          );
+
+
+          console.log(
+            "[GroupCallSocketRuntime] CHAT_READ",
+            {
+
+              conversationId:
+                activeConversationId,
+
+              userId,
+
+              lastMessageId:
+                payload?.lastMessageId,
+
+            }
+          );
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    runtime,
+  ]);
+
+
+  // ===================================================
+  // CHAT TYPING
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "CHAT_TYPING",
+        payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const eventConversationId =
+            normaliseId(
+              payload?.conversationId
+            );
+
+
+          const activeConversationId =
+            chatConversationIdRef.current;
+
+
+          if (
+            !activeConversationId ||
+            (
+              eventConversationId &&
+              eventConversationId !==
+                activeConversationId
+            )
+          ) {
+
+            return;
+
+          }
+
+
+          const typingUserId =
+            normaliseId(
+              payload?.userId
+            );
+
+
+          if (
+            !typingUserId
+          ) {
+
+            return;
+
+          }
+
+
+          // ---------------------------------------------
+          // Do not display our own typing event.
+          // ---------------------------------------------
+
+          if (
+            currentUserId &&
+            typingUserId ===
+              currentUserId
+          ) {
+
+            return;
+
+          }
+
+
+          const currentTypingUsers =
+            runtime.get?.(
+              "chat.typingUsers"
+            ) || {};
+
+
+          const nextTypingUsers =
+            updateTypingUser(
+              currentTypingUsers,
+              typingUserId,
+              payload?.isTyping !== false
+            );
+
+
+          runtime.set?.(
+            "chat.typingUsers",
+            nextTypingUsers
+          );
+
+
+          console.log(
+            "[GroupCallSocketRuntime] CHAT_TYPING",
+            {
+
+              conversationId:
+                activeConversationId,
+
+              userId:
+                typingUserId,
+
+              isTyping:
+                payload?.isTyping !== false,
+
+            }
+          );
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    currentUserId,
+    runtime,
+  ]);
+
+
+  // ===================================================
+  // CHAT CONVERSATION CLOSED
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "CHAT_CONVERSATION_CLOSED",
+        payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const closedConversationId =
+            normaliseId(
+              payload?.conversationId
+            );
+
+
+          const activeConversationId =
+            chatConversationIdRef.current;
+
+
+          if (
+            !activeConversationId ||
+            (
+              closedConversationId &&
+              closedConversationId !==
+                activeConversationId
+            )
+          ) {
+
+            return;
+
+          }
+
+
+          if (
+            chatCleanupRunningRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          chatCleanupRunningRef.current =
+            true;
+
+
+          try {
+
+            console.log(
+              "[GroupCallSocketRuntime] CHAT_CONVERSATION_CLOSED",
+              {
+
+                conversationId:
+                  closedConversationId ||
+                  activeConversationId,
+
+                closedBy:
+                  payload?.closedBy,
+
+              }
+            );
+
+
+            groupCallSocket.leaveChat(
+              closedConversationId ||
+              activeConversationId
+            );
+
+
+            runtime.patch?.(
+              "chat",
+              {
+
+                conversationId:
+                  null,
+
+                id:
+                  null,
+
+                joined:
+                  false,
+
+                connected:
+                  false,
+
+                status:
+                  "closed",
+
+                messages:
+                  [],
+
+                typingUsers:
+                  {},
+
+              }
+            );
+
+
+            chatConversationIdRef.current =
+              null;
+
+
+            chatJoinedRef.current =
+              false;
+
+
+            chatMessagesRef.current =
+              [];
+
+
+            setChatConversationId(
+              null
+            );
+
+
+            setChatJoined(
+              false
+            );
+
+
+            setChatMessages(
+              []
+            );
+
+          }
+          catch (error) {
+
+            console.error(
+              "[GroupCallSocketRuntime] chat close cleanup failed",
+              error
+            );
+
+          }
+          finally {
+
+            chatCleanupRunningRef.current =
+              false;
+
+          }
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    runtime,
+  ]);
+
+
+  // ===================================================
+  // CHAT PARTICIPANT LEFT
+  // ===================================================
+
+  useEffect(() => {
+
+    const unsubscribe =
+      groupCallSocket.on(
+        "CHAT_PARTICIPANT_LEFT",
+        payload => {
+
+          if (
+            !mountedRef.current
+          ) {
+
+            return;
+
+          }
+
+
+          const eventConversationId =
+            normaliseId(
+              payload?.conversationId
+            );
+
+
+          const activeConversationId =
+            chatConversationIdRef.current;
+
+
+          if (
+            !activeConversationId ||
+            (
+              eventConversationId &&
+              eventConversationId !==
+                activeConversationId
+            )
+          ) {
+
+            return;
+
+          }
+
+
+          const userId =
+            normaliseId(
+              payload?.userId
+            );
+
+
+          if (
+            !userId
+          ) {
+
+            return;
+
+          }
+
+
+          const currentParticipants =
+            normaliseArray(
+              runtime.get?.(
+                "chat.participants"
+              )
+            );
+
+
+          const nextParticipants =
+            currentParticipants.map(
+              participant => {
+
+                const participantId =
+                  normaliseId(
+                    participant?.userId ||
+                    participant?.id ||
+                    participant?._id
+                  );
+
+
+                if (
+                  participantId !==
+                  userId
+                ) {
+
+                  return participant;
+
+                }
+
+
+                return {
+
+                  ...participant,
+
+                  status:
+                    "left",
+
+                  leftAt:
+                    payload?.leftAt ||
+                    new Date().toISOString(),
+
+                };
+
+              }
+            );
+
+
+          runtime.set?.(
+            "chat.participants",
+            nextParticipants
+          );
+
+
+          const currentTypingUsers =
+            runtime.get?.(
+              "chat.typingUsers"
+            ) || {};
+
+
+          runtime.set?.(
+            "chat.typingUsers",
+            updateTypingUser(
+              currentTypingUsers,
+              userId,
+              false
+            )
+          );
+
+
+          console.log(
+            "[GroupCallSocketRuntime] CHAT_PARTICIPANT_LEFT",
+            {
+
+              conversationId:
+                activeConversationId,
+
+              userId,
+
+            }
+          );
+
+        }
+      );
+
+
+    return () => {
+
+      unsubscribe?.();
+
+    };
+
+  }, [
+    runtime,
+  ]);
+
+
+  // ===================================================
   // GROUP CALL ENDED
   // ===================================================
 
@@ -1312,13 +3216,6 @@ const trainingInvitationRefreshRef =
           );
 
 
-          // ------------------------------------------------
-          // We don't automatically join.
-          //
-          // fetchPendingSessions will replace the invitation
-          // state with the now-active session.
-          // ------------------------------------------------
-
           try {
 
             await runAction(
@@ -1379,14 +3276,6 @@ const trainingInvitationRefreshRef =
           const activeSessionId =
             trainingSessionIdRef.current;
 
-
-          // ------------------------------------------------
-          // Strict session matching.
-          //
-          // If we don't have a current session, ignore the
-          // event rather than accidentally tearing down
-          // unrelated Agora media.
-          // ------------------------------------------------
 
           if (
             !activeSessionId ||
@@ -1557,10 +3446,6 @@ const trainingInvitationRefreshRef =
               }
             );
 
-
-            // =========================================
-            // UPDATE LOCAL REFS
-            // =========================================
 
             trainingSessionIdRef.current =
               null;
@@ -1742,6 +3627,13 @@ const trainingInvitationRefreshRef =
       trainingSessionId,
 
       trainingJoined,
+
+      chatConversationId,
+
+      chatJoined,
+
+      chatMessageCount:
+        chatMessages.length,
 
       connected:
         groupCallSocket.isConnected(),

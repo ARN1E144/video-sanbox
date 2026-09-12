@@ -96,6 +96,9 @@ import groupCallRoutes
 import complianceRoutes
   from "./routes/complianceRoutes.js";
 
+import chatRoutes
+  from "./routes/chatRoutes.js";
+
 
 // =====================================================
 // DATABASE
@@ -324,6 +327,11 @@ app.use(
 app.use(
   "/api/compliance",
   complianceRoutes
+);
+
+app.use(
+  "/api/chat",
+  chatRoutes
 );
 
 

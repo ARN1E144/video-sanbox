@@ -22,19 +22,24 @@ import ConfosRegistry
 import ConfoRuntimeTriggers
   from "../runtime/confos/ConfoRuntimeTriggers";
 
+
 // =====================================================
 // AVAILABLE CONFOS
 // =====================================================
 //
-// These are the Confos currently exposed through the
-// development installer.
+// Keep this list aligned with ConfosRegistry.
 //
-// Keep this list aligned with ConfosRegistry while the
-// development/test environment is being used.
+// Chat is now exposed as a first-class Confo so it can
+// be installed into a project and tested through the same
+// runtime/install pipeline as the other showcase Confos.
 //
 // =====================================================
 
 const AVAILABLE_CONFOS = [
+
+  // ===================================================
+  // VIDEO CALLS
+  // ===================================================
 
   {
     id:
@@ -44,7 +49,6 @@ const AVAILABLE_CONFOS = [
       "1-to-1 Video Call",
   },
 
-
   {
     id:
       "confo.one_to_many",
@@ -53,7 +57,6 @@ const AVAILABLE_CONFOS = [
       "1-to-Many Video Call",
   },
 
-
   {
     id:
       "confo.host_to_many",
@@ -61,7 +64,6 @@ const AVAILABLE_CONFOS = [
     name:
       "Host-to-Many Video Call",
   },
-
 
   {
     id:
@@ -72,6 +74,23 @@ const AVAILABLE_CONFOS = [
   },
 
 
+  // ===================================================
+  // COMMUNICATION
+  // ===================================================
+
+  {
+    id:
+      "confo.chat_test",
+
+    name:
+      "Chat",
+  },
+
+
+  // ===================================================
+  // TRAINING
+  // ===================================================
+
   {
     id:
       "confo.remote_training",
@@ -81,6 +100,10 @@ const AVAILABLE_CONFOS = [
   },
 
 
+  // ===================================================
+  // AI
+  // ===================================================
+
   {
     id:
       "confo.ai_video_interviewer",
@@ -89,7 +112,12 @@ const AVAILABLE_CONFOS = [
       "AI Video Interviewer",
   },
 
-    {
+
+  // ===================================================
+  // COMPLIANCE
+  // ===================================================
+
+  {
     id:
       "confo.compliance",
 
@@ -98,7 +126,6 @@ const AVAILABLE_CONFOS = [
   },
 
 ];
-
 
 
 // =====================================================
@@ -180,6 +207,10 @@ function inspectTree(
 
 }
 
+
+// =====================================================
+// FIND NODE BY SOURCE ID
+// =====================================================
 
 function findNodeBySourceId(
   node,
@@ -284,9 +315,13 @@ export default function ConfoTest() {
     useProjectContext();
 
 
-
   // ===================================================
   // SELECTED CONFO
+  // ===================================================
+  //
+  // Chat is selected by default so the new Confo can
+  // immediately be installed and tested.
+  //
   // ===================================================
 
   const [
@@ -294,7 +329,7 @@ export default function ConfoTest() {
     setSelected,
   ] =
     useState(
-      "confo.remote_training"
+      "confo.chat_test"
     );
 
 
@@ -345,211 +380,214 @@ export default function ConfoTest() {
       null
     );
 
-    
-
 
   // ===================================================
   // CURRENT PROJECT
   // ===================================================
 
   const currentProject =
-    projects?.find(
-      project =>
-        String(
-          project?._id
-        ) ===
-        String(
-          activeProject
+    Array.isArray(
+      projects
+    )
+      ? (
+          projects.find(
+            project =>
+              String(
+                project?._id
+              ) ===
+              String(
+                activeProject
+              )
+          ) ||
+          null
         )
-    ) ||
-    null;
+      : null;
 
 
   // ===================================================
   // LOAD SELECTED CONFO
   // ===================================================
 
-    useEffect(
-      () => {
+  useEffect(
+    () => {
 
-        let cancelled =
-          false;
+      let cancelled =
+        false;
 
 
-        const loadConfo =
-          () => {
+      const loadConfo =
+        () => {
 
-            try {
+          try {
 
-              console.log(
-                "=============================================="
-              );
+            console.log(
+              "=============================================="
+            );
 
-              console.log(
-                "[ConfoTest] Loading",
+            console.log(
+              "[ConfoTest] Loading",
+              selected
+            );
+
+            console.log(
+              "=============================================="
+            );
+
+
+            setErrors([]);
+
+            setInstallResult(
+              null
+            );
+
+            setConfo(
+              null
+            );
+
+
+            // =========================================
+            // REGISTRY LOOKUP
+            // =========================================
+
+            const config =
+              ConfosRegistry[
                 selected
+              ];
+
+
+            if (
+              !config
+            ) {
+
+              throw new Error(
+                `Confo '${selected}' not found in ConfosRegistry.`
               );
 
-              console.log(
-                "=============================================="
-              );
+            }
 
 
-              setErrors([]);
-
-              setInstallResult(
-                null
-              );
-
-
-              setConfo(
-                null
-              );
+            console.log(
+              "[ConfoTest] Registry config",
+              config
+            );
 
 
-              // =========================================
-              // REGISTRY LOOKUP
-              // =========================================
+            // =========================================
+            // LOAD / VALIDATE
+            // =========================================
 
-              const config =
-                ConfosRegistry[
-                  selected
-                ];
+            const loader =
+              new ConfoLoader();
 
 
-              if (
-                !config
-              ) {
-
-                throw new Error(
-                  `Confo '${selected}' not found in ConfosRegistry.`
-                );
-
-              }
-
-
-              console.log(
-                "[ConfoTest] Registry config",
+            const result =
+              loader.load(
                 config
               );
 
 
-              // =========================================
-              // LOAD / VALIDATE
-              // =========================================
-
-              const loader =
-                new ConfoLoader();
+            console.log(
+              "[ConfoTest] LOAD RESULT",
+              result
+            );
 
 
-              const result =
-                loader.load(
-                  config
-                );
-
-
-              console.log(
-                "[ConfoTest] LOAD RESULT",
-                result
-              );
-
-
-              if (
-                !result?.valid
-              ) {
-
-                const validationErrors =
-                  result?.errors || [
-                    "Unknown Confo validation error.",
-                  ];
-
-
-                throw new Error(
-                  validationErrors.join(
-                    "\n"
-                  )
-                );
-
-              }
-
-
-              if (
-                cancelled
-              ) {
-
-                return;
-
-              }
-
-
-              setConfo(
-                result.confo
-              );
-
-
-              console.log(
-                "[ConfoTest] Confo ready",
-                {
-
-                  id:
-                    result.confo?.id,
-
-                  name:
-                    result.confo?.name,
-
-                }
-              );
-
-            }
-            catch (
-              error
+            if (
+              !result?.valid
             ) {
 
-              console.error(
-                "[ConfoTest] Load failed",
-                error
+              const validationErrors =
+                result?.errors || [
+                  "Unknown Confo validation error.",
+                ];
+
+
+              throw new Error(
+                validationErrors.join(
+                  "\n"
+                )
               );
-
-
-              if (
-                cancelled
-              ) {
-
-                return;
-
-              }
-
-
-              setConfo(
-                null
-              );
-
-
-              setErrors([
-                error?.message ||
-                "Failed to load Confo.",
-              ]);
 
             }
 
-          };
+
+            if (
+              cancelled
+            ) {
+
+              return;
+
+            }
 
 
-        loadConfo();
+            setConfo(
+              result.confo
+            );
 
 
-        return () => {
+            console.log(
+              "[ConfoTest] Confo ready",
+              {
 
-          cancelled =
-            true;
+                id:
+                  result.confo?.id,
+
+                name:
+                  result.confo?.name,
+
+              }
+            );
+
+          }
+          catch (
+            error
+          ) {
+
+            console.error(
+              "[ConfoTest] Load failed",
+              error
+            );
+
+
+            if (
+              cancelled
+            ) {
+
+              return;
+
+            }
+
+
+            setConfo(
+              null
+            );
+
+
+            setErrors([
+              error?.message ||
+              "Failed to load Confo.",
+            ]);
+
+          }
 
         };
 
-      },
-      [
-        selected,
-      ]
-    );
+
+      loadConfo();
+
+
+      return () => {
+
+        cancelled =
+          true;
+
+      };
+
+    },
+    [
+      selected,
+    ]
+  );
 
 
   // ===================================================
@@ -762,6 +800,24 @@ export default function ConfoTest() {
 
 
         // =================================================
+        // CHAT DIAGNOSTICS
+        // =================================================
+
+        const chatNodes =
+          diagnostics.filter(
+            item =>
+              item.type ===
+              "ChatPanel"
+          );
+
+
+        console.log(
+          "[ConfoTest] CHAT NODES",
+          chatNodes
+        );
+
+
+        // =================================================
         // EXISTING VIDEO DIAGNOSTIC
         // =================================================
 
@@ -878,6 +934,9 @@ export default function ConfoTest() {
           mediaNodeCount:
             mediaNodes.length,
 
+          chatNodeCount:
+            chatNodes.length,
+
           videoFeedFound:
             !!interviewVideo,
 
@@ -907,6 +966,9 @@ export default function ConfoTest() {
 
             mediaNodeCount:
               mediaNodes.length,
+
+            chatNodeCount:
+              chatNodes.length,
 
             videoFeedFound:
               !!interviewVideo,
@@ -985,11 +1047,16 @@ export default function ConfoTest() {
       }}
     >
 
-      {confo && (
-        <ConfoRuntimeTriggers
-          confo={confo}
-        />
-      )}
+      {
+        confo && (
+          <ConfoRuntimeTriggers
+            confo={
+              confo
+            }
+          />
+        )
+      }
+
 
       <h2>
         Confo Project Installer
@@ -1010,7 +1077,6 @@ export default function ConfoTest() {
         into the current project.
 
       </p>
-      
 
 
       {/* =================================================
@@ -1098,12 +1164,14 @@ export default function ConfoTest() {
         value={
           selected
         }
+
         onChange={
-          e =>
+          event =>
             setSelected(
-              e.target.value
+              event.target.value
             )
         }
+
         style={{
 
           marginBottom:
@@ -1126,6 +1194,7 @@ export default function ConfoTest() {
                 key={
                   item.id
                 }
+
                 value={
                   item.id
                 }
@@ -1148,163 +1217,168 @@ export default function ConfoTest() {
           CONFO INFO
       ================================================= */}
 
-      {confo && (
-
-        <div
-          style={{
-
-            background:
-              "#202020",
-
-            border:
-              "1px solid #333",
-
-            padding:
-              15,
-
-            borderRadius:
-              8,
-
-            marginBottom:
-              20,
-
-          }}
-        >
+      {
+        confo && (
 
           <div
             style={{
-
-              fontSize:
-                18,
-
-              fontWeight:
-                600,
-
-              marginBottom:
-                6,
-
-            }}
-          >
-
-            {
-              confo.name
-            }
-
-          </div>
-
-
-          <div
-            style={{
-
-              color:
-                "#aaa",
-
-              marginBottom:
-                12,
-
-            }}
-          >
-
-            {
-              confo.description ||
-              "No description provided."
-            }
-
-          </div>
-
-
-          <div
-            style={{
-
-              fontSize:
-                12,
-
-              color:
-                "#777",
-
-              marginBottom:
-                12,
-
-            }}
-          >
-
-            Confo ID:
-            {" "}
-
-            {
-              confo.id
-            }
-
-            <br />
-
-            Version:
-            {" "}
-
-            {
-              confo.version ||
-              1
-            }
-
-          </div>
-
-
-          <button
-            type="button"
-            onClick={
-              handleInstall
-            }
-            disabled={
-              installing ||
-              !activeProject ||
-              !currentProject
-            }
-            style={{
-
-              padding:
-                "10px 16px",
-
-              borderRadius:
-                6,
-
-              border:
-                "none",
 
               background:
-                installing ||
-                !activeProject ||
-                !currentProject
-                  ? "#555"
-                  : "#2563eb",
+                "#202020",
 
-              color:
-                "#fff",
+              border:
+                "1px solid #333",
 
-              cursor:
-                installing ||
-                !activeProject ||
-                !currentProject
-                  ? "default"
-                  : "pointer",
+              padding:
+                15,
 
-              fontWeight:
-                600,
+              borderRadius:
+                8,
+
+              marginBottom:
+                20,
 
             }}
           >
 
-            {
-              installing
-                ? "Installing..."
-                : !activeProject
-                  ? "Select a Project First"
-                  : "Install Confo"
-            }
+            <div
+              style={{
 
-          </button>
+                fontSize:
+                  18,
 
-        </div>
+                fontWeight:
+                  600,
 
-      )}
+                marginBottom:
+                  6,
+
+              }}
+            >
+
+              {
+                confo.name
+              }
+
+            </div>
+
+
+            <div
+              style={{
+
+                color:
+                  "#aaa",
+
+                marginBottom:
+                  12,
+
+              }}
+            >
+
+              {
+                confo.description ||
+                "No description provided."
+              }
+
+            </div>
+
+
+            <div
+              style={{
+
+                fontSize:
+                  12,
+
+                color:
+                  "#777",
+
+                marginBottom:
+                  12,
+
+              }}
+            >
+
+              Confo ID:
+              {" "}
+
+              {
+                confo.id
+              }
+
+              <br />
+
+              Version:
+              {" "}
+
+              {
+                confo.version ||
+                1
+              }
+
+            </div>
+
+
+            <button
+              type="button"
+
+              onClick={
+                handleInstall
+              }
+
+              disabled={
+                installing ||
+                !activeProject ||
+                !currentProject
+              }
+
+              style={{
+
+                padding:
+                  "10px 16px",
+
+                borderRadius:
+                  6,
+
+                border:
+                  "none",
+
+                background:
+                  installing ||
+                  !activeProject ||
+                  !currentProject
+                    ? "#555"
+                    : "#2563eb",
+
+                color:
+                  "#fff",
+
+                cursor:
+                  installing ||
+                  !activeProject ||
+                  !currentProject
+                    ? "default"
+                    : "pointer",
+
+                fontWeight:
+                  600,
+
+              }}
+            >
+
+              {
+                installing
+                  ? "Installing..."
+                  : !activeProject
+                    ? "Select a Project First"
+                    : "Install Confo"
+              }
+
+            </button>
+
+          </div>
+
+        )
+      }
 
 
       {/* =================================================
@@ -1470,6 +1544,14 @@ export default function ConfoTest() {
 
               <br />
 
+              Chat nodes:
+              {" "}
+              {
+                installResult.chatNodeCount
+              }
+
+              <br />
+
               VideoFeed found:
               {" "}
               {
@@ -1565,7 +1647,6 @@ export default function ConfoTest() {
         </pre>
 
       </details>
-
 
     </div>
 
