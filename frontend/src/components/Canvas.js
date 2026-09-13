@@ -295,6 +295,12 @@ const DEFAULT_PROPS_BY_TYPE = {
   ControlPanel: {
     layout: "horizontal",
     position: "bottom",
+    justify: "stretch",
+    align: "center",
+    gap: 8,
+    padding: 8,
+    wrap: false,
+    childSizing: "equal",
     controls: [],
   },
 
@@ -2662,25 +2668,37 @@ const nestedChildren =
       </div>
 
 
-      {/* =================================================
-          IMPORTANT
+            {/* =================================================
+                RECURSIVE CHILD RENDERING
+            =================================================
 
-          Non-parent components may still have Canvas
-          children rendered recursively here.
+                Parent components such as Container and
+                ControlPanel already receive their children
+                through CanvasElementRenderer:
 
-          Container and ControlPanel are excluded because
-          their children have already been passed into the
-          component through `children`.
-      ================================================= */}
+                    CanvasElementRenderer
+                        ↓
+                    Component
+                        ↓
+                    children
 
-      {renderChildren(
-        child.id,
-        new Set()
-      )}
+                Therefore they MUST NOT also render their
+                children again here.
 
-    </div>
-  );
-};
+                Non-parent components can still have nested
+                Canvas children, so those continue to be
+                rendered recursively here.
+            ================================================= */}
+
+            {!isParentComponent &&
+              renderChildren(
+                child.id,
+                new Set()
+              )}
+
+          </div>
+        );
+      };
 
 
 
@@ -2758,6 +2776,23 @@ const nestedChildren =
     // =================================================
     // CONTROL PANEL
     // =================================================
+    //
+    // ControlPanel is a deterministic flex layout.
+    //
+    // The panel itself owns:
+    //   - direction
+    //   - gap
+    //   - padding
+    //   - justification
+    //   - alignment
+    //   - wrapping
+    //   - child sizing
+    //
+    // Geometry remains owned by Canvas.
+    // The layout system determines how children
+    // are arranged inside the panel.
+    //
+    // =================================================
 
     if (
       parent?.type ===
@@ -2776,34 +2811,194 @@ const nestedChildren =
             )
         );
 
+      const layout =
+        String(
+          getLayoutValue(
+            parent,
+            "layout",
+            "horizontal"
+          )
+        )
+          .toLowerCase()
+          .trim();
+
+      const isHorizontal =
+        layout !== "vertical";
+
+      const justify =
+        getLayoutValue(
+          parent,
+          "justify",
+          "stretch"
+        );
+
+      const align =
+        getLayoutValue(
+          parent,
+          "align",
+          "center"
+        );
+
+      const gap =
+        Number(
+          getLayoutValue(
+            parent,
+            "gap",
+            8
+          )
+        ) || 0;
+
+      const padding =
+        Number(
+          getLayoutValue(
+            parent,
+            "padding",
+            8
+          )
+        ) || 0;
+
+      const wrap =
+        getLayoutValue(
+          parent,
+          "wrap",
+          false
+        );
+
+      const childSizing =
+        String(
+          getLayoutValue(
+            parent,
+            "childSizing",
+            "equal"
+          )
+        )
+          .toLowerCase()
+          .trim();
+
+      const flexDirection =
+        isHorizontal
+          ? "row"
+          : "column";
+
+      const resolvedJustify =
+        justify === "stretch"
+          ? "flex-start"
+          : justify;
+
+      const resolvedAlign =
+        align === "stretch"
+          ? "stretch"
+          : align;
+
       return (
-        <React.Fragment>
+        <div
+          style={{
+            position:
+              "relative",
+
+            width:
+              "100%",
+
+            height:
+              "100%",
+
+            minWidth:
+              0,
+
+            minHeight:
+              0,
+
+            display:
+              "flex",
+
+            flexDirection,
+
+            justifyContent:
+              resolvedJustify,
+
+            alignItems:
+              resolvedAlign,
+
+            flexWrap:
+              wrap
+                ? "wrap"
+                : "nowrap",
+
+            gap,
+
+            padding,
+
+            boxSizing:
+              "border-box",
+
+            overflow:
+              "hidden",
+
+            minInlineSize:
+              0,
+
+            minBlockSize:
+              0,
+          }}
+        >
           {panelChildren.map(
-            (child) =>
-              renderChildComponent(
+            (child) => {
+              const equalSizing =
+                childSizing ===
+                "equal";
+
+              return renderChildComponent(
                 child,
                 {
                   position:
                     "relative",
 
                   width:
-                    "100%",
+                    equalSizing
+                      ? 0
+                      : "auto",
 
                   height:
-                    "auto",
+                    isHorizontal
+                      ? "100%"
+                      : "auto",
 
-                  minWidth: 0,
-                  minHeight: 0,
+                  minWidth:
+                    0,
+
+                  minHeight:
+                    0,
 
                   flex:
-                    "1 1 0",
+                    equalSizing
+                      ? "1 1 0"
+                      : "0 1 auto",
+
+                  boxSizing:
+                    "border-box",
 
                   overflow:
-                    "visible",
+                    "hidden",
+
+                  flexShrink:
+                    equalSizing
+                      ? 1
+                      : 1,
+
+                  maxWidth:
+                    isHorizontal
+                      ? "100%"
+                      : undefined,
+
+                  maxHeight:
+                    !isHorizontal
+                      ? "100%"
+                      : undefined,
                 }
-              )
+              );
+            }
           )}
-        </React.Fragment>
+        </div>
       );
     }
 
