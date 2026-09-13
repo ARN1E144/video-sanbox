@@ -14,7 +14,7 @@ import {
   useProjectContext,
 } from "./ProjectContext";
 
-import registry from "../components/elements/registry";
+import registry from "../actions/componentRegistry";
 
 import {
   projectTreeToElements,

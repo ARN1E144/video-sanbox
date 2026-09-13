@@ -347,6 +347,550 @@ const sanitizeProps = (
 };
 
 // =====================================================
+// CANONICAL TEMPLATE EXPORT
+// =====================================================
+//
+// Canvas is the visual authoring surface.
+//
+// The persisted Canvas elements contain the geometry
+// chosen by the human:
+//
+//   x
+//   y
+//   width
+//   height
+//   parentId
+//
+// Template export converts that Canvas representation
+// back into the canonical hierarchical tree.
+//
+// IMPORTANT:
+//
+// A canonical Confo template must have ONE REAL ROOT.
+//
+// Canvas must NOT invent a synthetic `template-root`.
+//
+// If multiple top-level elements exist, the export is
+// rejected so the template can be corrected explicitly.
+//
+// This keeps:
+//
+//   Template → Canvas → Template
+//
+// structurally deterministic.
+//
+// =====================================================
+
+const buildCanonicalTemplateTree = (
+  canvasElements = []
+) => {
+  if (!Array.isArray(canvasElements)) {
+    console.error(
+      "[CANVAS TEMPLATE EXPORT] Canvas elements must be an array"
+    );
+
+    return null;
+  }
+
+  if (!canvasElements.length) {
+    console.error(
+      "[CANVAS TEMPLATE EXPORT] No Canvas elements available"
+    );
+
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // Normalise Canvas elements
+  // ---------------------------------------------------
+
+  const normalisedElements =
+    canvasElements
+      .map((element) => {
+        const id =
+          normaliseElementId(
+            element?.id
+          );
+
+        if (!id) {
+          return null;
+        }
+
+        return {
+          ...element,
+
+          id,
+
+          parentId:
+            normaliseElementId(
+              element?.parentId
+            ),
+
+          x:
+            Number.isFinite(
+              Number(element?.x)
+            )
+              ? Number(element.x)
+              : 0,
+
+          y:
+            Number.isFinite(
+              Number(element?.y)
+            )
+              ? Number(element.y)
+              : 0,
+
+          width:
+            Number.isFinite(
+              Number(element?.width)
+            )
+              ? Math.max(
+                  1,
+                  Number(element.width)
+                )
+              : 300,
+
+          height:
+            Number.isFinite(
+              Number(element?.height)
+            )
+              ? Math.max(
+                  1,
+                  Number(element.height)
+                )
+              : 150,
+
+          props:
+            element?.props &&
+            typeof element.props ===
+              "object"
+              ? {
+                  ...element.props,
+                }
+              : {},
+
+          meta:
+            element?.meta &&
+            typeof element.meta ===
+              "object"
+              ? {
+                  ...element.meta,
+                }
+              : undefined,
+        };
+      })
+      .filter(Boolean);
+
+  if (
+    !normalisedElements.length
+  ) {
+    console.error(
+      "[CANVAS TEMPLATE EXPORT] No valid Canvas elements found"
+    );
+
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // Duplicate protection
+  // ---------------------------------------------------
+
+  const seenIds =
+    new Set();
+
+  const duplicateIds =
+    [];
+
+  normalisedElements.forEach(
+    (element) => {
+      if (
+        seenIds.has(
+          element.id
+        )
+      ) {
+        duplicateIds.push(
+          element.id
+        );
+
+        return;
+      }
+
+      seenIds.add(
+        element.id
+      );
+    }
+  );
+
+  if (
+    duplicateIds.length
+  ) {
+    console.error(
+      "[CANVAS TEMPLATE EXPORT] Duplicate IDs detected",
+      duplicateIds
+    );
+
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // Element map
+  // ---------------------------------------------------
+
+  const elementMap =
+    new Map();
+
+  normalisedElements.forEach(
+    (element) => {
+      elementMap.set(
+        element.id,
+        element
+      );
+    }
+  );
+
+  // ---------------------------------------------------
+  // Parent validation
+  // ---------------------------------------------------
+  //
+  // Every parentId must refer to an actual Canvas element.
+  //
+  // We deliberately do NOT silently convert an orphan into
+  // a root during template export.
+  //
+  // Orphaned hierarchy is a Canvas/template integrity issue
+  // and should be corrected before creating a master template.
+  //
+  // ---------------------------------------------------
+
+  const orphanedElements =
+    normalisedElements.filter(
+      (element) => {
+        if (
+          !element.parentId
+        ) {
+          return false;
+        }
+
+        return !elementMap.has(
+          element.parentId
+        );
+      }
+    );
+
+  if (
+    orphanedElements.length
+  ) {
+    console.error(
+      "[CANVAS TEMPLATE EXPORT] Orphaned elements detected",
+      orphanedElements.map(
+        (element) => ({
+          id:
+            element.id,
+          type:
+            element.type,
+          parentId:
+            element.parentId,
+        })
+      )
+    );
+
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // Circular hierarchy protection
+  // ---------------------------------------------------
+
+  const hasCircularParent =
+    (element) => {
+      const visited =
+        new Set();
+
+      let parentId =
+        element.parentId;
+
+      while (parentId) {
+        if (
+          visited.has(
+            parentId
+          )
+        ) {
+          return true;
+        }
+
+        visited.add(
+          parentId
+        );
+
+        const parent =
+          elementMap.get(
+            parentId
+          );
+
+        if (!parent) {
+          return false;
+        }
+
+        parentId =
+          parent.parentId;
+      }
+
+      return false;
+    };
+
+  const circularElements =
+    normalisedElements.filter(
+      hasCircularParent
+    );
+
+  if (
+    circularElements.length
+  ) {
+    console.error(
+      "[CANVAS TEMPLATE EXPORT] Circular hierarchy detected",
+      circularElements.map(
+        (element) =>
+          element.id
+      )
+    );
+
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // Build canonical node
+  // ---------------------------------------------------
+
+  const buildNode =
+    (element) => {
+      const node = {
+        id:
+          element.id,
+
+        type:
+          element.type,
+
+        role:
+          element.role ??
+          null,
+
+        x:
+          element.x,
+
+        y:
+          element.y,
+
+        width:
+          element.width,
+
+        height:
+          element.height,
+
+        props: {
+          ...element.props,
+        },
+      };
+
+      // -----------------------------------------------
+      // Preserve meaningful component metadata.
+      //
+      // Canvas/editor persistence itself is NOT exported.
+      // -----------------------------------------------
+
+      if (
+        element.meta &&
+        Object.keys(
+          element.meta
+        ).length
+      ) {
+        node.meta = {
+          ...element.meta,
+        };
+      }
+
+      const children =
+        normalisedElements
+          .filter(
+            (child) =>
+              child.parentId ===
+              element.id
+          )
+          .map(
+            buildNode
+          );
+
+      if (
+        children.length
+      ) {
+        node.children =
+          children;
+      }
+
+      return node;
+    };
+
+  // ---------------------------------------------------
+  // Identify actual roots
+  // ---------------------------------------------------
+
+  const rootElements =
+    normalisedElements.filter(
+      (element) =>
+        !element.parentId
+    );
+
+  // ---------------------------------------------------
+  // Canonical templates MUST have one root
+  // ---------------------------------------------------
+
+  if (
+    rootElements.length ===
+    0
+  ) {
+    console.error(
+      "[CANVAS TEMPLATE EXPORT] No root element found"
+    );
+
+    return null;
+  }
+
+  if (
+    rootElements.length >
+    1
+  ) {
+    console.error(
+      "[CANVAS TEMPLATE EXPORT] Multiple top-level elements detected. A real root Container is required before this template can be exported.",
+      {
+        rootCount:
+          rootElements.length,
+
+        roots:
+          rootElements.map(
+            (element) => ({
+              id:
+                element.id,
+              type:
+                element.type,
+              x:
+                element.x,
+              y:
+                element.y,
+              width:
+                element.width,
+              height:
+                element.height,
+            })
+          ),
+      }
+    );
+
+    return null;
+  }
+
+  // ---------------------------------------------------
+  // Export the REAL root.
+  // ---------------------------------------------------
+
+  const root =
+    rootElements[0];
+
+  if (
+    root.type !==
+    "Container"
+  ) {
+    console.warn(
+      "[CANVAS TEMPLATE EXPORT] Root element is not a Container",
+      {
+        id:
+          root.id,
+
+        type:
+          root.type,
+      }
+    );
+  }
+
+  return buildNode(
+    root
+  );
+};
+
+// =====================================================
+// CANONICAL TEMPLATE DOWNLOAD
+// =====================================================
+
+const downloadCanonicalTemplate = (
+  template
+) => {
+  if (!template) {
+    return false;
+  }
+
+  const json =
+    JSON.stringify(
+      template,
+      null,
+      2
+    );
+
+  const blob =
+    new Blob(
+      [json],
+      {
+        type:
+          "application/json",
+      }
+    );
+
+  const url =
+    URL.createObjectURL(
+      blob
+    );
+
+  const anchor =
+    document.createElement(
+      "a"
+    );
+
+  const baseName =
+    String(
+      template.name ||
+      template.id ||
+      "confo-template"
+    )
+      .trim()
+      .toLowerCase()
+      .replace(
+        /[^a-z0-9]+/g,
+        "_"
+      )
+      .replace(
+        /^_+|_+$/g,
+        ""
+      );
+
+  anchor.href =
+    url;
+
+  anchor.download =
+    `${baseName || "confo-template"}.json`;
+
+  document.body.appendChild(
+    anchor
+  );
+
+  anchor.click();
+
+  anchor.remove();
+
+  URL.revokeObjectURL(
+    url
+  );
+
+  return true;
+};
+
+// =====================================================
 // CANVAS
 // =====================================================
 
@@ -373,6 +917,7 @@ export default function Canvas({
   const {
     projectType,
     backgroundConfigs,
+    projectSchema,
   } = useProjectContext();
 
   const {
@@ -423,7 +968,7 @@ export default function Canvas({
     useState("desktop");
 
   const [scale, setScale] =
-    useState(0.75);
+    useState(1);
 
   const [
     selectedId,
@@ -937,24 +1482,51 @@ export default function Canvas({
     elementMap,
   ]);
 
-  // ===================================================
-  // HIERARCHY DEBUG
-  // ===================================================
+// ===================================================
+// HIERARCHY / GEOMETRY DEBUG
+// ===================================================
 
-  useEffect(() => {
-    console.log(
-      "[CANVAS HIERARCHY]",
-      visibleElements.map(
-        (el) => ({
+useEffect(() => {
+  console.log(
+    "[CANVAS HIERARCHY]",
+    visibleElements.map(
+      (el) => {
+
+        const parent =
+          visibleElements.find(
+            (candidate) =>
+              candidate.id ===
+              el.parentId
+          );
+
+        return {
+          // ---------------------------------------------
+          // ELEMENT IDENTITY
+          // ---------------------------------------------
+
           id: el.id,
+
           type: el.type,
+
           parentId:
             el.parentId ||
             null,
+
+          // ---------------------------------------------
+          // CANVAS GEOMETRY
+          // ---------------------------------------------
+
           x: el.x,
+
           y: el.y,
+
           width: el.width,
+
           height: el.height,
+
+          // ---------------------------------------------
+          // LAYOUT
+          // ---------------------------------------------
 
           layout:
             el.type ===
@@ -963,12 +1535,95 @@ export default function Canvas({
                   el
                 )
               : undefined,
-        })
-      )
-    );
-  }, [
-    visibleElements,
-  ]);
+
+          layoutManaged:
+            el.meta?.layoutManaged ??
+            false,
+
+          // ---------------------------------------------
+          // COLLAPSE CONFIGURATION
+          // ---------------------------------------------
+
+          collapsible:
+            el.props?.collapsible ??
+            null,
+
+          defaultCollapsed:
+            el.props?.defaultCollapsed ??
+            null,
+
+          // ---------------------------------------------
+          // STYLE GEOMETRY
+          // ---------------------------------------------
+
+          propsWidth:
+            el.props?.width ??
+            null,
+
+          propsHeight:
+            el.props?.height ??
+            null,
+
+          styleWidth:
+            el.props?.style?.width ??
+            null,
+
+          styleHeight:
+            el.props?.style?.height ??
+            null,
+
+          // ---------------------------------------------
+          // PARENT GEOMETRY
+          // ---------------------------------------------
+
+          parentGeometry:
+            parent
+              ? {
+                  id:
+                    parent.id,
+
+                  type:
+                    parent.type,
+
+                  x:
+                    parent.x,
+
+                  y:
+                    parent.y,
+
+                  width:
+                    parent.width,
+
+                  height:
+                    parent.height,
+
+                  layout:
+                    parent.type ===
+                    "Container"
+                      ? getContainerLayout(
+                          parent
+                        )
+                      : undefined,
+
+                  gap:
+                    parent.props?.gap ??
+                    parent.props?.style?.gap ??
+                    null,
+
+                  padding:
+                    parent.props?.padding ??
+                    parent.props?.style?.padding ??
+                    null,
+                }
+              : null,
+        };
+      }
+    )
+  );
+}, [
+  visibleElements,
+]);
+
 
   // ===================================================
   // SELECTED ELEMENT
@@ -1703,122 +2358,331 @@ export default function Canvas({
   };
 
   // ===================================================
-  // RENDER CHILD COMPONENT
+  // EXPORT TEMPLATE LAYOUT
+  // ===================================================
+  //
+  // Converts the CURRENT Canvas arrangement into the
+  // canonical template structure.
+  //
+  // Important:
+  //
+  // This reads `elements`, not `visibleElements`.
+  //
+  // Therefore multi-role templates export the complete
+  // canonical Canvas rather than only the currently
+  // visible role.
+  //
   // ===================================================
 
-  const renderChildComponent = (
-    child,
-    wrapperStyle = {}
-  ) => {
-    const childEntry =
-      componentRegistry[
-        child.type
-      ];
-
-    if (
-      !childEntry?.component
-    ) {
+  const handleExportTemplateLayout = () => {
+    if (!isBuilderEditable) {
       console.warn(
-        "[CANVAS] Missing child component:",
-        child.type
+        "[CANVAS TEMPLATE EXPORT] Export blocked because Canvas is not editable"
       );
 
-      return null;
+      return;
     }
 
-    const ChildComponent =
-      childEntry.component;
+    if (
+      !Array.isArray(elements) ||
+      !elements.length
+    ) {
+      console.warn(
+        "[CANVAS TEMPLATE EXPORT] No Canvas elements available"
+      );
 
-    const childBinding =
-      bindings[
+      return;
+    }
+
+    console.log(
+      "[CANVAS TEMPLATE EXPORT] Starting export",
+      {
+        elementCount:
+          elements.length,
+
+        projectSchema,
+
+        elements,
+      }
+    );
+
+    const tree =
+      buildCanonicalTemplateTree(
+        elements
+      );
+
+    if (!tree) {
+      console.error(
+        "[CANVAS TEMPLATE EXPORT] Export aborted. Fix the Canvas hierarchy before exporting the master template."
+      );
+
+      return;
+    }
+
+    // -------------------------------------------------
+    // Preserve template/project metadata.
+    //
+    // canvas is deliberately removed because it contains
+    // editor persistence rather than the template itself.
+    // -------------------------------------------------
+
+    const sourceSchema =
+      projectSchema &&
+      typeof projectSchema ===
+        "object"
+        ? projectSchema
+        : {};
+
+    const {
+      canvas,
+      tree: existingTree,
+      ...templateMetadata
+    } = sourceSchema;
+
+    const exportedTemplate = {
+      ...templateMetadata,
+
+      tree,
+    };
+
+    console.log(
+      "[CANVAS TEMPLATE EXPORT] Canonical template",
+      exportedTemplate
+    );
+
+    const downloaded =
+      downloadCanonicalTemplate(
+        exportedTemplate
+      );
+
+    if (
+      downloaded
+    ) {
+      console.log(
+        "[CANVAS TEMPLATE EXPORT] Template exported successfully"
+      );
+    }
+  };
+
+// ===================================================
+// RENDER CHILD COMPONENT
+// ===================================================
+
+const renderChildComponent = (
+  child,
+  wrapperStyle = {}
+) => {
+
+  console.log(
+  "🔥 CHILD ELEMENT",
+  {
+    id: child?.id,
+    type: child?.type,
+    parentId: child?.parentId,
+  }
+);
+
+  const childEntry =
+    componentRegistry[
+      child.type
+    ];
+
+  if (
+    !childEntry?.component
+  ) {
+    console.warn(
+      "[CANVAS] Missing child component:",
+      child.type
+    );
+
+    return null;
+  }
+
+  const ChildComponent =
+    childEntry.component;
+
+  const childBinding =
+    bindings[
+      child.id
+    ] || {};
+
+  const isSelected =
+    selectedId ===
+    child.id;
+
+
+// =================================================
+// PARENT COMPONENTS
+//
+// TEMPORARY: Container children are rendered by
+// Canvas recursively rather than passed through the
+// Container component.
+//
+// This restores the rendering behaviour that was
+// working before the parent-owned-child change.
+// =================================================
+
+const isParentComponent =
+  child.type === "ControlPanel";
+
+const nestedChildren =
+  isParentComponent
+    ? renderChildren(
+        child.id,
+        new Set()
+      )
+    : null;
+
+
+  // =================================================
+  // CHILD HEIGHT
+  //
+  // The parent layout may explicitly control the
+  // child's height.
+  //
+  // Do NOT blindly force height: 100%.
+  //
+  // A percentage height here can create a circular
+  // sizing dependency when a Container itself uses
+  // auto height.
+  // =================================================
+
+  const resolvedChildHeight =
+    wrapperStyle.height !==
+      undefined
+      ? wrapperStyle.height
+      : "auto";
+
+
+  return (
+    <div
+      key={
         child.id
-      ] || {};
+      }
 
-    const isSelected =
-      selectedId ===
-      child.id;
+      data-canvas-element-id={
+        child.id
+      }
 
-    return (
-      <div
-        key={child.id}
-        data-canvas-element-id={
-          child.id
+      onClick={(event) => {
+
+        event.stopPropagation();
+
+        if (
+          !isBuilderEditable
+        ) {
+          return;
         }
-        onClick={(event) => {
-          event.stopPropagation();
 
-          if (
-            !isBuilderEditable
-          ) {
-            return;
-          }
+        selectElement(
+          child.id
+        );
 
-          selectElement(
-            child.id
-          );
-        }}
+      }}
+
+      style={{
+        boxSizing:
+          "border-box",
+
+        zIndex:
+          isSelected
+            ? 100
+            : 1,
+
+        minWidth:
+          0,
+
+        minHeight:
+          0,
+
+        cursor:
+          isBuilderEditable
+            ? "pointer"
+            : "default",
+
+        ...getSelectionStyle(
+          isSelected
+        ),
+
+        ...wrapperStyle,
+      }}
+    >
+
+      <div
         style={{
+          position:
+            "relative",
+
+          width:
+            "100%",
+
+          /*
+           * IMPORTANT:
+           *
+           * Do not force every child to 100% height.
+           *
+           * If the parent layout supplied an explicit
+           * height, preserve it.
+           *
+           * Otherwise allow the component to size
+           * naturally.
+           */
+          height:
+            resolvedChildHeight,
+
+          minWidth:
+            0,
+
+          minHeight:
+            0,
+
           boxSizing:
             "border-box",
-
-          zIndex:
-            isSelected
-              ? 100
-              : 1,
-
-          minWidth: 0,
-          minHeight: 0,
-
-          cursor:
-            isBuilderEditable
-              ? "pointer"
-              : "default",
-
-          ...getSelectionStyle(
-            isSelected
-          ),
-
-          ...wrapperStyle,
         }}
       >
-        <div
-          style={{
-            position:
-              "relative",
 
-            width:
-              "100%",
+        <CanvasElementRenderer
+          Component={
+            ChildComponent
+          }
 
-            height:
-              "100%",
+          element={
+            child
+          }
 
-            minWidth: 0,
-            minHeight: 0,
+          binding={
+            childBinding
+          }
 
-            boxSizing:
-              "border-box",
-          }}
-        >
-          <CanvasElementRenderer
-            Component={
-              ChildComponent
-            }
-            element={
-              child
-            }
-            binding={
-              childBinding
-            }
-          />
-        </div>
+          children={
+            nestedChildren
+          }
+        />
 
-        {renderChildren(
-          child.id,
-          new Set()
-        )}
       </div>
-    );
-  };
+
+
+      {/* =================================================
+          IMPORTANT
+
+          Non-parent components may still have Canvas
+          children rendered recursively here.
+
+          Container and ControlPanel are excluded because
+          their children have already been passed into the
+          component through `children`.
+      ================================================= */}
+
+      {renderChildren(
+        child.id,
+        new Set()
+      )}
+
+    </div>
+  );
+};
+
+
 
   // ===================================================
   // RECURSIVE CANVAS CHILD RENDERER
@@ -1864,6 +2728,17 @@ export default function Canvas({
       getChildren(
         normalisedParentId
       );
+
+      console.log(
+  "🔥 CONTAINER CHILD DEBUG",
+  {
+    parentId: normalisedParentId,
+    parent: parent,
+    allElements: elements,
+    children: children,
+    childCount: children.length,
+  }
+);
 
     if (
       !children.length
@@ -1915,7 +2790,7 @@ export default function Canvas({
                     "100%",
 
                   height:
-                    "100%",
+                    "auto",
 
                   minWidth: 0,
                   minHeight: 0,
@@ -1935,14 +2810,76 @@ export default function Canvas({
     // =================================================
     // CONTAINER
     // =================================================
+     console.log(
+    "🔥 CONTAINER LAYOUT RESOLUTION",
+    {
+      parentId:
+        parent?.id,
+
+      parentType:
+        parent?.type,
+
+      parentWidth:
+        parent?.width,
+
+      parentHeight:
+        parent?.height,
+
+      parentProps:
+        parent?.props,
+
+      parentStyle:
+        parent?.props?.style,
+
+      directLayout:
+        parent?.props?.layout,
+
+      styleLayout:
+        parent?.props?.style?.layout,
+
+      resolvedLayout:
+        getContainerLayout(
+          parent
+        ),
+    }
+  );
 
     const containerLayout =
       getContainerLayout(
         parent
       );
 
-    // =================================================
+        // =================================================
     // FREE LAYOUT
+    // =================================================
+    //
+    // Free-layout children are Canvas-authorable
+    // elements.
+    //
+    // They therefore need the same Rnd behaviour as
+    // top-level Canvas elements:
+    //
+    //   - drag
+    //   - resize
+    //   - selection
+    //   - persisted x/y
+    //   - persisted width/height
+    //
+    // This is especially important now that Confo
+    // templates have a real structural root Container.
+    //
+    // Before the canonical root fix, many template
+    // elements happened to be top-level and therefore
+    // received Rnd automatically.
+    //
+    // Now that the hierarchy is correct:
+    //
+    //   Root Container
+    //       ↓
+    //   free-layout children
+    //
+    // those children must explicitly receive Rnd.
+    //
     // =================================================
 
     if (
@@ -1951,6 +2888,7 @@ export default function Canvas({
     ) {
       return children.map(
         (child) => {
+
           const childX =
             Number.isFinite(
               Number(child.x)
@@ -1969,8 +2907,9 @@ export default function Canvas({
             Number.isFinite(
               Number(child.width)
             )
-              ? Number(
-                  child.width
+              ? Math.max(
+                  1,
+                  Number(child.width)
                 )
               : 100;
 
@@ -1978,10 +2917,693 @@ export default function Canvas({
             Number.isFinite(
               Number(child.height)
             )
+              ? Math.max(
+                  1,
+                  Number(child.height)
+                )
+              : 40;
+
+          const childEntry =
+            componentRegistry[
+              child.type
+            ];
+
+          if (
+            !childEntry?.component
+          ) {
+            console.warn(
+              "[CANVAS] Missing free-layout child component:",
+              child.type
+            );
+
+            return null;
+          }
+
+          const ChildComponent =
+            childEntry.component;
+
+          const childBinding =
+            bindings[
+              child.id
+            ] || {};
+
+          const isSelected =
+            selectedId ===
+            child.id;
+
+          const isControlPanel =
+            child.type ===
+            "ControlPanel";
+
+          const isContainer =
+            child.type ===
+            "Container";
+
+          const isParentComponent =
+            isControlPanel ||
+            isContainer;
+
+          const nestedChildren =
+            isParentComponent
+              ? renderChildren(
+                  child.id,
+                  new Set()
+                )
+              : null;
+
+          // ---------------------------------------------
+          // Parent geometry
+          // ---------------------------------------------
+
+          const parentWidth =
+            Number(parent?.width) ||
+            canvasSize.width;
+
+          const parentHeight =
+            Number(parent?.height) ||
+            canvasSize.height;
+
+          // ---------------------------------------------
+          // Keep the element inside its parent.
+          // ---------------------------------------------
+
+          const maxX =
+            Math.max(
+              0,
+              parentWidth -
+                childWidth
+            );
+
+          const maxY =
+            Math.max(
+              0,
+              parentHeight -
+                childHeight
+            );
+
+          const boundedX =
+            Math.min(
+              maxX,
+              Math.max(
+                0,
+                childX
+              )
+            );
+
+          const boundedY =
+            Math.min(
+              maxY,
+              Math.max(
+                0,
+                childY
+              )
+            );
+
+          console.log(
+            "[CANVAS FREE CHILD]",
+            {
+              parentId:
+                parent?.id,
+
+              parentType:
+                parent?.type,
+
+              childId:
+                child.id,
+
+              childType:
+                child.type,
+
+              x:
+                boundedX,
+
+              y:
+                boundedY,
+
+              width:
+                childWidth,
+
+              height:
+                childHeight,
+
+              isBuilderEditable,
+            }
+          );
+
+          return (
+            <Rnd
+              key={
+                child.id
+              }
+
+              bounds="parent"
+
+              size={{
+                width:
+                  childWidth,
+
+                height:
+                  childHeight,
+              }}
+
+              position={{
+                x:
+                  boundedX,
+
+                y:
+                  boundedY,
+              }}
+
+              scale={
+                scale
+              }
+
+              enableResizing={
+                isBuilderEditable
+              }
+
+              disableDragging={
+                !isBuilderEditable
+              }
+
+              dragHandleClassName={
+                isBuilderEditable
+                  ? `canvas-drag-handle-${child.id}`
+                  : undefined
+              }
+
+              style={{
+                zIndex:
+                  isSelected
+                    ? 100
+                    : 1,
+
+                ...getSelectionStyle(
+                  isSelected
+                ),
+              }}
+
+              data-canvas-element-id={
+                child.id
+              }
+
+              onMouseDownCapture={
+                (event) => {
+                  if (
+                    !isBuilderEditable
+                  ) {
+                    return;
+                  }
+
+                  // ---------------------------------------
+                  // IMPORTANT:
+                  //
+                  // Do NOT stop propagation here.
+                  // Rnd needs the original pointer event.
+                  // ---------------------------------------
+
+                  selectElement(
+                    child.id
+                  );
+                }
+              }
+
+              onClick={
+                (event) => {
+                  event.stopPropagation();
+
+                  if (
+                    !isBuilderEditable
+                  ) {
+                    return;
+                  }
+
+                  selectElement(
+                    child.id
+                  );
+                }
+              }
+
+              onDragStart={
+                () => {
+                  if (
+                    !isBuilderEditable
+                  ) {
+                    return false;
+                  }
+
+                  console.log(
+                    "[CANVAS FREE CHILD DRAG START]",
+                    {
+                      id:
+                        child.id,
+
+                      type:
+                        child.type,
+
+                      parentId:
+                        parent?.id,
+                    }
+                  );
+
+                  return true;
+                }
+              }
+
+              onDragStop={
+                (
+                  event,
+                  data
+                ) => {
+                  if (
+                    !isBuilderEditable
+                  ) {
+                    return;
+                  }
+
+                  const nextX =
+                    Math.round(
+                      Math.min(
+                        maxX,
+                        Math.max(
+                          0,
+                          data.x
+                        )
+                      )
+                    );
+
+                  const nextY =
+                    Math.round(
+                      Math.min(
+                        maxY,
+                        Math.max(
+                          0,
+                          data.y
+                        )
+                      )
+                    );
+
+                  console.log(
+                    "[CANVAS FREE CHILD DRAG STOP]",
+                    {
+                      id:
+                        child.id,
+
+                      type:
+                        child.type,
+
+                      parentId:
+                        parent?.id,
+
+                      from: {
+                        x:
+                          child.x,
+
+                        y:
+                          child.y,
+                      },
+
+                      to: {
+                        x:
+                          nextX,
+
+                        y:
+                          nextY,
+                      },
+                    }
+                  );
+
+                  updateElement(
+                    child.id,
+                    {
+                      x:
+                        nextX,
+
+                      y:
+                        nextY,
+                    }
+                  );
+                }
+              }
+
+              onResizeStart={
+                () => {
+                  if (
+                    !isBuilderEditable
+                  ) {
+                    return false;
+                  }
+
+                  console.log(
+                    "[CANVAS FREE CHILD RESIZE START]",
+                    {
+                      id:
+                        child.id,
+
+                      type:
+                        child.type,
+
+                      parentId:
+                        parent?.id,
+                    }
+                  );
+
+                  return true;
+                }
+              }
+
+              onResizeStop={
+                (
+                  event,
+                  direction,
+                  ref,
+                  delta,
+                  position
+                ) => {
+                  if (
+                    !isBuilderEditable
+                  ) {
+                    return;
+                  }
+
+                  const newWidth =
+                    Math.max(
+                      1,
+                      Math.round(
+                        parseFloat(
+                          ref.style
+                            .width
+                        )
+                      )
+                    );
+
+                  const newHeight =
+                    Math.max(
+                      1,
+                      Math.round(
+                        parseFloat(
+                          ref.style
+                            .height
+                        )
+                      )
+                    );
+
+                  const resizeMaxX =
+                    Math.max(
+                      0,
+                      parentWidth -
+                        newWidth
+                    );
+
+                  const resizeMaxY =
+                    Math.max(
+                      0,
+                      parentHeight -
+                        newHeight
+                    );
+
+                  const newX =
+                    Math.round(
+                      Math.min(
+                        resizeMaxX,
+                        Math.max(
+                          0,
+                          position.x
+                        )
+                      )
+                    );
+
+                  const newY =
+                    Math.round(
+                      Math.min(
+                        resizeMaxY,
+                        Math.max(
+                          0,
+                          position.y
+                        )
+                      )
+                    );
+
+                  console.log(
+                    "[CANVAS FREE CHILD RESIZE STOP]",
+                    {
+                      id:
+                        child.id,
+
+                      type:
+                        child.type,
+
+                      parentId:
+                        parent?.id,
+
+                      width:
+                        newWidth,
+
+                      height:
+                        newHeight,
+
+                      x:
+                        newX,
+
+                      y:
+                        newY,
+                    }
+                  );
+
+                  updateElement(
+                    child.id,
+                    {
+                      width:
+                        newWidth,
+
+                      height:
+                        newHeight,
+
+                      x:
+                        newX,
+
+                      y:
+                        newY,
+                    }
+                  );
+                }
+              }
+            >
+              <div
+                data-canvas-element-id={
+                  child.id
+                }
+
+                className={
+                  `canvas-drag-handle-${child.id}`
+                }
+
+                onClick={
+                  (event) => {
+                    event.stopPropagation();
+
+                    if (
+                      !isBuilderEditable
+                    ) {
+                      return;
+                    }
+
+                    selectElement(
+                      child.id
+                    );
+                  }
+                }
+
+                style={{
+                  position:
+                    "relative",
+
+                  width:
+                    "100%",
+
+                  height:
+                    "100%",
+
+                  minWidth: 0,
+
+                  minHeight: 0,
+
+                  boxSizing:
+                    "border-box",
+
+                  cursor:
+                    isBuilderEditable
+                      ? "move"
+                      : "default",
+
+                  overflow:
+                    "visible",
+                }}
+              >
+                <CanvasElementRenderer
+                  Component={
+                    ChildComponent
+                  }
+
+                  element={
+                    child
+                  }
+
+                  binding={
+                    childBinding
+                  }
+
+                  children={
+                    nestedChildren
+                  }
+                />
+              </div>
+            </Rnd>
+          );
+        }
+      );
+    }
+
+    // =================================================
+// VERTICAL / HORIZONTAL LAYOUT
+// =================================================
+
+if (
+  containerLayout ===
+    "vertical" ||
+  containerLayout ===
+    "horizontal"
+) {
+  const isHorizontal =
+    containerLayout ===
+    "horizontal";
+
+  return (
+    <div
+      style={{
+        position:
+          "relative",
+
+        width:
+          "100%",
+
+        height:
+          "auto",
+
+        minWidth: 0,
+        minHeight: 0,
+
+        display:
+          "flex",
+
+        flexDirection:
+          isHorizontal
+            ? "row"
+            : "column",
+
+        alignItems:
+          isHorizontal
+            ? "flex-start"
+            : "stretch",
+
+        justifyContent:
+          "flex-start",
+
+        gap:
+          getLayoutValue(
+            parent,
+            "gap",
+            8
+          ),
+
+        padding:
+          getLayoutValue(
+            parent,
+            "padding",
+            0
+          ),
+
+        boxSizing:
+          "border-box",
+
+        overflow:
+          getLayoutValue(
+            parent,
+            "overflow",
+            "auto"
+          ),
+      }}
+    >
+      {children.map(
+        (child) => {
+
+          const childWidth =
+            Number.isFinite(
+              Number(
+                child.width
+              )
+            )
+              ? Number(
+                  child.width
+                )
+              : 100;
+
+          const childHeight =
+            Number.isFinite(
+              Number(
+                child.height
+              )
+            )
               ? Number(
                   child.height
                 )
               : 40;
+
+          // =================================================
+          // DIAGNOSTIC — NESTED CHILD GEOMETRY
+          // =================================================
+
+          console.log(
+            "🔥 VERTICAL CHILD GEOMETRY",
+            {
+              parentId:
+                parent?.id,
+
+              parentType:
+                parent?.type,
+
+              parentWidth:
+                parent?.width,
+
+              parentHeight:
+                parent?.height,
+
+              childId:
+                child?.id,
+
+              childType:
+                child?.type,
+
+              childWidth:
+                child?.width,
+
+              childHeight:
+                child?.height,
+
+              resolvedChildWidth:
+                childWidth,
+
+              resolvedChildHeight:
+                childHeight,
+
+              childProps:
+                child?.props,
+
+              isHorizontal,
+            }
+          );
+
+          // =================================================
 
           return (
             <React.Fragment
@@ -1993,22 +3615,32 @@ export default function Canvas({
                 child,
                 {
                   position:
-                    "absolute",
+                    "relative",
 
                   left:
-                    childX,
+                    "auto",
 
                   top:
-                    childY,
+                    "auto",
 
                   width:
-                    childWidth,
+                    isHorizontal
+                      ? childWidth
+                      : "100%",
 
                   height:
                     childHeight,
 
-                  margin: 0,
-                  padding: 0,
+                  flex:
+                    "0 0 auto",
+
+                  maxWidth:
+                    "100%",
+
+                  minWidth: 0,
+
+                  boxSizing:
+                    "border-box",
 
                   overflow:
                     "visible",
@@ -2017,152 +3649,10 @@ export default function Canvas({
             </React.Fragment>
           );
         }
-      );
-    }
-
-    // =================================================
-    // VERTICAL / HORIZONTAL LAYOUT
-    // =================================================
-
-    if (
-      containerLayout ===
-        "vertical" ||
-      containerLayout ===
-        "horizontal"
-    ) {
-      const isHorizontal =
-        containerLayout ===
-        "horizontal";
-
-      return (
-        <div
-          style={{
-            position:
-              "relative",
-
-            width:
-              "100%",
-
-            height:
-              "100%",
-
-            minWidth: 0,
-            minHeight: 0,
-
-            display:
-              "flex",
-
-            flexDirection:
-              isHorizontal
-                ? "row"
-                : "column",
-
-            alignItems:
-              isHorizontal
-                ? "flex-start"
-                : "stretch",
-
-            justifyContent:
-              "flex-start",
-
-            gap:
-              getLayoutValue(
-                parent,
-                "gap",
-                8
-              ),
-
-            padding:
-              getLayoutValue(
-                parent,
-                "padding",
-                0
-              ),
-
-            boxSizing:
-              "border-box",
-
-            overflow:
-              getLayoutValue(
-                parent,
-                "overflow",
-                "auto"
-              ),
-          }}
-        >
-          {children.map(
-            (child) => {
-              const childWidth =
-                Number.isFinite(
-                  Number(
-                    child.width
-                  )
-                )
-                  ? Number(
-                      child.width
-                    )
-                  : 100;
-
-              const childHeight =
-                Number.isFinite(
-                  Number(
-                    child.height
-                  )
-                )
-                  ? Number(
-                      child.height
-                    )
-                  : 40;
-
-              return (
-                <React.Fragment
-                  key={
-                    child.id
-                  }
-                >
-                  {renderChildComponent(
-                    child,
-                    {
-                      position:
-                        "relative",
-
-                      left:
-                        "auto",
-
-                      top:
-                        "auto",
-
-                      width:
-                        isHorizontal
-                          ? childWidth
-                          : "100%",
-
-                      height:
-                        childHeight,
-
-                      flex:
-                        "0 0 auto",
-
-                      maxWidth:
-                        "100%",
-
-                      minWidth: 0,
-
-                      boxSizing:
-                        "border-box",
-
-                      overflow:
-                        "visible",
-                    }
-                  )}
-                </React.Fragment>
-              );
-            }
-          )}
-        </div>
-      );
-    }
-
+      )}
+    </div>
+  );
+}
     // =================================================
     // FALLBACK
     // =================================================
@@ -2190,6 +3680,15 @@ export default function Canvas({
 
   const renderTopLevelElement =
     (rawElement) => {
+
+          console.log(
+          "🔥 TOP LEVEL ELEMENT",
+          {
+            id: rawElement?.id,
+            type: rawElement?.type,
+            parentId: rawElement?.parentId,
+          }
+        );
       const el =
         clampTopLevelElement(
           rawElement
@@ -2231,22 +3730,146 @@ export default function Canvas({
       const Comp =
         entry.component;
 
+      
+      // ===================================================
+      // CANONICAL ROOT CONTAINER
+      // ===================================================
+      //
+      // The real project root is structural.
+      // It represents the Canvas itself and must NOT be
+      // draggable/resizable.
+      //
+      // Its children remain normal Rnd Canvas elements.
+      //
+      // This preserves:
+      //   Confo root Container
+      //        ↓
+      //   Canvas structural layer
+      //        ↓
+      //   draggable/resizable descendants
+      //
+      // IMPORTANT:
+      // Do not convert the root back into an App.
+      // Do not remove it from the project tree.
+      // Do not wrap it in Rnd.
+      //
+
+      const isCanonicalRoot =
+        el.parentId === null &&
+        el.type === "Container";
+
+      if (isCanonicalRoot) {
+        const binding =
+          bindings[el.id] || {};
+
+        const isSelected =
+          selectedId === el.id;
+
+        return (
+          <div
+            key={el.id}
+            data-canvas-element-id={el.id}
+            style={{
+              position: "relative",
+
+              width: "100%",
+              height: "100%",
+
+              minWidth: 0,
+              minHeight: 0,
+
+              boxSizing: "border-box",
+
+              overflow:
+                getContainerLayout(el) !== "free"
+                  ? "hidden"
+                  : "visible",
+
+              zIndex:
+                isSelected
+                  ? 0
+                  : 0,
+
+              ...getSelectionStyle(
+                isSelected
+              ),
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+
+              if (!isBuilderEditable) {
+                return;
+              }
+
+              selectElement(el.id);
+            }}
+          >
+            <CanvasElementRenderer
+              Component={Comp}
+              element={el}
+              binding={binding}
+            />
+
+            {renderChildren(
+              el.id,
+              new Set()
+            )}
+          </div>
+        );
+      }
+
       const binding =
         bindings[
           el.id
         ] || {};
 
-      const isControlPanel =
-        el.type ===
-        "ControlPanel";
-
-      const controlPanelChildren =
-        isControlPanel
+      const isControlPanel = 
+        el.type === "ControlPanel"; 
+      
+      const isContainer = 
+         el.type === "Container"; 
+         
+      const isParentComponent = 
+        isControlPanel || isContainer; 
+      
+      const nestedChildren = 
+        isParentComponent
           ? renderChildren(
               el.id,
               new Set()
             )
           : null;
+
+      console.log(
+        "🔥 TOP LEVEL PARENT PAYLOAD",
+        {
+          id:
+            el.id,
+
+          type:
+            el.type,
+
+          isControlPanel,
+
+          isContainer,
+
+          isParentComponent,
+
+          nestedChildren,
+
+          nestedChildrenType:
+            typeof nestedChildren,
+
+          nestedChildrenCount:
+            Array.isArray(
+              nestedChildren
+            )
+              ? nestedChildren.length
+              : nestedChildren
+                ? 1
+                : 0,
+        }
+      );
 
       const isSelected =
         selectedId ===
@@ -2633,53 +4256,13 @@ export default function Canvas({
                   : "visible",
             }}
           >
-            {/* =========================================
-                CONTROL PANEL
-            ========================================= */}
-
-            {isControlPanel ? (
-              <CanvasElementRenderer
-                Component={
-                  Comp
-                }
-
-                element={
-                  el
-                }
-
-                binding={
-                  binding
-                }
-
-                children={
-                  controlPanelChildren
-                }
-              />
-            ) : (
-              <CanvasElementRenderer
-                Component={
-                  Comp
-                }
-
-                element={
-                  el
-                }
-
-                binding={
-                  binding
-                }
-              />
-            )}
-
-            {/* =========================================
-                NORMAL CONTAINER CHILDREN
-            ========================================= */}
-
-            {!isControlPanel &&
-              renderChildren(
-                el.id,
-                new Set()
-              )}
+            
+          {/* ========================================= CANVAS ELEMENT ========================================= */} 
+          <CanvasElementRenderer 
+            Component={ Comp } 
+            element={ el } 
+            binding={ binding } 
+            children={ nestedChildren } />
           </div>
         </Rnd>
       );
@@ -2950,6 +4533,41 @@ export default function Canvas({
             "Layers",
           ]}
         />
+
+                {/* =================================================
+            TEMPLATE AUTHORING
+        ================================================= */}
+
+        {isBuilderEditable && (
+          <button
+            type="button"
+            onClick={
+              handleExportTemplateLayout
+            }
+            style={{
+              width: "100%",
+              marginTop: 10,
+              marginBottom: 10,
+              padding:
+                "8px 10px",
+              border:
+                "1px solid rgba(99, 102, 241, 0.5)",
+              borderRadius: 6,
+              background:
+                "rgba(99, 102, 241, 0.12)",
+              color:
+                "#c7d2fe",
+              fontSize:
+                12,
+              fontWeight:
+                600,
+              cursor:
+                "pointer",
+            }}
+          >
+            Export Template Layout
+          </button>
+        )}
 
         {/* =================================================
             ELEMENTS

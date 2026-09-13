@@ -146,6 +146,56 @@ function getDisplayName(
 }
 
 
+function getInitials(
+  member
+) {
+
+  const name =
+    getDisplayName(
+      member
+    );
+
+
+  if (
+    !name
+  ) {
+
+    return "?";
+
+  }
+
+
+  const parts =
+    name
+      .split(
+        /\s+/
+      )
+      .filter(Boolean);
+
+
+  if (
+    parts.length >= 2
+  ) {
+
+    return (
+      parts[0][0] +
+      parts[parts.length - 1][0]
+    )
+      .toUpperCase();
+
+  }
+
+
+  return name
+    .slice(
+      0,
+      2
+    )
+    .toUpperCase();
+
+}
+
+
 // =====================================================
 // NORMALISE MEMBER
 // =====================================================
@@ -191,6 +241,82 @@ function normaliseMember(
 
 
 // =====================================================
+// AVATAR
+// =====================================================
+
+function MemberAvatar({
+  member,
+  selected = false,
+}) {
+
+  const initials =
+    getInitials(
+      member
+    );
+
+
+  return (
+
+    <div
+      style={{
+        width:
+          34,
+
+        height:
+          34,
+
+        minWidth:
+          34,
+
+        borderRadius:
+          "50%",
+
+        display:
+          "flex",
+
+        alignItems:
+          "center",
+
+        justifyContent:
+          "center",
+
+        background:
+          selected
+            ? "#1d4ed8"
+            : "#263244",
+
+        border:
+          selected
+            ? "1px solid #3b82f6"
+            : "1px solid #3b4759",
+
+        color:
+          "#fff",
+
+        fontSize:
+          11,
+
+        fontWeight:
+          700,
+
+        boxSizing:
+          "border-box",
+
+        userSelect:
+          "none",
+      }}
+    >
+
+      {initials}
+
+    </div>
+
+  );
+
+}
+
+
+// =====================================================
 // COMPONENT
 // =====================================================
 
@@ -211,6 +337,12 @@ export default function ParticipantSelector({
   selectionPath =
     "call.selectedParticipantIds",
 
+  collapsible =
+    true,
+
+  defaultCollapsed =
+    false,
+
 }) {
 
   // ===================================================
@@ -220,7 +352,7 @@ export default function ParticipantSelector({
   const {
     session,
   } =
-    useAuth();
+  useAuth();
 
 
   const runtime =
@@ -367,6 +499,21 @@ export default function ParticipantSelector({
 
 
   // ===================================================
+  // COLLAPSE STATE
+  // ===================================================
+
+  const [
+    collapsed,
+    setCollapsed,
+  ] =
+  useState(
+    Boolean(
+      defaultCollapsed
+    )
+  );
+
+
+  // ===================================================
   // REFS
   // ===================================================
 
@@ -428,8 +575,39 @@ export default function ParticipantSelector({
           resolvedSelectionPath
         ),
 
+      collapsed,
+
     }
   );
+
+
+  // ===================================================
+  // TOGGLE COLLAPSE
+  // ===================================================
+
+  const handleToggleCollapse =
+    useCallback(
+      () => {
+
+        if (
+          !collapsible
+        ) {
+
+          return;
+
+        }
+
+
+        setCollapsed(
+          previous =>
+            !previous
+        );
+
+      },
+      [
+        collapsible,
+      ]
+    );
 
 
   // ===================================================
@@ -490,22 +668,6 @@ export default function ParticipantSelector({
   // ===================================================
   // RUNTIME SELECTION SUBSCRIPTION
   // ===================================================
-  //
-  // Runtime is authoritative.
-  //
-  // Therefore:
-  //
-  // runtime [] -> selector []
-  //
-  // runtime [user] -> selector [user]
-  //
-  // This is essential after:
-  //
-  // training.createSession
-  //        ↓
-  // training.selectedParticipantIds = []
-  //
-  // ===================================================
 
   useEffect(() => {
 
@@ -541,11 +703,6 @@ export default function ParticipantSelector({
             nextIds
           );
 
-
-          // --------------------------------------------
-          // Keep only matching selected members in the
-          // local cache.
-          // --------------------------------------------
 
           setSelectedMembersMap(
             previous => {
@@ -616,8 +773,10 @@ export default function ParticipantSelector({
       async ({
         nextPage =
           1,
+
         append =
           false,
+
         searchValue =
           "",
       } = {}) => {
@@ -739,10 +898,6 @@ export default function ParticipantSelector({
                 : loadedMembers
           );
 
-
-          // ---------------------------------------------
-          // Cache selected member objects.
-          // ---------------------------------------------
 
           setSelectedMembersMap(
             previous => {
@@ -1002,10 +1157,6 @@ export default function ParticipantSelector({
         }
 
 
-        // ---------------------------------------------
-        // Update selected member cache.
-        // ---------------------------------------------
-
         setSelectedMembersMap(
           previous => {
 
@@ -1091,7 +1242,6 @@ export default function ParticipantSelector({
       [
         currentUserId,
         multiple,
-        normaliseMember,
         resolvedSelectionPath,
         writeSelection,
       ]
@@ -1287,578 +1437,1191 @@ export default function ParticipantSelector({
         boxSizing:
           "border-box",
 
+        padding:
+          12,
+
+        border:
+          "1px solid #292929",
+
+        borderRadius:
+          12,
+
+        background:
+          "#111827",
+
         color:
           "#fff",
+
+        boxShadow:
+          "0 4px 16px rgba(0,0,0,0.20)",
       }}
     >
 
-      <div
-        style={{
-          marginBottom:
-            7,
+      {/* =============================================
+          HEADER
+      ============================================= */}
 
-          fontSize:
-            11,
+      <button
+        type="button"
 
-          fontWeight:
-            600,
-
-          color:
-            "#888",
-        }}
-      >
-
-        {label}
-
-      </div>
-
-
-      <input
-        type="text"
-
-        value={
-          search
+        onClick={
+          handleToggleCollapse
         }
 
-        onChange={
-          event =>
-            setSearch(
-              event.target.value
-            )
+        disabled={
+          !collapsible
         }
 
-        placeholder={
-          placeholder
+        aria-expanded={
+          !collapsed
+        }
+
+        aria-label={
+          collapsed
+            ? `Expand ${label}`
+            : `Collapse ${label}`
         }
 
         style={{
           width:
             "100%",
 
-          boxSizing:
-            "border-box",
+          display:
+            "flex",
+
+          alignItems:
+            "center",
+
+          justifyContent:
+            "space-between",
+
+          gap:
+            10,
+
+          margin:
+            0,
 
           padding:
-            "9px 10px",
+            0,
 
           border:
-            "1px solid #333",
-
-          borderRadius:
-            7,
+            "none",
 
           background:
-            "#111",
+            "transparent",
 
           color:
             "#fff",
 
-          fontSize:
-            12,
+          textAlign:
+            "left",
 
-          outline:
-            "none",
-        }}
-      />
-
-
-      <div
-        style={{
-          marginTop:
-            6,
-
-          fontSize:
-            9,
-
-          color:
-            "#666",
+          cursor:
+            collapsible
+              ? "pointer"
+              : "default",
         }}
       >
-
-        Runtime:
-        {" "}
-        {resolvedSelectionPath}
-
-      </div>
-
-
-      <div
-        style={{
-          marginTop:
-            7,
-
-          marginBottom:
-            7,
-
-          fontSize:
-            11,
-
-          color:
-            "#999",
-        }}
-      >
-
-        {selectedIds.length ===
-          0
-
-          ? "No participants selected"
-
-          : `${selectedIds.length} participant${
-              selectedIds.length ===
-              1
-                ? ""
-                : "s"
-            } selected`
-        }
-
-      </div>
-
-
-      {selectedMembers.length >
-        0 && (
 
         <div
           style={{
             display:
               "flex",
 
-            flexWrap:
-              "wrap",
+            alignItems:
+              "center",
 
             gap:
-              5,
-
-            marginBottom:
               9,
+
+            minWidth:
+              0,
+
+            flex:
+              1,
           }}
         >
 
-          {selectedMembers.map(
-            member => (
+          <div
+            style={{
+              width:
+                24,
 
-              <button
-                key={
-                  member.id
-                }
+              height:
+                24,
 
-                type="button"
+              minWidth:
+                24,
 
-                onClick={() =>
-                  removeParticipant(
-                    member.id
-                  )
-                }
+              display:
+                "flex",
 
-                style={{
-                  border:
-                    "1px solid #334155",
+              alignItems:
+                "center",
 
-                  borderRadius:
-                    999,
+              justifyContent:
+                "center",
 
-                  background:
-                    "#1e293b",
+              border:
+                "1px solid #334155",
 
-                  color:
-                    "#fff",
+              borderRadius:
+                6,
 
-                  padding:
-                    "4px 8px",
+              background:
+                "#172033",
 
-                  fontSize:
-                    10,
+              color:
+                "#94a3b8",
 
-                  cursor:
-                    "pointer",
-                }}
-              >
+              fontSize:
+                12,
 
-                {getDisplayName(
-                  member
-                )}
+              fontWeight:
+                700,
 
-                {" ×"}
+              userSelect:
+                "none",
+            }}
+          >
 
-              </button>
+            {collapsed
+              ? "+"
+              : "−"
+            }
 
-            )
-          )}
+          </div>
+
+
+          <div
+            style={{
+              minWidth:
+                0,
+
+              flex:
+                1,
+            }}
+          >
+
+            <div
+              style={{
+                fontSize:
+                  13,
+
+                fontWeight:
+                  700,
+
+                color:
+                  "#fff",
+
+                overflow:
+                  "hidden",
+
+                textOverflow:
+                  "ellipsis",
+
+                whiteSpace:
+                  "nowrap",
+              }}
+            >
+
+              {label}
+
+            </div>
+
+
+            <div
+              style={{
+                marginTop:
+                  3,
+
+                fontSize:
+                  10,
+
+                color:
+                  "#6b7280",
+
+                overflow:
+                  "hidden",
+
+                textOverflow:
+                  "ellipsis",
+
+                whiteSpace:
+                  "nowrap",
+              }}
+            >
+
+              {selectedIds.length ===
+                0
+
+                ? "Choose people to invite"
+
+                : `${selectedIds.length} participant${
+                    selectedIds.length ===
+                    1
+                      ? ""
+                      : "s"
+                  } selected`
+              }
+
+            </div>
+
+          </div>
 
         </div>
 
-      )}
-
-
-      {error && (
 
         <div
           style={{
-            marginBottom:
-              7,
-
             padding:
-              8,
+              "4px 8px",
 
             border:
-              "1px solid #6b1d1d",
+              "1px solid #334155",
 
             borderRadius:
-              7,
+              999,
 
             background:
-              "#321515",
+              "#172033",
 
             color:
-              "#fca5a5",
+              "#94a3b8",
 
             fontSize:
-              11,
+              9,
+
+            fontWeight:
+              600,
+
+            whiteSpace:
+              "nowrap",
+
+            flexShrink:
+              0,
           }}
         >
 
-          {error}
+          {multiple
+            ? "MULTI SELECT"
+            : "SELECT ONE"
+          }
 
         </div>
 
-      )}
+      </button>
 
 
-      <div
-        style={{
-          maxHeight:
-            220,
+      {/* =============================================
+          COLLAPSIBLE CONTENT
+      ============================================= */}
 
-          overflowY:
-            "auto",
+      {!collapsed && (
 
-          border:
-            "1px solid #292929",
+        <>
 
-          borderRadius:
-            8,
-
-          background:
-            "#0d0d0d",
-        }}
-      >
-
-        {loading && (
+          {/* =========================================
+              SEARCH
+          ========================================= */}
 
           <div
             style={{
-              padding:
-                12,
+              position:
+                "relative",
 
-              color:
-                "#777",
+              marginTop:
+                10,
 
-              fontSize:
-                11,
-
-              textAlign:
-                "center",
+              marginBottom:
+                10,
             }}
           >
 
-            Loading participants...
+            <div
+              style={{
+                position:
+                  "absolute",
+
+                left:
+                  10,
+
+                top:
+                  "50%",
+
+                transform:
+                  "translateY(-50%)",
+
+                color:
+                  "#64748b",
+
+                fontSize:
+                  13,
+
+                pointerEvents:
+                  "none",
+              }}
+            >
+
+              🔍
+
+            </div>
+
+
+            <input
+              type="text"
+
+              value={
+                search
+              }
+
+              onChange={
+                event =>
+                  setSearch(
+                    event.target.value
+                  )
+              }
+
+              placeholder={
+                placeholder
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                boxSizing:
+                  "border-box",
+
+                padding:
+                  "9px 10px 9px 32px",
+
+                border:
+                  "1px solid #334155",
+
+                borderRadius:
+                  8,
+
+                background:
+                  "#0f172a",
+
+                color:
+                  "#fff",
+
+                fontSize:
+                  11,
+
+                outline:
+                  "none",
+              }}
+            />
 
           </div>
 
-        )}
 
+          {/* =========================================
+              SELECTED PARTICIPANTS
+          ========================================= */}
 
-        {!loading &&
-          selectableMembers.length ===
+          {selectedMembers.length >
             0 && (
 
-          <div
-            style={{
-              padding:
-                12,
+            <div
+              style={{
+                marginBottom:
+                  10,
+              }}
+            >
 
-              color:
-                "#777",
+              <div
+                style={{
+                  marginBottom:
+                    6,
 
-              fontSize:
-                11,
+                  fontSize:
+                    9,
 
-              textAlign:
-                "center",
-            }}
-          >
+                  fontWeight:
+                    700,
 
-            No participants found.
+                  color:
+                    "#64748b",
 
-          </div>
+                  textTransform:
+                    "uppercase",
 
-        )}
+                  letterSpacing:
+                    "0.06em",
+                }}
+              >
 
+                Selected participants
 
-        {!loading &&
-          selectableMembers.map(
-            member => {
-
-              const memberId =
-                normaliseId(
-                  member.id
-                );
-
-
-              const selected =
-                selectedIds.includes(
-                  memberId
-                );
+              </div>
 
 
-              return (
+              <div
+                style={{
+                  display:
+                    "flex",
 
-                <button
-                  key={
-                    memberId
-                  }
+                  flexDirection:
+                    "column",
 
-                  type="button"
+                  gap:
+                    5,
+                }}
+              >
 
-                  onClick={() =>
-                    toggleParticipant(
-                      member
-                    )
-                  }
+                {selectedMembers.map(
+                  member => (
 
+                    <div
+                      key={
+                        member.id
+                      }
+
+                      style={{
+                        display:
+                          "flex",
+
+                        alignItems:
+                          "center",
+
+                        gap:
+                          9,
+
+                        padding:
+                          "7px 8px",
+
+                        border:
+                          "1px solid #24416e",
+
+                        borderRadius:
+                          8,
+
+                        background:
+                          "#14213a",
+                      }}
+                    >
+
+                      <MemberAvatar
+                        member={
+                          member
+                        }
+
+                        selected
+                      />
+
+
+                      <div
+                        style={{
+                          minWidth:
+                            0,
+
+                          flex:
+                            1,
+                        }}
+                      >
+
+                        <div
+                          style={{
+                            fontSize:
+                              11,
+
+                            fontWeight:
+                              600,
+
+                            color:
+                              "#fff",
+
+                            overflow:
+                              "hidden",
+
+                            textOverflow:
+                              "ellipsis",
+
+                            whiteSpace:
+                              "nowrap",
+                          }}
+                        >
+
+                          {getDisplayName(
+                            member
+                          )}
+
+                        </div>
+
+
+                        <div
+                          style={{
+                            marginTop:
+                              2,
+
+                            fontSize:
+                              9,
+
+                            color:
+                              "#64748b",
+
+                            overflow:
+                              "hidden",
+
+                            textOverflow:
+                              "ellipsis",
+
+                            whiteSpace:
+                              "nowrap",
+                          }}
+                        >
+
+                          {member.email ||
+                            "Participant"
+                          }
+
+                        </div>
+
+                      </div>
+
+
+                      <div
+                        style={{
+                          display:
+                            "flex",
+
+                          alignItems:
+                            "center",
+
+                          gap:
+                            6,
+                        }}
+                      >
+
+                        <span
+                          style={{
+                            color:
+                              "#60a5fa",
+
+                            fontSize:
+                              9,
+
+                            fontWeight:
+                              600,
+                          }}
+                        >
+
+                          Selected
+
+                        </span>
+
+
+                        <button
+                          type="button"
+
+                          onClick={() =>
+                            removeParticipant(
+                              member.id
+                            )
+                          }
+
+                          style={{
+                            width:
+                              24,
+
+                            height:
+                              24,
+
+                            border:
+                              "1px solid #334155",
+
+                            borderRadius:
+                              6,
+
+                            background:
+                              "#0f172a",
+
+                            color:
+                              "#94a3b8",
+
+                            cursor:
+                              "pointer",
+
+                            fontSize:
+                              12,
+
+                            lineHeight:
+                              1,
+                          }}
+                        >
+
+                          ×
+
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                  )
+                )}
+
+              </div>
+
+            </div>
+
+          )}
+
+
+          {/* =========================================
+              AVAILABLE PARTICIPANTS
+          ========================================= */}
+
+          <div>
+
+            <div
+              style={{
+                display:
+                  "flex",
+
+                alignItems:
+                  "center",
+
+                justifyContent:
+                  "space-between",
+
+                marginBottom:
+                  6,
+              }}
+            >
+
+              <div
+                style={{
+                  fontSize:
+                    9,
+
+                  fontWeight:
+                    700,
+
+                  color:
+                    "#64748b",
+
+                  textTransform:
+                    "uppercase",
+
+                  letterSpacing:
+                    "0.06em",
+                }}
+              >
+
+                Available participants
+
+              </div>
+
+
+              {selectableMembers.length >
+                0 && (
+
+                <div
                   style={{
-                    width:
-                      "100%",
-
-                    display:
-                      "flex",
-
-                    alignItems:
-                      "center",
-
-                    gap:
+                    fontSize:
                       9,
 
-                    padding:
-                      "9px 10px",
-
-                    border:
-                      "none",
-
-                    borderBottom:
-                      "1px solid #202020",
-
-                    background:
-                      selected
-                        ? "#182235"
-                        : "transparent",
-
                     color:
-                      "#fff",
-
-                    textAlign:
-                      "left",
-
-                    cursor:
-                      "pointer",
+                      "#475569",
                   }}
                 >
 
-                  <span
-                    style={{
-                      width:
-                        16,
+                  {selectableMembers.length} available
 
-                      height:
-                        16,
+                </div>
 
-                      display:
-                        "flex",
+              )}
 
-                      alignItems:
-                        "center",
-
-                      justifyContent:
-                        "center",
-
-                      flexShrink:
-                        0,
-
-                      border:
-                        selected
-                          ? "1px solid #2563eb"
-                          : "1px solid #555",
-
-                      borderRadius:
-                        4,
-
-                      background:
-                        selected
-                          ? "#2563eb"
-                          : "transparent",
-
-                      fontSize:
-                        10,
-                    }}
-                  >
-
-                    {selected
-                      ? "✓"
-                      : ""
-                    }
-
-                  </span>
+            </div>
 
 
-                  <span
-                    style={{
-                      minWidth:
-                        0,
+            <div
+              style={{
+                maxHeight:
+                  250,
 
-                      flex:
-                        1,
-                    }}
-                  >
+                overflowY:
+                  "auto",
 
-                    <span
-                      style={{
-                        display:
-                          "block",
+                border:
+                  "1px solid #293548",
 
-                        fontSize:
-                          12,
+                borderRadius:
+                  9,
 
-                        fontWeight:
-                          600,
+                background:
+                  "#0f172a",
+              }}
+            >
 
-                        whiteSpace:
-                          "nowrap",
+              {loading && (
 
-                        overflow:
-                          "hidden",
+                <div
+                  style={{
+                    padding:
+                      18,
 
-                        textOverflow:
-                          "ellipsis",
-                      }}
-                    >
+                    color:
+                      "#64748b",
 
-                      {getDisplayName(
-                        member
-                      )}
+                    fontSize:
+                      10,
 
-                    </span>
+                    textAlign:
+                      "center",
+                  }}
+                >
 
+                  Loading participants...
 
-                    <span
-                      style={{
-                        display:
-                          "block",
+                </div>
 
-                        marginTop:
-                          2,
-
-                        fontSize:
-                          10,
-
-                        color:
-                          "#777",
-
-                        whiteSpace:
-                          "nowrap",
-
-                        overflow:
-                          "hidden",
-
-                        textOverflow:
-                          "ellipsis",
-                      }}
-                    >
-
-                      {member.email}
-
-                    </span>
-
-                  </span>
+              )}
 
 
-                  {member.role && (
+              {!loading &&
+                selectableMembers.length ===
+                  0 && (
 
-                    <span
-                      style={{
-                        fontSize:
-                          9,
+                <div
+                  style={{
+                    padding:
+                      18,
 
-                        color:
-                          "#777",
-                      }}
-                    >
+                    color:
+                      "#64748b",
 
-                      {member.role}
+                    fontSize:
+                      10,
 
-                    </span>
+                    textAlign:
+                      "center",
+                  }}
+                >
 
-                  )}
+                  No participants found.
 
-                </button>
+                </div>
 
-              );
+              )}
 
-            }
+
+              {!loading &&
+                selectableMembers.map(
+                  (
+                    member,
+                    index
+                  ) => {
+
+                    const memberId =
+                      normaliseId(
+                        member.id
+                      );
+
+
+                    const selected =
+                      selectedIds.includes(
+                        memberId
+                      );
+
+
+                    return (
+
+                      <button
+                        key={
+                          memberId
+                        }
+
+                        type="button"
+
+                        onClick={() =>
+                          toggleParticipant(
+                            member
+                          )
+                        }
+
+                        style={{
+                          width:
+                            "100%",
+
+                          display:
+                            "flex",
+
+                          alignItems:
+                            "center",
+
+                          gap:
+                            9,
+
+                          padding:
+                            "9px 10px",
+
+                          border:
+                            "none",
+
+                          borderBottom:
+                            index ===
+                            selectableMembers.length - 1
+
+                              ? "none"
+
+                              : "1px solid #1e293b",
+
+                          background:
+                            selected
+                              ? "#172a46"
+                              : "transparent",
+
+                          color:
+                            "#fff",
+
+                          textAlign:
+                            "left",
+
+                          cursor:
+                            "pointer",
+
+                          boxSizing:
+                            "border-box",
+
+                          transition:
+                            "background 120ms ease",
+                        }}
+                      >
+
+                        <MemberAvatar
+                          member={
+                            member
+                          }
+
+                          selected={
+                            selected
+                          }
+                        />
+
+
+                        <div
+                          style={{
+                            minWidth:
+                              0,
+
+                            flex:
+                              1,
+                          }}
+                        >
+
+                          <div
+                            style={{
+                              display:
+                                "flex",
+
+                              alignItems:
+                                "center",
+
+                              gap:
+                                6,
+
+                              minWidth:
+                                0,
+                            }}
+                          >
+
+                            <span
+                              style={{
+                                minWidth:
+                                  0,
+
+                                flex:
+                                  1,
+
+                                fontSize:
+                                  11,
+
+                                fontWeight:
+                                  600,
+
+                                color:
+                                  "#f8fafc",
+
+                                overflow:
+                                  "hidden",
+
+                                textOverflow:
+                                  "ellipsis",
+
+                                whiteSpace:
+                                  "nowrap",
+                              }}
+                            >
+
+                              {getDisplayName(
+                                member
+                              )}
+
+                            </span>
+
+
+                            {member.role && (
+
+                              <span
+                                style={{
+                                  flexShrink:
+                                    0,
+
+                                  padding:
+                                    "2px 5px",
+
+                                  border:
+                                    "1px solid #334155",
+
+                                  borderRadius:
+                                    4,
+
+                                  color:
+                                    "#64748b",
+
+                                  fontSize:
+                                    8,
+
+                                  textTransform:
+                                    "uppercase",
+                                }}
+                              >
+
+                                {member.role}
+
+                              </span>
+
+                            )}
+
+                          </div>
+
+
+                          <div
+                            style={{
+                              marginTop:
+                                2,
+
+                              fontSize:
+                                9,
+
+                              color:
+                                "#64748b",
+
+                              overflow:
+                                "hidden",
+
+                              textOverflow:
+                                "ellipsis",
+
+                              whiteSpace:
+                                "nowrap",
+                            }}
+                          >
+
+                            {member.email ||
+                              "Tenant member"
+                            }
+
+                          </div>
+
+                        </div>
+
+
+                        <div
+                          style={{
+                            flexShrink:
+                              0,
+
+                            minWidth:
+                              60,
+
+                            padding:
+                              "5px 7px",
+
+                            border:
+                              selected
+                                ? "1px solid #2563eb"
+                                : "1px solid #334155",
+
+                            borderRadius:
+                              6,
+
+                            background:
+                              selected
+                                ? "#1d4ed8"
+                                : "#172033",
+
+                            color:
+                              selected
+                                ? "#fff"
+                                : "#94a3b8",
+
+                            fontSize:
+                              9,
+
+                            fontWeight:
+                              600,
+
+                            textAlign:
+                              "center",
+                          }}
+                        >
+
+                          {selected
+                            ? "Selected"
+                            : "Invite"
+                          }
+
+                        </div>
+
+                      </button>
+
+                    );
+
+                  }
+                )}
+
+            </div>
+
+          </div>
+
+
+          {/* =========================================
+              ERROR
+          ========================================= */}
+
+          {error && (
+
+            <div
+              style={{
+                marginTop:
+                  8,
+
+                padding:
+                  8,
+
+                border:
+                  "1px solid #6b1d1d",
+
+                borderRadius:
+                  7,
+
+                background:
+                  "#321515",
+
+                color:
+                  "#fca5a5",
+
+                fontSize:
+                  10,
+              }}
+            >
+
+              {error}
+
+            </div>
+
           )}
 
-      </div>
+
+          {/* =========================================
+              LOAD MORE
+          ========================================= */}
+
+          {hasNext && (
+
+            <button
+              type="button"
+
+              onClick={
+                loadMore
+              }
+
+              disabled={
+                loadingMore
+              }
+
+              style={{
+                width:
+                  "100%",
+
+                marginTop:
+                  8,
+
+                padding:
+                  "7px 10px",
+
+                border:
+                  "1px solid #334155",
+
+                borderRadius:
+                  7,
+
+                background:
+                  "#172033",
+
+                color:
+                  "#94a3b8",
+
+                fontSize:
+                  10,
+
+                cursor:
+                  loadingMore
+                    ? "default"
+                    : "pointer",
+              }}
+            >
+
+              {loadingMore
+                ? "Loading..."
+                : "Load more participants"
+              }
+
+            </button>
+
+          )}
 
 
-      {hasNext && (
+          {/* =========================================
+              RUNTIME DEBUG
+          ========================================= */}
 
-        <button
-          type="button"
+          <div
+            style={{
+              marginTop:
+                8,
 
-          onClick={
-            loadMore
-          }
+              fontSize:
+                8,
 
-          disabled={
-            loadingMore
-          }
+              color:
+                "#374151",
 
-          style={{
-            width:
-              "100%",
+              overflow:
+                "hidden",
 
-            marginTop:
-              7,
+              textOverflow:
+                "ellipsis",
 
-            padding:
-              "8px 10px",
+              whiteSpace:
+                "nowrap",
+            }}
+          >
 
-            border:
-              "1px solid #333",
+            Runtime:
+            {" "}
+            {resolvedSelectionPath}
 
-            borderRadius:
-              7,
+          </div>
 
-            background:
-              "#151515",
-
-            color:
-              "#aaa",
-
-            fontSize:
-              11,
-
-            cursor:
-              loadingMore
-                ? "default"
-                : "pointer",
-          }}
-        >
-
-          {loadingMore
-            ? "Loading..."
-            : "Load more"
-          }
-
-        </button>
+        </>
 
       )}
 

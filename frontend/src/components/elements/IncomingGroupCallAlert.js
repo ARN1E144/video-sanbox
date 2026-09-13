@@ -179,6 +179,16 @@ export default function IncomingGroupCallAlert({
   style =
     {},
 
+  // ---------------------------------------------------
+  // COLLAPSIBLE UI
+  // ---------------------------------------------------
+
+  collapsible =
+    true,
+
+  defaultCollapsed =
+    false,
+
 }) {
 
   const runtime =
@@ -189,6 +199,21 @@ export default function IncomingGroupCallAlert({
     runAction,
   } =
   useActionContext();
+
+
+  // ===================================================
+  // COLLAPSED STATE
+  // ===================================================
+
+  const [
+    collapsed,
+    setCollapsed,
+  ] =
+  useState(
+    Boolean(
+      defaultCollapsed
+    )
+  );
 
 
   // ===================================================
@@ -206,17 +231,6 @@ export default function IncomingGroupCallAlert({
 
   // ===================================================
   // LOCAL ACCEPTED STATE
-  // ===================================================
-  //
-  // This deliberately lives outside the server's
-  // pending-invitation collection.
-  //
-  // Once accepted, the backend will normally stop
-  // returning the invitation from /invitations.
-  //
-  // We therefore preserve the selected invitation
-  // locally until the user joins or dismisses it.
-  //
   // ===================================================
 
   const [
@@ -536,10 +550,6 @@ export default function IncomingGroupCallAlert({
         }
 
 
-        // ---------------------------------------------
-        // Preserve the accepted invitation locally.
-        // ---------------------------------------------
-
         setAcceptedInvitations(
           previous => ({
 
@@ -557,10 +567,6 @@ export default function IncomingGroupCallAlert({
           })
         );
 
-
-        // ---------------------------------------------
-        // Remove it from the incoming state.
-        // ---------------------------------------------
 
         console.log(
           "[IncomingGroupCallAlert] Invitation accepted - waiting for join"
@@ -765,13 +771,6 @@ export default function IncomingGroupCallAlert({
         }
 
 
-        // ---------------------------------------------
-        // The active call is now represented by
-        // call.id / call.channel / call.state.
-        //
-        // Remove the local accepted invitation.
-        // ---------------------------------------------
-
         setAcceptedInvitations(
           previous => {
 
@@ -923,6 +922,45 @@ export default function IncomingGroupCallAlert({
 
 
   // ===================================================
+  // COLLAPSE EVENT HANDLING
+  // ===================================================
+
+  const stopCanvasInteraction =
+    event => {
+
+      event.preventDefault();
+
+      event.stopPropagation();
+
+    };
+
+
+  const toggleCollapsed =
+    event => {
+
+      stopCanvasInteraction(
+        event
+      );
+
+
+      if (
+        !collapsible
+      ) {
+
+        return;
+
+      }
+
+
+      setCollapsed(
+        previous =>
+          !previous
+      );
+
+    };
+
+
+  // ===================================================
   // RENDER
   // ===================================================
 
@@ -937,7 +975,14 @@ export default function IncomingGroupCallAlert({
         ...positionStyle,
 
         width:
-          "min(380px, calc(100vw - 32px))",
+          collapsed
+            ? "auto"
+            : "min(380px, calc(100vw - 32px))",
+
+        minWidth:
+          collapsed
+            ? 220
+            : undefined,
 
         boxSizing:
           "border-box",
@@ -966,218 +1011,218 @@ export default function IncomingGroupCallAlert({
         ...style,
 
       }}
+
+      onMouseDown={event => {
+        event.stopPropagation();
+      }}
+
+      onPointerDown={event => {
+        event.stopPropagation();
+      }}
+
     >
 
       {/* =============================================
-          TITLE
+          COLLAPSIBLE HEADER
       ============================================= */}
 
-      <div
+      <button
+        type="button"
+
+        onPointerDown={
+          toggleCollapsed
+        }
+
+        onMouseDown={
+          toggleCollapsed
+        }
+
+        onClick={
+          event => {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }
+
+        disabled={
+          !collapsible
+        }
+
+        aria-expanded={
+          !collapsed
+        }
+
+        aria-label={
+          collapsible
+            ? (
+                collapsed
+                  ? "Expand incoming group call"
+                  : "Collapse incoming group call"
+              )
+            : undefined
+        }
+
         style={{
-          fontSize:
-            14,
+          width:
+            "100%",
 
-          fontWeight:
-            700,
-
-          marginBottom:
-            8,
-        }}
-      >
-
-        {isAccepted
-          ? "Group Call Invitation Accepted"
-          : title}
-
-      </div>
-
-
-      {/* =============================================
-          MESSAGE
-      ============================================= */}
-
-      <div
-        style={{
-          fontSize:
-            12,
-
-          color:
-            "#bbb",
-
-          lineHeight:
-            1.45,
-
-          marginBottom:
-            10,
-        }}
-      >
-
-        <strong
-          style={{
-            color:
-              "#fff",
-          }}
-        >
-
-          {safeText(
-            activeInvitation?.creatorName,
-            "Someone"
-          )}
-
-        </strong>
-
-        {" "}
-
-        {isAccepted
-          ? acceptedMessage
-          : message}
-
-      </div>
-
-
-      {/* =============================================
-          CREATOR EMAIL
-      ============================================= */}
-
-      {activeInvitation?.creatorEmail && (
-
-        <div
-          style={{
-            fontSize:
-              10,
-
-            color:
-              "#777",
-
-            marginBottom:
-              8,
-          }}
-        >
-
-          {activeInvitation.creatorEmail}
-
-        </div>
-
-      )}
-
-
-      {/* =============================================
-          CHANNEL
-      ============================================= */}
-
-      {showChannel &&
-      activeInvitation?.channelName && (
-
-        <div
-          style={{
-            marginBottom:
-              10,
-
-            padding:
-              7,
-
-            borderRadius:
-              6,
-
-            background:
-              "#111",
-
-            color:
-              "#666",
-
-            fontSize:
-              9,
-
-            wordBreak:
-              "break-all",
-          }}
-        >
-
-          {activeInvitation.channelName}
-
-        </div>
-
-      )}
-
-
-      {/* =============================================
-          ACCEPTED STATUS
-      ============================================= */}
-
-      {isAccepted && (
-
-        <div
-          style={{
-            marginBottom:
-              10,
-
-            padding:
-              8,
-
-            border:
-              "1px solid #24452d",
-
-            borderRadius:
-              7,
-
-            background:
-              "#102117",
-
-            color:
-              "#86efac",
-
-            fontSize:
-              10,
-          }}
-        >
-
-          Invitation accepted. The call has not been
-          joined yet.
-
-        </div>
-
-      )}
-
-
-      {/* =============================================
-          ACTIONS
-      ============================================= */}
-
-      <div
-        style={{
           display:
             "flex",
 
+          alignItems:
+            "center",
+
+          justifyContent:
+            "space-between",
+
           gap:
-            8,
+            10,
+
+          padding:
+            0,
+
+          margin:
+            0,
+
+          border:
+            "none",
+
+          background:
+            "transparent",
+
+          color:
+            "#fff",
+
+          cursor:
+            collapsible
+              ? "pointer"
+              : "default",
+
+          textAlign:
+            "left",
+
+          userSelect:
+            "none",
+
+          touchAction:
+            "manipulation",
         }}
       >
 
-        {!isAccepted && (
+        <span
+          style={{
+            display:
+              "flex",
 
-          <button
+            alignItems:
+              "center",
 
-            type="button"
+            gap:
+              8,
 
-            onClick={() =>
-              handleDecline(
-                invitation
-              )
-            }
+            minWidth:
+              0,
+          }}
+        >
 
-            disabled={
-              actionRunning
-            }
-
+          <span
             style={{
-              flex:
-                1,
+              width:
+                28,
 
-              minHeight:
-                38,
+              height:
+                28,
+
+              display:
+                "flex",
+
+              alignItems:
+                "center",
+
+              justifyContent:
+                "center",
+
+              flexShrink:
+                0,
+
+              borderRadius:
+                8,
+
+              background:
+                isAccepted
+                  ? "#102117"
+                  : "#172554",
 
               border:
-                "1px solid #444",
+                isAccepted
+                  ? "1px solid #24452d"
+                  : "1px solid #263b75",
+
+              fontSize:
+                14,
+            }}
+          >
+
+            {isAccepted
+              ? "✓"
+              : "☎"}
+
+          </span>
+
+
+          <span
+            style={{
+              fontSize:
+                14,
+
+              fontWeight:
+                700,
+
+              overflow:
+                "hidden",
+
+              textOverflow:
+                "ellipsis",
+
+              whiteSpace:
+                "nowrap",
+            }}
+          >
+
+            {isAccepted
+              ? "Group Call Invitation Accepted"
+              : title}
+
+          </span>
+
+        </span>
+
+
+        {collapsible && (
+
+          <span
+            aria-hidden="true"
+            style={{
+              width:
+                28,
+
+              height:
+                28,
+
+              display:
+                "flex",
+
+              alignItems:
+                "center",
+
+              justifyContent:
+                "center",
+
+              flexShrink:
+                0,
+
+              border:
+                "1px solid #333",
 
               borderRadius:
                 7,
@@ -1186,244 +1231,463 @@ export default function IncomingGroupCallAlert({
                 "#222",
 
               color:
-                "#fff",
+                "#aaa",
 
-              cursor:
-                actionRunning
-                  ? "default"
-                  : "pointer",
-
-              opacity:
-                actionRunning
-                  ? 0.6
-                  : 1,
-            }}
-          >
-
-            {
-              actionRunning &&
-              processingCallId ===
-                invitation?.callId
-
-                ? "Working..."
-
-                : declineLabel
-            }
-
-          </button>
-
-        )}
-
-
-        {!isAccepted && (
-
-          <button
-
-            type="button"
-
-            onClick={
-              handleAccept
-            }
-
-            disabled={
-              actionRunning
-            }
-
-            style={{
-              flex:
-                1,
-
-              minHeight:
-                38,
-
-              border:
-                "none",
-
-              borderRadius:
-                7,
-
-              background:
-                "#2563eb",
-
-              color:
-                "#fff",
+              fontSize:
+                16,
 
               fontWeight:
-                600,
+                700,
 
-              cursor:
-                actionRunning
-                  ? "default"
-                  : "pointer",
-
-              opacity:
-                actionRunning
-                  ? 0.6
-                  : 1,
+              lineHeight:
+                1,
             }}
           >
 
-            {
-              actionRunning &&
-              processingCallId ===
-                invitation?.callId
+            {collapsed
+              ? "+"
+              : "−"}
 
-                ? "Working..."
-
-                : acceptLabel
-            }
-
-          </button>
+          </span>
 
         )}
 
-
-        {isAccepted && (
-
-          <>
-
-            <button
-
-              type="button"
-
-              onClick={() =>
-                dismiss(
-                  acceptedInvitation.callId
-                )
-              }
-
-              disabled={
-                actionRunning
-              }
-
-              style={{
-                flex:
-                  1,
-
-                minHeight:
-                  38,
-
-                border:
-                  "1px solid #444",
-
-                borderRadius:
-                  7,
-
-                background:
-                  "#222",
-
-                color:
-                  "#fff",
-
-                cursor:
-                  actionRunning
-                    ? "default"
-                    : "pointer",
-
-              }}
-            >
-
-              Later
-
-            </button>
-
-
-            <button
-
-              type="button"
-
-              onClick={() =>
-                handleJoin(
-                  acceptedInvitation
-                )
-              }
-
-              disabled={
-                actionRunning
-              }
-
-              style={{
-                flex:
-                  1,
-
-                minHeight:
-                  38,
-
-                border:
-                  "none",
-
-                borderRadius:
-                  7,
-
-                background:
-                  "#2563eb",
-
-                color:
-                  "#fff",
-
-                fontWeight:
-                  600,
-
-                cursor:
-                  actionRunning
-                    ? "default"
-                    : "pointer",
-
-                opacity:
-                  actionRunning
-                    ? 0.6
-                    : 1,
-              }}
-            >
-
-              {
-                actionRunning &&
-                processingCallId ===
-                  acceptedInvitation.callId
-
-                  ? "Joining..."
-
-                  : joinLabel
-              }
-
-            </button>
-
-          </>
-
-        )}
-
-      </div>
+      </button>
 
 
       {/* =============================================
-          ADDITIONAL INVITATIONS
+          COLLAPSIBLE CONTENT
       ============================================= */}
 
-      {!isAccepted &&
-      visibleInvitations.length > 1 && (
+      {!collapsed && (
 
         <div
           style={{
             marginTop:
-              9,
-
-            fontSize:
-              9,
-
-            color:
-              "#666",
-
-            textAlign:
-              "center",
+              12,
           }}
         >
 
-          +{visibleInvitations.length - 1}
-          {" "}
-          more pending invitation
-          {visibleInvitations.length === 2
-            ? ""
-            : "s"}
+          {/* =========================================
+              MESSAGE
+          ========================================= */}
+
+          <div
+            style={{
+              fontSize:
+                12,
+
+              color:
+                "#bbb",
+
+              lineHeight:
+                1.45,
+
+              marginBottom:
+                10,
+            }}
+          >
+
+            <strong
+              style={{
+                color:
+                  "#fff",
+              }}
+            >
+
+              {safeText(
+                activeInvitation?.creatorName,
+                "Someone"
+              )}
+
+            </strong>
+
+            {" "}
+
+            {isAccepted
+              ? acceptedMessage
+              : message}
+
+          </div>
+
+
+          {/* =========================================
+              CREATOR EMAIL
+          ========================================= */}
+
+          {activeInvitation?.creatorEmail && (
+
+            <div
+              style={{
+                fontSize:
+                  10,
+
+                color:
+                  "#777",
+
+                marginBottom:
+                  8,
+              }}
+            >
+
+              {activeInvitation.creatorEmail}
+
+            </div>
+
+          )}
+
+
+          {/* =========================================
+              CHANNEL
+          ========================================= */}
+
+          {showChannel &&
+          activeInvitation?.channelName && (
+
+            <div
+              style={{
+                marginBottom:
+                  10,
+
+                padding:
+                  7,
+
+                borderRadius:
+                  6,
+
+                background:
+                  "#111",
+
+                color:
+                  "#666",
+
+                fontSize:
+                  9,
+
+                wordBreak:
+                  "break-all",
+              }}
+            >
+
+              {activeInvitation.channelName}
+
+            </div>
+
+          )}
+
+
+          {/* =========================================
+              ACCEPTED STATUS
+          ========================================= */}
+
+          {isAccepted && (
+
+            <div
+              style={{
+                marginBottom:
+                  10,
+
+                padding:
+                  8,
+
+                border:
+                  "1px solid #24452d",
+
+                borderRadius:
+                  7,
+
+                background:
+                  "#102117",
+
+                color:
+                  "#86efac",
+
+                fontSize:
+                  10,
+              }}
+            >
+
+              Invitation accepted. The call has not been
+              joined yet.
+
+            </div>
+
+          )}
+
+
+          {/* =========================================
+              ACTIONS
+          ========================================= */}
+
+          <div
+            style={{
+              display:
+                "flex",
+
+              gap:
+                8,
+            }}
+          >
+
+            {!isAccepted && (
+
+              <button
+                type="button"
+                onClick={() =>
+                  handleDecline(
+                    invitation
+                  )
+                }
+                disabled={
+                  actionRunning
+                }
+                style={{
+                  flex:
+                    1,
+
+                  minHeight:
+                    38,
+
+                  border:
+                    "1px solid #444",
+
+                  borderRadius:
+                    7,
+
+                  background:
+                    "#222",
+
+                  color:
+                    "#fff",
+
+                  cursor:
+                    actionRunning
+                      ? "default"
+                      : "pointer",
+
+                  opacity:
+                    actionRunning
+                      ? 0.6
+                      : 1,
+                }}
+              >
+
+                {
+                  actionRunning &&
+                  processingCallId ===
+                    invitation?.callId
+
+                    ? "Working..."
+
+                    : declineLabel
+                }
+
+              </button>
+
+            )}
+
+
+            {!isAccepted && (
+
+              <button
+                type="button"
+                onClick={
+                  handleAccept
+                }
+                disabled={
+                  actionRunning
+                }
+                style={{
+                  flex:
+                    1,
+
+                  minHeight:
+                    38,
+
+                  border:
+                    "none",
+
+                  borderRadius:
+                    7,
+
+                  background:
+                    "#2563eb",
+
+                  color:
+                    "#fff",
+
+                  fontWeight:
+                    600,
+
+                  cursor:
+                    actionRunning
+                      ? "default"
+                      : "pointer",
+
+                  opacity:
+                    actionRunning
+                      ? 0.6
+                      : 1,
+                }}
+              >
+
+                {
+                  actionRunning &&
+                  processingCallId ===
+                    invitation?.callId
+
+                    ? "Working..."
+
+                    : acceptLabel
+                }
+
+              </button>
+
+            )}
+
+
+            {isAccepted && (
+
+              <>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    dismiss(
+                      acceptedInvitation.callId
+                    )
+                  }
+                  disabled={
+                    actionRunning
+                  }
+                  style={{
+                    flex:
+                      1,
+
+                    minHeight:
+                      38,
+
+                    border:
+                      "1px solid #444",
+
+                    borderRadius:
+                      7,
+
+                    background:
+                      "#222",
+
+                    color:
+                      "#fff",
+
+                    cursor:
+                      actionRunning
+                        ? "default"
+                        : "pointer",
+
+                  }}
+                >
+
+                  Later
+
+                </button>
+
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleJoin(
+                      acceptedInvitation
+                    )
+                  }
+                  disabled={
+                    actionRunning
+                  }
+                  style={{
+                    flex:
+                      1,
+
+                    minHeight:
+                      38,
+
+                    border:
+                      "none",
+
+                    borderRadius:
+                      7,
+
+                    background:
+                      "#2563eb",
+
+                    color:
+                      "#fff",
+
+                    fontWeight:
+                      600,
+
+                    cursor:
+                      actionRunning
+                        ? "default"
+                        : "pointer",
+
+                    opacity:
+                      actionRunning
+                        ? 0.6
+                        : 1,
+                  }}
+                >
+
+                  {
+                    actionRunning &&
+                    processingCallId ===
+                      acceptedInvitation.callId
+
+                      ? "Joining..."
+
+                      : joinLabel
+                  }
+
+                </button>
+
+              </>
+
+            )}
+
+          </div>
+
+
+          {/* =========================================
+              ADDITIONAL INVITATIONS
+          ========================================= */}
+
+          {!isAccepted &&
+          visibleInvitations.length > 1 && (
+
+            <div
+              style={{
+                marginTop:
+                  9,
+
+                fontSize:
+                  9,
+
+                color:
+                  "#666",
+
+                textAlign:
+                  "center",
+              }}
+            >
+
+              +{visibleInvitations.length - 1}
+              {" "}
+              more pending invitation
+              {visibleInvitations.length === 2
+                ? ""
+                : "s"}
+
+            </div>
+
+          )}
 
         </div>
 

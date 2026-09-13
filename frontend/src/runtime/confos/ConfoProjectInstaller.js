@@ -23,7 +23,7 @@ The installer:
 - preserves explicit Canvas properties
 - preserves parent/child relationships explicitly
 - preserves tree paths
-- preserves logical root containers
+- preserves logical / canonical root containers
 - provides diagnostics for hierarchy integrity
 
 It does NOT:
@@ -68,6 +68,29 @@ understand hierarchy:
       child.meta.parentId
 
 The native tree remains authoritative.
+
+IMPORTANT ROOT MODEL
+-----------------------------------------------------
+
+Canonical Confo templates may contain a REAL root:
+
+    Container
+        ↓
+        children
+
+That root is part of the project tree and MUST NOT be
+stripped or replaced with an App wrapper.
+
+Therefore:
+
+    Confo.tree
+        ↓
+    installNode(Confo.tree)
+        ↓
+    installed project tree
+
+Legacy App roots are still supported, but canonical
+Container roots remain real Canvas nodes.
 
 =====================================================
 */
@@ -202,6 +225,11 @@ function getOriginalMeta(
 // The walk is recursive so nested children are always
 // included.
 //
+// IMPORTANT:
+// The root is included when it is a real node.
+// Legacy App roots are excluded from target mapping
+// because App is a logical wrapper rather than a
+// component target.
 // =====================================================
 
 function buildIdMap(
@@ -223,6 +251,9 @@ function buildIdMap(
   // ---------------------------------------------------
   // App is a logical root and does not participate in
   // Confo target ID mapping.
+  //
+  // Real canonical roots such as Container DO
+  // participate in the installed ID map.
   // ---------------------------------------------------
 
   if (
@@ -607,19 +638,33 @@ function installNode(
 
 
 // =====================================================
-// GET INSTALL ROOT
+// RESOLVE INSTALL ROOT
 // =====================================================
 //
-// Converts the Confo logical root into the project App
-// root when necessary.
+// IMPORTANT CHANGE:
 //
-// IMPORTANT:
+// Canonical roots are preserved.
 //
-// The logical Container itself is NOT installed as a
-// detached Canvas element.
+// Previously a Container root was converted into:
 //
-// Its children become the App's children while retaining
-// their complete internal hierarchy.
+//     App
+//       ├── child
+//       ├── child
+//       └── child
+//
+// That caused the Canvas to see multiple top-level
+// elements and lose the real Container hierarchy.
+//
+// Now:
+//
+//     Container
+//       ├── child
+//       ├── child
+//       └── child
+//
+// remains exactly that.
+//
+// Legacy App roots are also preserved.
 //
 // =====================================================
 
@@ -638,95 +683,14 @@ function getInstallRoot(
 
 
   // ---------------------------------------------------
-  // Existing App root
+  // Canonical / legacy root
   // ---------------------------------------------------
-
-  if (
-    confoTree.type ===
-    "App"
-  ) {
-
-    return confoTree;
-
-  }
-
-
-  // ---------------------------------------------------
-  // Logical Container root
-  // ---------------------------------------------------
-
-  if (
-    confoTree.type ===
-    "Container"
-  ) {
-
-    return {
-
-      id:
-        "root",
-
-      type:
-        "App",
-
-      props:
-        {},
-
-      children:
-        Array.isArray(
-          confoTree.children
-        )
-          ? confoTree.children
-          : [],
-
-      meta: {
-
-        source:
-          "confo-root-container",
-
-        confoLayout:
-          confoTree.props?.layout ||
-          "vertical",
-
-        sourceId:
-          null,
-
-      },
-
-    };
-
-  }
-
-
-  // ---------------------------------------------------
-  // Any other root
-  // ---------------------------------------------------
-
-  return {
-
-    id:
-      "root",
-
-    type:
-      "App",
-
-    props:
-      {},
-
-    children: [
-      confoTree,
-    ],
-
-    meta: {
-
-      source:
-        "confo-root",
-
-      sourceId:
-        null,
-
-    },
-
-  };
+  //
+  // Do NOT unwrap it.
+  //
+  // The supplied tree root is authoritative.
+  //
+  return confoTree;
 
 }
 
@@ -883,7 +847,7 @@ function validateInstalledHierarchy(
   }
   else {
 
-    // Root App is allowed to have no parent.
+    // Real root is allowed to have no parent.
 
     if (
       node.meta?.parentId
@@ -1102,6 +1066,13 @@ export function installConfo(
   // ===================================================
   // BUILD ID MAP
   // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // Build from the REAL root so the root Container is
+  // included in deterministic ID resolution.
+  //
+  // ===================================================
 
   const idMap =
     buildIdMap(
@@ -1118,98 +1089,103 @@ export function installConfo(
 
 
   // ===================================================
-  // INSTALL CHILDREN
+  // INSTALL REAL ROOT
+  // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // The previous implementation installed only
+  // logicalRoot.children.
+  //
+  // That stripped the canonical Container root.
+  //
+  // We now install the root itself.
+  //
   // ===================================================
 
-  const installedChildren =
-    (
-      Array.isArray(
-        logicalRoot.children
-      )
-        ? logicalRoot.children
-        : []
-    )
-      .map(
-        (
-          child,
-          index
-        ) =>
-          installNode(
-            child,
+  const installedTree =
+    installNode(
+      logicalRoot,
 
-            String(
-              index
-            ),
+      "0",
 
-            idMap,
+      idMap,
 
-            null,
+      null,
 
-            0
-          )
-      )
+      0
+    );
 
-      .filter(
-        Boolean
-      );
+
+  if (
+    !installedTree
+  ) {
+
+    return {
+
+      success:
+        false,
+
+      errors: [
+        "Failed to install Confo root node.",
+      ],
+
+    };
+
+  }
 
 
   // ===================================================
-  // PROJECT TREE
+  // PROJECT METADATA
+  // ===================================================
+  //
+  // Preserve the installed root's existing metadata,
+  // then add project-level installation metadata.
+  //
+  // Do NOT change the root type.
+  //
   // ===================================================
 
-  const installedTree = {
+  installedTree.meta = {
 
-    id:
-      projectSchema?.tree?.id ||
-      "root",
+    ...(installedTree.meta || {}),
 
-    type:
-      "App",
+    installedFromConfo:
+      confo.id ||
+      confo.name,
 
-    props:
-      projectSchema?.tree?.props ||
-      {},
+    confoName:
+      confo.name,
 
-    children:
-      installedChildren,
-
-    meta: {
-
-      ...(projectSchema?.tree?.meta || {}),
-
-      source:
-        "project-tree",
-
-      sourceId:
-        null,
-
-      installedFromConfo:
-        confo.id ||
-        confo.name,
-
-      confoName:
-        confo.name,
-
-      confoVersion:
-        confo.version ||
-        1,
-
-      treePath:
-        "root",
-
-      depth:
-        0,
-
-      parentId:
-        null,
-
-      parentSourceId:
-        null,
-
-    },
+    confoVersion:
+      confo.version ||
+      1,
 
   };
+
+
+  // ===================================================
+  // PRESERVE PROJECT TREE ID WHEN APPROPRIATE
+  // ===================================================
+  //
+  // Canonical Confo root identity remains the source
+  // identity. We do not replace it with "root".
+  //
+  // If the existing project tree has an App root ID,
+  // preserve it only for legacy App-root installations.
+  //
+  // ===================================================
+
+  if (
+    installedTree.type ===
+    "App" &&
+    projectSchema?.tree?.id
+  ) {
+
+    installedTree.id =
+      projectSchema.tree.id;
+
+  }
 
 
   // ===================================================
@@ -1229,7 +1205,7 @@ export function installConfo(
 
   // ===================================================
   // HIERARCHY VALIDATION
-  // ===================================================
+  // =====================================================
 
   const hierarchyValidation =
     validateInstalledHierarchy(

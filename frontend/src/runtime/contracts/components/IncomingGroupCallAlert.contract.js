@@ -154,6 +154,32 @@ export default {
 
     },
 
+    collapsible: {
+
+    type:
+      "boolean",
+
+    label:
+      "Collapsible",
+
+    default:
+      true,
+
+      },
+
+    defaultCollapsed: {
+
+      type:
+        "boolean",
+
+      label:
+        "Default Collapsed",
+
+      default:
+        false,
+
+    },
+
   },
 
 

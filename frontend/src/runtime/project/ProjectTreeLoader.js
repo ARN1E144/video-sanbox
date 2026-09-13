@@ -5,6 +5,8 @@ PROJECT TREE → CANVAS ELEMENTS
 
 Project tree:
 
+LEGACY:
+
 App
 ├── AgoraFeed
 ├── Container
@@ -13,34 +15,55 @@ App
 │   └── ControlButton
 └── ChatPanel
 
-becomes Canvas elements:
 
-AgoraFeed
-  parentId: null
+CANONICAL:
 
 Container
+├── AgoraFeed
+├── Container
+│   ├── ParticipantSelector
+│   ├── TextBox
+│   └── ControlButton
+└── ChatPanel
+
+
+becomes Canvas elements:
+
+Canonical root Container
   parentId: null
+
+AgoraFeed
+  parentId: Container.id
+
+Container
+  parentId: Container.id
 
 ParticipantSelector
-  parentId: Container.id
+  parentId: nested Container.id
 
 TextBox
-  parentId: Container.id
+  parentId: nested Container.id
 
 ControlButton
-  parentId: Container.id
-
-ChatPanel
-  parentId: null
+  parentId: nested Container.id
 
 
 IMPORTANT:
 
-App is a logical project root.
+A legacy App node is a logical project root.
 
 It is NOT a Canvas element.
 
-Real components such as Container / ControlPanel
+A canonical real root such as Container IS a
+Canvas element and MUST be preserved.
+
+Real components such as:
+
+    Container
+    ControlPanel
+    AgoraFeed
+    ChatPanel
+
 ARE Canvas elements.
 
 
@@ -59,7 +82,7 @@ This loader is responsible for:
 - preserving roles
 - preserving props
 - preserving metadata
-- preserving the App root layout
+- preserving the root layout
 - validating hierarchy
 
 This loader is NOT responsible for:
@@ -749,16 +772,29 @@ function createElement(
 
 
 // =====================================================
-// APP ROOT EXTRACTION
+// ROOT CONFIGURATION
 // =====================================================
 //
-// The App node is never inserted into Canvas elements.
+// There are now TWO supported root forms:
 //
-// We only extract:
 //
-//   - root layout
-//   - root dimensions
-//   - root children
+// 1. Legacy:
+//
+//      App
+//       └── Container
+//
+//    App is logical only.
+//
+//
+// 2. Canonical:
+//
+//      Container
+//
+//    Container IS the real Canvas root.
+//
+//
+// For canonical roots, the root's own dimensions and
+// layout become the project Canvas configuration.
 //
 // =====================================================
 
@@ -768,14 +804,14 @@ function getRootConfiguration(
 
   if (
     !tree ||
-    tree.type !==
-      "App"
+    typeof tree !==
+      "object"
   ) {
 
     return {
 
       layout:
-        "free",
+        DEFAULT_ROOT_LAYOUT,
 
       width:
         DEFAULT_ELEMENT_SIZE.App.width,
@@ -788,53 +824,99 @@ function getRootConfiguration(
   }
 
 
-  const layout =
-    normaliseLayout(
-      tree.props?.layout ??
-      tree.meta?.confoLayout ??
-      DEFAULT_ROOT_LAYOUT
+  // ---------------------------------------------------
+  // LEGACY APP ROOT
+  // ---------------------------------------------------
+
+  if (
+    tree.type ===
+    "App"
+  ) {
+
+    const layout =
+      normaliseLayout(
+        tree.props?.layout ??
+        tree.meta?.confoLayout ??
+        DEFAULT_ROOT_LAYOUT
+      );
+
+
+    const width =
+      Number.isFinite(
+        Number(
+          tree.width
+        )
+      )
+        ? Number(
+            tree.width
+          )
+        : DEFAULT_ELEMENT_SIZE.App.width;
+
+
+    const height =
+      Number.isFinite(
+        Number(
+          tree.height
+        )
+      )
+        ? Number(
+            tree.height
+          )
+        : DEFAULT_ELEMENT_SIZE.App.height;
+
+
+    return {
+
+      layout,
+
+      width:
+        Math.max(
+          1,
+          width
+        ),
+
+      height:
+        Math.max(
+          1,
+          height
+        ),
+
+    };
+
+  }
+
+
+  // ---------------------------------------------------
+  // CANONICAL REAL ROOT
+  // ---------------------------------------------------
+  //
+  // The real root is a Canvas element.
+  //
+  // Its layout and geometry are preserved.
+  //
+
+  const rootSize =
+    resolveSize(
+      tree
     );
 
 
-  const width =
-    Number.isFinite(
-      Number(
-        tree.width
-      )
-    )
-      ? Number(
-          tree.width
-        )
-      : DEFAULT_ELEMENT_SIZE.App.width;
-
-
-  const height =
-    Number.isFinite(
-      Number(
-        tree.height
-      )
-    )
-      ? Number(
-          tree.height
-        )
-      : DEFAULT_ELEMENT_SIZE.App.height;
+  const rootLayout =
+    getNodeLayout(
+      tree
+    );
 
 
   return {
 
-    layout,
+    layout:
+      rootLayout,
 
     width:
-      Math.max(
-        1,
-        width
-      ),
+      rootSize.width,
 
     height:
-      Math.max(
-        1,
-        height
-      ),
+      rootSize.height,
 
   };
 
@@ -851,7 +933,14 @@ function getRootConfiguration(
 //
 // It deliberately does not calculate layout.
 //
-// =====================================================
+// IMPORTANT:
+//
+// App is special only because it is a legacy logical
+// wrapper.
+//
+// Every other node, including a root Container, is a
+// real Canvas element.
+//
 
 function walkNode(
   node,
@@ -876,7 +965,17 @@ function walkNode(
 
 
   // ---------------------------------------------------
-  // App is logical only.
+  // LEGACY APP ROOT
+  // ---------------------------------------------------
+  //
+  // App remains a logical project wrapper.
+  //
+  // IMPORTANT:
+  //
+  // We do NOT create an App Canvas element.
+  //
+  // Its children remain top-level Canvas elements.
+  //
   // ---------------------------------------------------
 
   if (
@@ -906,11 +1005,15 @@ function walkNode(
               null,
 
             fallbackX:
+              child?.x ??
               fallbackX,
 
             fallbackY:
-              fallbackY +
-              index * 12,
+              child?.y ??
+              (
+                fallbackY +
+                index * 12
+              ),
 
             result,
 
@@ -929,7 +1032,16 @@ function walkNode(
 
 
   // ---------------------------------------------------
-  // Create real Canvas element.
+  // CREATE REAL CANVAS ELEMENT
+  // ---------------------------------------------------
+  //
+  // This now includes a canonical real root.
+  //
+  // Example:
+  //
+  // Container
+  // parentId: null
+  //
   // ---------------------------------------------------
 
   const element =
@@ -955,7 +1067,7 @@ function walkNode(
 
 
   // ---------------------------------------------------
-  // Duplicate protection.
+  // DUPLICATE PROTECTION
   // ---------------------------------------------------
 
   if (
@@ -994,13 +1106,14 @@ function walkNode(
 
 
   // ---------------------------------------------------
-  // Recurse into children.
+  // RECURSE INTO CHILDREN
+  // ---------------------------------------------------
   //
-  // Child coordinates are preserved as initial
-  // geometry only.
+  // The current element is ALWAYS the parent of its
+  // children.
   //
-  // CanvasLayoutEngine will subsequently calculate
-  // managed geometry.
+  // This is the critical hierarchy contract.
+  //
   // ---------------------------------------------------
 
   const children =
@@ -1025,11 +1138,15 @@ function walkNode(
             element.id,
 
           fallbackX:
+            child?.x ??
             16,
 
           fallbackY:
-            16 +
-            index * 12,
+            child?.y ??
+            (
+              16 +
+              index * 12
+            ),
 
           result,
 
@@ -1053,7 +1170,7 @@ function walkNode(
 //
 // Output is structural Canvas elements.
 //
-// No layout engine is executed here yet.
+// No layout calculations are performed here.
 //
 // =====================================================
 
@@ -1076,9 +1193,11 @@ function flattenTree(
         null,
 
       fallbackX:
+        tree?.x ??
         DEFAULT_START_X,
 
       fallbackY:
+        tree?.y ??
         DEFAULT_START_Y,
 
       result,
@@ -1241,7 +1360,7 @@ function validateHierarchy(
 // APPLY CANVAS LAYOUT
 // =====================================================
 //
-// This is the important architectural change.
+// This is the architectural boundary.
 //
 // ProjectTreeLoader creates structure.
 //
@@ -1295,6 +1414,22 @@ function applyLayout(
 
 
 // =====================================================
+// ROOT DIAGNOSTICS
+// =====================================================
+
+function getRootElements(
+  elements
+) {
+
+  return elements.filter(
+    element =>
+      !element.parentId
+  );
+
+}
+
+
+// =====================================================
 // PUBLIC API
 // =====================================================
 
@@ -1314,7 +1449,7 @@ export function projectTreeToElements(
 
 
   // ---------------------------------------------------
-  // 1. Read logical App configuration.
+  // 1. Read root configuration.
   // ---------------------------------------------------
 
   const rootConfiguration =
@@ -1363,7 +1498,61 @@ export function projectTreeToElements(
 
 
   // ---------------------------------------------------
-  // 6. Diagnostics.
+  // 6. Determine actual Canvas roots.
+  // ---------------------------------------------------
+
+  const roots =
+    getRootElements(
+      elements
+    );
+
+
+  // ---------------------------------------------------
+  // 7. Root diagnostics.
+  // ---------------------------------------------------
+
+  console.log(
+    "[ProjectTreeLoader] Root hierarchy",
+    {
+
+      rootCount:
+        roots.length,
+
+      roots:
+        roots.map(
+          root => ({
+
+            id:
+              root.id,
+
+            type:
+              root.type,
+
+            x:
+              root.x,
+
+            y:
+              root.y,
+
+            width:
+              root.width,
+
+            height:
+              root.height,
+
+            layout:
+              root.props?.layout ||
+              null,
+
+          })
+        ),
+
+    }
+  );
+
+
+  // ---------------------------------------------------
+  // 8. Main diagnostics.
   // ---------------------------------------------------
 
   console.log(
@@ -1384,41 +1573,144 @@ export function projectTreeToElements(
 
       elements:
         elements.map(
-          element => ({
+          element => {
 
-            id:
-              element.id,
+            const parent =
+              elements.find(
+                candidate =>
+                  candidate.id ===
+                  element.parentId
+              );
 
-            type:
-              element.type,
+            return {
 
-            parentId:
-              element.parentId,
+              id:
+                element.id,
 
-            x:
-              element.x,
+              type:
+                element.type,
 
-            y:
-              element.y,
+              parentId:
+                element.parentId,
 
-            width:
-              element.width,
+              x:
+                element.x,
 
-            height:
-              element.height,
+              y:
+                element.y,
 
-            layout:
-              element.props?.layout ||
-              null,
+              width:
+                element.width,
 
-            layoutManaged:
-              element.meta?.layoutManaged ||
-              false,
+              height:
+                element.height,
 
-          })
+              layout:
+                element.props?.layout ||
+                null,
+
+              layoutManaged:
+                element.meta?.layoutManaged ||
+                false,
+
+              collapsible:
+                element.props?.collapsible ??
+                null,
+
+              defaultCollapsed:
+                element.props?.defaultCollapsed ??
+                null,
+
+              propsWidth:
+                element.props?.width ??
+                null,
+
+              propsHeight:
+                element.props?.height ??
+                null,
+
+              styleWidth:
+                element.props?.style?.width ??
+                null,
+
+              styleHeight:
+                element.props?.style?.height ??
+                null,
+
+              parentGeometry:
+                parent
+                  ? {
+
+                      id:
+                        parent.id,
+
+                      type:
+                        parent.type,
+
+                      x:
+                        parent.x,
+
+                      y:
+                        parent.y,
+
+                      width:
+                        parent.width,
+
+                      height:
+                        parent.height,
+
+                      layout:
+                        parent.props?.layout ||
+                        null,
+
+                      gap:
+                        parent.props?.gap ??
+                        null,
+
+                      padding:
+                        parent.props?.padding ??
+                        null,
+
+                    }
+
+                  : null,
+
+            };
+
+          }
         ),
 
     }
+  );
+
+
+  // ---------------------------------------------------
+  // 9. Existing type diagnostics.
+  // ---------------------------------------------------
+
+  console.log(
+    "%c 🌳 [PROJECT TREE TYPE CHECK] %c",
+    "background-color: #DCFCE7; color: #166534; font-weight: bold; padding: 3px 8px; border-radius: 4px; font-size: 11px;",
+    "",
+    elements.map(
+      element => ({
+
+        id:
+          element.id,
+
+        sourceId:
+          element.meta?.sourceId ??
+          null,
+
+        type:
+          element.type,
+
+        parentId:
+          element.parentId ??
+          null,
+
+      })
+    )
   );
 
 

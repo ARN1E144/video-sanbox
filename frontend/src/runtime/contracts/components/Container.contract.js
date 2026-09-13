@@ -2,7 +2,7 @@ export default {
 
   name: "Container",
 
-  version: "1.0",
+  version: "1.1",
 
   category: "layout",
 
@@ -31,7 +31,6 @@ export default {
     ]
 
   },
-
 
 
   editableProps: {
@@ -74,7 +73,7 @@ export default {
 
       label: "Layout",
 
-      default: "free",
+      default: "vertical",
 
       group: "layout",
 
@@ -97,10 +96,54 @@ export default {
 
       ]
 
+    },
+
+
+    collapsible: {
+
+      type: "boolean",
+
+      ui: "build",
+
+      label: "Collapsible",
+
+      default: false,
+
+      group: "layout"
+
+    },
+
+
+    defaultCollapsed: {
+
+      type: "boolean",
+
+      ui: "advanced",
+
+      label: "Default Collapsed",
+
+      default: false,
+
+      group: "layout"
+
+    },
+
+
+    label: {
+
+      type: "string",
+
+      ui: "advanced",
+
+      label: "Container Label",
+
+      default: "Container",
+
+      group: "layout"
+
     }
 
   },
-
 
 
   bindings: {
@@ -112,7 +155,6 @@ export default {
   },
 
 
-
   actions: {
 
     inputs: [],
@@ -120,7 +162,6 @@ export default {
     outputs: []
 
   },
-
 
 
   events: {
@@ -132,9 +173,7 @@ export default {
   },
 
 
-
   targets: {
-
 
     accepts: [
 
@@ -172,12 +211,10 @@ export default {
   },
 
 
-
   validation: {
 
     requires: []
 
   }
-
 
 };

@@ -1,4 +1,4 @@
-// src/components/elements/componentRegistry.js
+// src/actions/componentRegistry.js
 
 
 // =====================================================
@@ -67,6 +67,9 @@ import FileUpload
 
 import Select 
   from "../components/elements/Select";
+
+import IncomingGroupCallAlert
+  from "../components/elements/IncomingGroupCallAlert";
 
 
 
@@ -152,6 +155,9 @@ import selectContract
 
 import complianceEvidenceContract
   from "../runtime/contracts/components/ComplianceEvidence.contract.js";
+
+import incomingGroupCallAlertContract
+  from "../runtime/contracts/components/IncomingGroupCallAlert.contract.js";
 
 
 // =====================================================
@@ -272,6 +278,16 @@ export const componentRegistry = {
 
     contract:
       trainingInvitationContract,
+
+  },
+
+  IncomingGroupCallAlert: {
+
+    component:
+        IncomingGroupCallAlert,
+
+      contract:
+        incomingGroupCallAlertContract,
 
   },
 
