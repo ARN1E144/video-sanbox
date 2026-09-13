@@ -772,6 +772,19 @@ export default function Canvas({
       projectType,
     ]);
 
+  console.log(
+  "[CANVAS DEBUG] RENDER PIPELINE",
+  {
+    projectType,
+    elementCount:
+      elements?.length ?? 0,
+    visibleCount:
+      visibleElements?.length ?? 0,
+    elements,
+    visibleElements,
+  }
+);
+
   // ===================================================
   // ELEMENT MAP
   // ===================================================

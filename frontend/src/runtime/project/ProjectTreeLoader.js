@@ -45,68 +45,98 @@ ARE Canvas elements.
 
 
 ========================================================
+RESPONSIBILITY
+========================================================
+
+This loader is responsible for:
+
+- flattening the project tree
+- preserving hierarchy
+- creating Canvas elements
+- resolving default element sizes
+- preserving explicit dimensions
+- preserving explicit coordinates
+- preserving roles
+- preserving props
+- preserving metadata
+- preserving the App root layout
+- validating hierarchy
+
+This loader is NOT responsible for:
+
+- vertical layout
+- horizontal layout
+- grid layout
+- container auto-sizing
+- child positioning
+- child clamping
+- overlap detection
+- geometry validation
+
+Those responsibilities belong to:
+
+    CanvasLayoutEngine
+            +
+      CanvasGeometry
+
+
+========================================================
+ARCHITECTURE
+========================================================
+
+Project tree
+     │
+     ▼
+ProjectTreeLoader
+     │
+     │ structural elements only
+     ▼
+CanvasLayoutEngine
+     │
+     │ canonical geometry
+     ▼
+Canvas elements
+
+
+========================================================
 POSITION CONTRACT
 ========================================================
 
 Top-level element:
 
-  x/y = relative to Canvas stage
+    x/y = Canvas coordinates
 
+Child of free container:
 
-Child of Container layout="free":
+    x/y = relative to immediate parent
 
-  x/y = relative to immediate parent
+Child of managed container:
 
+    x/y = calculated by CanvasLayoutEngine
 
-Child of Container layout="vertical":
-
-  x/y are layout-managed.
-
-  Child order controls vertical position.
-
-
-Child of Container layout="horizontal":
-
-  x/y are layout-managed.
-
-  Child order controls horizontal position.
-
-
-Child of ControlPanel:
-
-  x/y are layout-managed by ControlPanel.
-
-
-========================================================
-RESPONSIBILITIES
-========================================================
-
-This loader:
-
-- flattens the project tree
-- preserves hierarchy
-- resolves default sizes
-- calculates sensible fallback positions
-- preserves explicit dimensions
-- preserves free-container coordinates
-- preserves roles
-- preserves metadata
-- validates hierarchy
-
-It does NOT:
-
-- modify the source Confo
-- install the Confo
-- render components
+The loader does not attempt to calculate those
+managed positions.
 
 
 ========================================================
 */
 
 
+import CanvasLayoutEngine from "../canvas/CanvasLayoutEngine";
+
+
 // =====================================================
 // DEFAULT ELEMENT SIZES
 // =====================================================
+//
+// These are creation defaults only.
+//
+// They are deliberately kept here because the loader
+// must create an element with a usable size before the
+// layout engine can calculate the final geometry.
+//
+// Layout decisions do NOT belong here.
+//
 
 const DEFAULT_ELEMENT_SIZE = {
 
@@ -224,8 +254,12 @@ const DEFAULT_ELEMENT_SIZE = {
 
 
 // =====================================================
-// LAYOUT DEFAULTS
+// DEFAULT ROOT CONFIGURATION
 // =====================================================
+
+const DEFAULT_ROOT_LAYOUT =
+  "free";
+
 
 const DEFAULT_START_X =
   40;
@@ -233,26 +267,6 @@ const DEFAULT_START_X =
 
 const DEFAULT_START_Y =
   20;
-
-
-const DEFAULT_LAYOUT_GAP =
-  12;
-
-
-const DEFAULT_CONTAINER_PADDING =
-  16;
-
-
-const DEFAULT_GRID_COLUMNS =
-  2;
-
-
-const DEFAULT_GRID_COLUMN_GAP =
-  12;
-
-
-const DEFAULT_GRID_ROW_GAP =
-  12;
 
 
 // =====================================================
@@ -286,15 +300,64 @@ function normaliseId(
 
 
 // =====================================================
+// NUMBER HELPERS
+// =====================================================
+
+function resolveNumber(
+  value,
+  fallback
+) {
+
+  const numericValue =
+    Number(
+      value
+    );
+
+
+  if (
+    Number.isFinite(
+      numericValue
+    )
+  ) {
+
+    return numericValue;
+
+  }
+
+
+  const numericFallback =
+    Number(
+      fallback
+    );
+
+
+  return Number.isFinite(
+    numericFallback
+  )
+    ? numericFallback
+    : 0;
+
+}
+
+
+// =====================================================
 // LAYOUT NORMALISATION
 // =====================================================
 //
-// Supported:
+// The loader only needs to preserve the root layout.
+// CanvasLayoutEngine owns all actual layout behaviour.
+//
+// Supports:
 //
 //   free
 //   vertical
 //   horizontal
 //   grid
+//
+// Also accepts:
+//
+//   row      → horizontal
+//   column   → vertical
 //
 // =====================================================
 
@@ -307,7 +370,7 @@ function normaliseLayout(
     "string"
   ) {
 
-    return "free";
+    return DEFAULT_ROOT_LAYOUT;
 
   }
 
@@ -330,10 +393,24 @@ function normaliseLayout(
 
   if (
     layout ===
-    "horizontal"
+    "horizontal" ||
+    layout ===
+    "row"
   ) {
 
     return "horizontal";
+
+  }
+
+
+  if (
+    layout ===
+    "vertical" ||
+    layout ===
+    "column"
+  ) {
+
+    return "vertical";
 
   }
 
@@ -348,16 +425,6 @@ function normaliseLayout(
   }
 
 
-  if (
-    layout ===
-    "vertical"
-  ) {
-
-    return "vertical";
-
-  }
-
-
   return "free";
 
 }
@@ -366,6 +433,11 @@ function normaliseLayout(
 // =====================================================
 // GET NODE LAYOUT
 // =====================================================
+//
+// This is intentionally a structural helper.
+//
+// CanvasLayoutEngine will interpret the layout.
+//
 
 function getNodeLayout(
   node
@@ -411,6 +483,13 @@ function getDefaultSize(
 
 // =====================================================
 // RESOLVE SIZE
+// =====================================================
+//
+// Explicit dimensions always win.
+//
+// If no dimensions are supplied by the tree,
+// the component creation default is used.
+//
 // =====================================================
 
 function resolveSize(
@@ -471,42 +550,42 @@ function resolveSize(
 
 
 // =====================================================
-// RESOLVE COORDINATE
+// RESOLVE POSITION
+// =====================================================
+//
+// The loader preserves explicit coordinates.
+//
+// It does NOT calculate positions based on:
+//
+//   vertical
+//   horizontal
+//   grid
+//
+// CanvasLayoutEngine does that later.
+//
 // =====================================================
 
-function resolveCoordinate(
-  value,
-  fallback
+function resolvePosition(
+  node,
+  fallbackX,
+  fallbackY
 ) {
 
-  const numericValue =
-    Number(
-      value
-    );
+  return {
 
+    x:
+      resolveNumber(
+        node?.x,
+        fallbackX
+      ),
 
-  if (
-    Number.isFinite(
-      numericValue
-    )
-  ) {
+    y:
+      resolveNumber(
+        node?.y,
+        fallbackY
+      ),
 
-    return numericValue;
-
-  }
-
-
-  const numericFallback =
-    Number(
-      fallback
-    );
-
-
-  return Number.isFinite(
-    numericFallback
-  )
-    ? numericFallback
-    : 0;
+  };
 
 }
 
@@ -518,11 +597,10 @@ function resolveCoordinate(
 function createElement(
   node,
   {
-    x,
-    y,
-    parentId,
-    layoutManaged = false,
-  }
+    parentId = null,
+    fallbackX = DEFAULT_START_X,
+    fallbackY = DEFAULT_START_Y,
+  } = {}
 ) {
 
   if (
@@ -544,6 +622,14 @@ function createElement(
   const size =
     resolveSize(
       node
+    );
+
+
+  const position =
+    resolvePosition(
+      node,
+      fallbackX,
+      fallbackY
     );
 
 
@@ -587,36 +673,20 @@ function createElement(
     // POSITION
     // -------------------------------------------------
     //
-    // Free-layout elements retain explicit x/y.
+    // IMPORTANT:
     //
-    // Layout-managed children receive the calculated
-    // position generated by the loader.
+    // These are only initial coordinates.
     //
-    // Canvas ignores x/y for flex-managed children.
+    // CanvasLayoutEngine becomes authoritative for
+    // managed layouts.
     //
     // -------------------------------------------------
 
     x:
-      layoutManaged
-        ? resolveCoordinate(
-            x,
-            0
-          )
-        : resolveCoordinate(
-            node.x,
-            x
-          ),
+      position.x,
 
     y:
-      layoutManaged
-        ? resolveCoordinate(
-            y,
-            0
-          )
-        : resolveCoordinate(
-            node.y,
-            y
-          ),
+      position.y,
 
 
     // -------------------------------------------------
@@ -679,20 +749,119 @@ function createElement(
 
 
 // =====================================================
-// PROCESS NODE
+// APP ROOT EXTRACTION
+// =====================================================
+//
+// The App node is never inserted into Canvas elements.
+//
+// We only extract:
+//
+//   - root layout
+//   - root dimensions
+//   - root children
+//
 // =====================================================
 
-function processNode(
+function getRootConfiguration(
+  tree
+) {
+
+  if (
+    !tree ||
+    tree.type !==
+      "App"
+  ) {
+
+    return {
+
+      layout:
+        "free",
+
+      width:
+        DEFAULT_ELEMENT_SIZE.App.width,
+
+      height:
+        DEFAULT_ELEMENT_SIZE.App.height,
+
+    };
+
+  }
+
+
+  const layout =
+    normaliseLayout(
+      tree.props?.layout ??
+      tree.meta?.confoLayout ??
+      DEFAULT_ROOT_LAYOUT
+    );
+
+
+  const width =
+    Number.isFinite(
+      Number(
+        tree.width
+      )
+    )
+      ? Number(
+          tree.width
+        )
+      : DEFAULT_ELEMENT_SIZE.App.width;
+
+
+  const height =
+    Number.isFinite(
+      Number(
+        tree.height
+      )
+    )
+      ? Number(
+          tree.height
+        )
+      : DEFAULT_ELEMENT_SIZE.App.height;
+
+
+  return {
+
+    layout,
+
+    width:
+      Math.max(
+        1,
+        width
+      ),
+
+    height:
+      Math.max(
+        1,
+        height
+      ),
+
+  };
+
+}
+
+
+// =====================================================
+// TREE WALK
+// =====================================================
+//
+// This function does exactly one job:
+//
+//     tree node → Canvas element
+//
+// It deliberately does not calculate layout.
+//
+// =====================================================
+
+function walkNode(
   node,
   {
     parentId = null,
-    fallbackX =
-      DEFAULT_START_X,
-    fallbackY =
-      DEFAULT_START_Y,
-    layoutManaged = false,
+    fallbackX = DEFAULT_START_X,
+    fallbackY = DEFAULT_START_Y,
     result,
-  }
+    ids,
+  } = {}
 ) {
 
   if (
@@ -706,49 +875,49 @@ function processNode(
   }
 
 
-  // ===================================================
-  // APP ROOT
-  // ===================================================
+  // ---------------------------------------------------
+  // App is logical only.
+  // ---------------------------------------------------
 
   if (
     node.type ===
     "App"
   ) {
 
-    const rootLayout =
-      normaliseLayout(
-        node.props?.layout ||
-        node.meta?.confoLayout ||
-        "vertical"
-      );
-
-
-    const rootWidth =
-      Number.isFinite(
-        Number(
-          node.width
-        )
+    const children =
+      Array.isArray(
+        node.children
       )
-        ? Number(
-            node.width
-          )
-        : DEFAULT_ELEMENT_SIZE.App.width;
+        ? node.children
+        : [];
 
 
-    layoutChildren(
-      node.children,
-      {
+    children.forEach(
+      (
+        child,
+        index
+      ) => {
 
-        parentId:
-          null,
+        walkNode(
+          child,
+          {
 
-        parentWidth:
-          rootWidth,
+            parentId:
+              null,
 
-        parentLayout:
-          rootLayout,
+            fallbackX:
+              fallbackX,
 
-        result,
+            fallbackY:
+              fallbackY +
+              index * 12,
+
+            result,
+
+            ids,
+
+          }
+        );
 
       }
     );
@@ -759,31 +928,20 @@ function processNode(
   }
 
 
-  // ===================================================
-  // REAL CANVAS ELEMENT
-  // ===================================================
-
-  const canonicalParentId =
-    normaliseId(
-      parentId
-    );
-
+  // ---------------------------------------------------
+  // Create real Canvas element.
+  // ---------------------------------------------------
 
   const element =
     createElement(
       node,
       {
 
-        x:
-          fallbackX,
+        parentId,
 
-        y:
-          fallbackY,
+        fallbackX,
 
-        parentId:
-          canonicalParentId,
-
-        layoutManaged,
+        fallbackY,
 
       }
     );
@@ -797,19 +955,13 @@ function processNode(
 
 
   // ---------------------------------------------------
-  // Duplicate protection
+  // Duplicate protection.
   // ---------------------------------------------------
 
-  const duplicate =
-    result.some(
-      existing =>
-        existing.id ===
-        element.id
-    );
-
-
   if (
-    duplicate
+    ids.has(
+      element.id
+    )
   ) {
 
     console.warn(
@@ -831,48 +983,63 @@ function processNode(
   }
 
 
+  ids.add(
+    element.id
+  );
+
+
   result.push(
     element
   );
 
 
-  // ===================================================
-  // CHILDREN
-  // ===================================================
+  // ---------------------------------------------------
+  // Recurse into children.
+  //
+  // Child coordinates are preserved as initial
+  // geometry only.
+  //
+  // CanvasLayoutEngine will subsequently calculate
+  // managed geometry.
+  // ---------------------------------------------------
 
-  if (
+  const children =
     Array.isArray(
       node.children
-    ) &&
-    node.children.length >
-      0
-  ) {
+    )
+      ? node.children
+      : [];
 
-    const childLayout =
-      getNodeLayout(
-        node
+
+  children.forEach(
+    (
+      child,
+      index
+    ) => {
+
+      walkNode(
+        child,
+        {
+
+          parentId:
+            element.id,
+
+          fallbackX:
+            16,
+
+          fallbackY:
+            16 +
+            index * 12,
+
+          result,
+
+          ids,
+
+        }
       );
 
-
-    layoutChildren(
-      node.children,
-      {
-
-        parentId:
-          element.id,
-
-        parentWidth:
-          element.width,
-
-        parentLayout:
-          childLayout,
-
-        result,
-
-      }
-    );
-
-  }
+    }
+  );
 
 
   return element;
@@ -881,516 +1048,13 @@ function processNode(
 
 
 // =====================================================
-// LAYOUT CHILDREN
-// =====================================================
-
-function layoutChildren(
-  children,
-  {
-    parentId,
-    parentWidth,
-    parentLayout,
-    result,
-  }
-) {
-
-  if (
-    !Array.isArray(
-      children
-    ) ||
-    children.length ===
-      0
-  ) {
-
-    return;
-
-  }
-
-
-  const layout =
-    normaliseLayout(
-      parentLayout
-    );
-
-
-  // ===================================================
-  // FREE
-  // ===================================================
-  //
-  // IMPORTANT:
-  //
-  // No artificial layout is imposed.
-  //
-  // Explicit child x/y values are retained.
-  //
-  // Missing x/y values fall back to a sensible position.
-  //
-  // ===================================================
-
-  if (
-    layout ===
-    "free"
-  ) {
-
-    let fallbackY =
-      DEFAULT_CONTAINER_PADDING;
-
-
-    children.forEach(
-      child => {
-
-        if (
-          !child ||
-          typeof child !==
-            "object"
-        ) {
-
-          return;
-
-        }
-
-
-        const childSize =
-          resolveSize(
-            child
-          );
-
-
-        const explicitX =
-          Number(
-            child?.x
-          );
-
-
-        const explicitY =
-          Number(
-            child?.y
-          );
-
-
-        const hasExplicitX =
-          Number.isFinite(
-            explicitX
-          );
-
-
-        const hasExplicitY =
-          Number.isFinite(
-            explicitY
-          );
-
-
-        const childX =
-          hasExplicitX
-            ? explicitX
-            : DEFAULT_CONTAINER_PADDING;
-
-
-        const childY =
-          hasExplicitY
-            ? explicitY
-            : fallbackY;
-
-
-        const created =
-          processNode(
-            child,
-            {
-
-              parentId,
-
-              fallbackX:
-                childX,
-
-              fallbackY:
-                childY,
-
-              layoutManaged:
-                false,
-
-              result,
-
-            }
-          );
-
-
-        if (
-          created &&
-          created.parentId ===
-            parentId
-        ) {
-
-          fallbackY =
-            Math.max(
-              fallbackY,
-              created.y +
-                created.height +
-                DEFAULT_LAYOUT_GAP
-            );
-
-        }
-        else {
-
-          fallbackY +=
-            childSize.height +
-            DEFAULT_LAYOUT_GAP;
-
-        }
-
-      }
-    );
-
-
-    return;
-
-  }
-
-
-  // ===================================================
-  // VERTICAL
-  // ===================================================
-  //
-  // The loader establishes ordering and sensible
-  // coordinates, but Canvas uses flex layout at runtime.
-  //
-  // Explicit x/y values are intentionally ignored.
-  //
-  // ===================================================
-
-  if (
-    layout ===
-    "vertical"
-  ) {
-
-    let currentY =
-      DEFAULT_CONTAINER_PADDING;
-
-
-    children.forEach(
-      child => {
-
-        if (
-          !child ||
-          typeof child !==
-            "object"
-        ) {
-
-          return;
-
-        }
-
-
-        const childSize =
-          resolveSize(
-            child
-          );
-
-
-        const created =
-          processNode(
-            child,
-            {
-
-              parentId,
-
-              fallbackX:
-                DEFAULT_CONTAINER_PADDING,
-
-              fallbackY:
-                currentY,
-
-              layoutManaged:
-                true,
-
-              result,
-
-            }
-          );
-
-
-        if (
-          created &&
-          created.parentId ===
-            parentId
-        ) {
-
-          currentY =
-            Math.max(
-              currentY,
-              created.height +
-                currentY +
-                DEFAULT_LAYOUT_GAP
-            );
-
-        }
-        else {
-
-          currentY +=
-            childSize.height +
-            DEFAULT_LAYOUT_GAP;
-
-        }
-
-      }
-    );
-
-
-    return;
-
-  }
-
-
-  // ===================================================
-  // HORIZONTAL
-  // ===================================================
-
-  if (
-    layout ===
-    "horizontal"
-  ) {
-
-    let currentX =
-      DEFAULT_CONTAINER_PADDING;
-
-
-    children.forEach(
-      child => {
-
-        if (
-          !child ||
-          typeof child !==
-            "object"
-        ) {
-
-          return;
-
-        }
-
-
-        const childSize =
-          resolveSize(
-            child
-          );
-
-
-        const created =
-          processNode(
-            child,
-            {
-
-              parentId,
-
-              fallbackX:
-                currentX,
-
-              fallbackY:
-                DEFAULT_CONTAINER_PADDING,
-
-              layoutManaged:
-                true,
-
-              result,
-
-            }
-          );
-
-
-        if (
-          created &&
-          created.parentId ===
-            parentId
-        ) {
-
-          currentX =
-            Math.max(
-              currentX,
-              created.width +
-                currentX +
-                DEFAULT_LAYOUT_GAP
-            );
-
-        }
-        else {
-
-          currentX +=
-            childSize.width +
-            DEFAULT_LAYOUT_GAP;
-
-        }
-
-      }
-    );
-
-
-    return;
-
-  }
-
-
-  // ===================================================
-  // GRID
-  // ===================================================
-
-  if (
-    layout ===
-    "grid"
-  ) {
-
-    const columns =
-      DEFAULT_GRID_COLUMNS;
-
-
-    const usableWidth =
-      Math.max(
-
-        parentWidth -
-          (
-            DEFAULT_CONTAINER_PADDING *
-            2
-          ) -
-          (
-            DEFAULT_GRID_COLUMN_GAP *
-            (
-              columns -
-              1
-            )
-          ),
-
-        200
-
-      );
-
-
-    const columnWidth =
-      usableWidth /
-      columns;
-
-
-    const rowHeights =
-      [];
-
-
-    children.forEach(
-      (
-        child,
-        index
-      ) => {
-
-        if (
-          !child ||
-          typeof child !==
-            "object"
-        ) {
-
-          return;
-
-        }
-
-
-        const childSize =
-          resolveSize(
-            child
-          );
-
-
-        const column =
-          index %
-          columns;
-
-
-        const row =
-          Math.floor(
-            index /
-            columns
-          );
-
-
-        const fallbackX =
-          DEFAULT_CONTAINER_PADDING +
-          column *
-          (
-            columnWidth +
-            DEFAULT_GRID_COLUMN_GAP
-          );
-
-
-        const fallbackY =
-          DEFAULT_CONTAINER_PADDING +
-          row *
-          (
-            (
-              rowHeights[
-                row
-              ] ||
-              childSize.height
-            ) +
-            DEFAULT_GRID_ROW_GAP
-          );
-
-
-        const created =
-          processNode(
-            child,
-            {
-
-              parentId,
-
-              fallbackX,
-
-              fallbackY,
-
-              layoutManaged:
-                true,
-
-              result,
-
-            }
-          );
-
-
-        if (
-          created &&
-          created.parentId ===
-            parentId
-        ) {
-
-          rowHeights[
-            row
-          ] =
-            Math.max(
-              rowHeights[
-                row
-              ] ||
-              0,
-              created.height
-            );
-
-        }
-        else {
-
-          rowHeights[
-            row
-          ] =
-            Math.max(
-              rowHeights[
-                row
-              ] ||
-              0,
-              childSize.height
-            );
-
-        }
-
-      }
-    );
-
-  }
-
-}
-
-
-// =====================================================
 // FLATTEN TREE
+// =====================================================
+//
+// Output is structural Canvas elements.
+//
+// No layout engine is executed here yet.
+//
 // =====================================================
 
 function flattenTree(
@@ -1400,8 +1064,11 @@ function flattenTree(
   const result =
     [];
 
+  const ids =
+    new Set();
 
-  processNode(
+
+  walkNode(
     tree,
     {
 
@@ -1414,10 +1081,9 @@ function flattenTree(
       fallbackY:
         DEFAULT_START_Y,
 
-      layoutManaged:
-        false,
-
       result,
+
+      ids,
 
     }
   );
@@ -1429,7 +1095,7 @@ function flattenTree(
 
 
 // =====================================================
-// VALIDATE HIERARCHY
+// HIERARCHY VALIDATION
 // =====================================================
 
 function validateHierarchy(
@@ -1572,6 +1238,63 @@ function validateHierarchy(
 
 
 // =====================================================
+// APPLY CANVAS LAYOUT
+// =====================================================
+//
+// This is the important architectural change.
+//
+// ProjectTreeLoader creates structure.
+//
+// CanvasLayoutEngine creates geometry.
+//
+// =====================================================
+
+function applyLayout(
+  elements,
+  rootConfiguration
+) {
+
+  const result =
+    CanvasLayoutEngine.layoutProjectElements(
+      elements,
+      {
+
+        canvasWidth:
+          rootConfiguration.width,
+
+        canvasHeight:
+          rootConfiguration.height,
+
+        rootLayout:
+          rootConfiguration.layout,
+
+      }
+    );
+
+
+  if (
+    !result ||
+    !Array.isArray(
+      result.elements
+    )
+  ) {
+
+    console.warn(
+      "[ProjectTreeLoader] CanvasLayoutEngine returned invalid result"
+    );
+
+
+    return elements;
+
+  }
+
+
+  return result.elements;
+
+}
+
+
+// =====================================================
 // PUBLIC API
 // =====================================================
 
@@ -1590,55 +1313,182 @@ export function projectTreeToElements(
   }
 
 
-  const result =
+  // ---------------------------------------------------
+  // 1. Read logical App configuration.
+  // ---------------------------------------------------
+
+  const rootConfiguration =
+    getRootConfiguration(
+      tree
+    );
+
+
+  // ---------------------------------------------------
+  // 2. Convert tree to structural elements.
+  // ---------------------------------------------------
+
+  const structuralElements =
     flattenTree(
       tree
     );
 
 
+  // ---------------------------------------------------
+  // 3. Validate hierarchy before layout.
+  // ---------------------------------------------------
+
   validateHierarchy(
-    result
+    structuralElements
   );
 
+
+  // ---------------------------------------------------
+  // 4. Apply the single shared layout engine.
+  // ---------------------------------------------------
+
+  const elements =
+    applyLayout(
+      structuralElements,
+      rootConfiguration
+    );
+
+
+  // ---------------------------------------------------
+  // 5. Validate resulting hierarchy again.
+  // ---------------------------------------------------
+
+  validateHierarchy(
+    elements
+  );
+
+
+  // ---------------------------------------------------
+  // 6. Diagnostics.
+  // ---------------------------------------------------
 
   console.log(
-    "[ProjectTreeLoader] Tree → Elements",
-    result.map(
-      element => ({
+    "[ProjectTreeLoader] Tree → Canvas",
+    {
 
-        id:
-          element.id,
+      rootLayout:
+        rootConfiguration.layout,
 
-        type:
-          element.type,
+      canvasWidth:
+        rootConfiguration.width,
 
-        parentId:
-          element.parentId,
+      canvasHeight:
+        rootConfiguration.height,
 
-        x:
-          element.x,
+      elementCount:
+        elements.length,
 
-        y:
-          element.y,
+      elements:
+        elements.map(
+          element => ({
 
-        width:
-          element.width,
+            id:
+              element.id,
 
-        height:
-          element.height,
+            type:
+              element.type,
 
-        layout:
-          element.props?.layout ||
-          null,
+            parentId:
+              element.parentId,
 
-      })
-    )
+            x:
+              element.x,
+
+            y:
+              element.y,
+
+            width:
+              element.width,
+
+            height:
+              element.height,
+
+            layout:
+              element.props?.layout ||
+              null,
+
+            layoutManaged:
+              element.meta?.layoutManaged ||
+              false,
+
+          })
+        ),
+
+    }
   );
 
 
-  return result;
+  return elements;
 
 }
+
+
+// =====================================================
+// OPTIONAL STRUCTURAL API
+// =====================================================
+//
+// Useful for diagnostics/tests when we need the raw
+// tree → element conversion without layout.
+//
+// Normal application code should use:
+//
+//     projectTreeToElements()
+//
+// =====================================================
+
+export function projectTreeToStructuralElements(
+  tree
+) {
+
+  if (
+    !tree ||
+    typeof tree !==
+      "object"
+  ) {
+
+    return [];
+
+  }
+
+
+  return flattenTree(
+    tree
+  );
+
+}
+
+
+// =====================================================
+// ROOT CONFIGURATION API
+// =====================================================
+
+export function getProjectRootConfiguration(
+  tree
+) {
+
+  return getRootConfiguration(
+    tree
+  );
+
+}
+
+
+// =====================================================
+// VALIDATION API
+// =====================================================
+
+export {
+  validateHierarchy,
+  getNodeLayout,
+  getDefaultSize,
+  resolveSize,
+  normaliseLayout,
+  DEFAULT_ELEMENT_SIZE,
+};
 
 
 // =====================================================
@@ -1648,5 +1498,21 @@ export function projectTreeToElements(
 export default {
 
   projectTreeToElements,
+
+  projectTreeToStructuralElements,
+
+  getProjectRootConfiguration,
+
+  validateHierarchy,
+
+  getNodeLayout,
+
+  getDefaultSize,
+
+  resolveSize,
+
+  normaliseLayout,
+
+  DEFAULT_ELEMENT_SIZE,
 
 };

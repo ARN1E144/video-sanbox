@@ -984,103 +984,158 @@ export function CanvasProvider({
     );
 
 
-  // =====================================================
-  // PROJECT SCHEMA → CANVAS HYDRATION
-  // =====================================================
-  //
-  // IMPORTANT:
-  //
-  // If canonical canvas.elements exist, they WIN.
-  //
-  // We never reconstruct the editor geometry from the
-  // tree during normal reload.
-  //
-  // This is the key fix for save/reload geometry drift.
-  //
-  // =====================================================
+// =====================================================
+// PROJECT SCHEMA → CANVAS HYDRATION
+// =====================================================
+//
+// IMPORTANT:
+//
+// If canonical canvas.elements contain actual elements,
+// they WIN.
+//
+// If canvas.elements exists but is empty while the
+// project tree contains elements, the tree is used as
+// the migration source.
+//
+// This preserves canonical geometry on normal reload
+// while preventing an empty canvas.elements array from
+// hiding an existing project tree.
+//
+// =====================================================
 
-  useEffect(
-    () => {
+useEffect(
+  () => {
 
-      if (
-        hydratingRef.current
-      ) {
+    if (
+      hydratingRef.current
+    ) {
 
-        hydratingRef.current =
-          false;
+      hydratingRef.current =
+        false;
 
-        return;
+      return;
+    }
+
+    const schema =
+      projectSchema;
+
+    if (
+      !schema ||
+      typeof schema !== "object"
+    ) {
+
+      elementsRef.current =
+        [];
+
+      setElements(
+        []
+      );
+
+      return;
+    }
+
+
+    // =================================================
+    // INSPECT AVAILABLE SOURCES
+    // =================================================
+
+    const canonicalElements =
+      schema.canvas?.elements;
+
+    const hasCanonicalElements =
+      Array.isArray(
+        canonicalElements
+      ) &&
+      canonicalElements.length >
+        0;
+
+    const treeElements =
+      loadElementsFromTree(
+        schema.tree
+      );
+
+    const hasTreeElements =
+      Array.isArray(
+        treeElements
+      ) &&
+      treeElements.length >
+        0;
+
+
+    console.log(
+      "[CanvasContext] HYDRATION SOURCE CHECK",
+      {
+        hasCanonicalElements,
+        canonicalCount:
+          Array.isArray(
+            canonicalElements
+          )
+            ? canonicalElements.length
+            : 0,
+
+        hasTreeElements,
+
+        treeCount:
+          treeElements.length,
       }
+    );
 
-      const schema =
-        projectSchema;
 
-      if (
-        !schema ||
-        typeof schema !== "object"
-      ) {
+    // =================================================
+    // CANONICAL CANVAS EXISTS
+    // =================================================
+    //
+    // Canonical Canvas remains authoritative when it
+    // actually contains elements.
+    //
+    // This is what protects saved editor geometry.
+    //
+    // =================================================
 
-        elementsRef.current =
-          [];
+    if (
+      hasCanonicalElements
+    ) {
 
-        setElements(
-          []
+      const canonical =
+        validateHierarchy(
+          canonicalElements
         );
 
-        return;
-      }
+      console.log(
+        "[CanvasContext] Hydrating canonical Canvas elements",
+        {
+          count:
+            canonical.length,
+        }
+      );
+
+      elementsRef.current =
+        canonical;
+
+      setElements(
+        canonical
+      );
+
+      return;
+    }
 
 
-      // =================================================
-      // CANONICAL CANVAS EXISTS
-      // =================================================
+    // =================================================
+    // LEGACY / EMPTY-CANONICAL TREE FALLBACK
+    // =================================================
+    //
+    // If canonical canvas.elements is missing OR empty,
+    // but the project tree contains elements, reconstruct
+    // the Canvas elements from the tree.
+    //
+    // This also repairs projects where an empty
+    // canvas.elements array was previously persisted.
+    //
+    // =================================================
 
-      if (
-        schema.canvas &&
-        Array.isArray(
-          schema.canvas.elements
-        )
-      ) {
-
-        const canonical =
-          validateHierarchy(
-            schema.canvas.elements
-          );
-
-        console.log(
-          "[CanvasContext] Hydrating canonical Canvas elements",
-          {
-            count:
-              canonical.length,
-          }
-        );
-
-        elementsRef.current =
-          canonical;
-
-        setElements(
-          canonical
-        );
-
-        return;
-      }
-
-
-      // =================================================
-      // LEGACY / TREE FALLBACK
-      // =================================================
-      //
-      // Existing projects created before the canonical
-      // Canvas model are migrated here.
-      //
-      // This is intentionally a one-time migration.
-      //
-      // =================================================
-
-      const treeElements =
-        loadElementsFromTree(
-          schema.tree
-        );
+    if (
+      hasTreeElements
+    ) {
 
       console.log(
         "[CanvasContext] Hydrating Canvas from project tree",
@@ -1098,18 +1153,15 @@ export function CanvasProvider({
       );
 
 
-      // =================================================
+      // ===============================================
       // MIGRATE TREE → CANONICAL CANVAS
-      // =================================================
+      // ===============================================
       //
-      // The tracked ProjectContext setter marks this as
-      // dirty. This only occurs for projects which do not
-      // yet contain canvas.elements.
+      // Once the tree has been converted into canonical
+      // Canvas state, subsequent reloads will use
+      // canvas.elements directly.
       //
-      // Once saved, subsequent loads use the canonical
-      // Canvas representation and this path is never hit.
-      //
-      // =================================================
+      // ===============================================
 
       if (
         !migrationRef.current
@@ -1149,17 +1201,41 @@ export function CanvasProvider({
         markProjectDirty();
 
         console.log(
-          "[CanvasContext] Legacy project migrated to canonical Canvas state"
+          "[CanvasContext] Legacy/empty-canonical project migrated to canonical Canvas state",
+          {
+            count:
+              treeElements.length,
+          }
         );
       }
 
-    },
-    [
-      projectSchema,
-      setProjectSchema,
-      markProjectDirty,
-    ]
-  );
+      return;
+    }
+
+
+    // =================================================
+    // EMPTY PROJECT
+    // =================================================
+
+    console.log(
+      "[CanvasContext] No Canvas elements available"
+    );
+
+    elementsRef.current =
+      [];
+
+    setElements(
+      []
+    );
+
+  },
+  [
+    projectSchema,
+    setProjectSchema,
+    markProjectDirty,
+  ]
+);
+
 
 
   // =====================================================
@@ -1808,7 +1884,14 @@ export function CanvasProvider({
   // =====================================================
   // PROVIDER
   // =====================================================
-
+  console.log("[CANVAS DEBUG] CONTEXT ELEMENTS", {
+    count: elements?.length ?? 0,
+    elements,
+    treeElements:
+      projectSchema?.tree?.children?.length ?? 0,
+    canonicalCanvasElements:
+      projectSchema?.canvas?.elements?.length ?? 0,
+  });
   return (
     <CanvasContext.Provider
       value={
@@ -1840,6 +1923,7 @@ export function useCanvasState() {
       "useCanvasState must be used within CanvasProvider"
     );
   }
+  
 
   return context;
 }
