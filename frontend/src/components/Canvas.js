@@ -132,6 +132,54 @@ const isContainerType = (type) => {
 };
 
 // =====================================================
+// LAYOUT VALUE RESOLUTION
+// =====================================================
+//
+// Layout configuration has existed in two forms across
+// the current template set:
+//
+//   props.gap
+//
+// and:
+//
+//   props.style.gap
+//
+// Canvas should understand both without forcing existing
+// templates to be rewritten immediately.
+//
+// Direct props take precedence over style props.
+//
+// =====================================================
+
+const getLayoutValue = (
+  element,
+  key,
+  fallback
+) => {
+  const direct =
+    element?.props?.[key];
+
+  if (
+    direct !== undefined &&
+    direct !== null
+  ) {
+    return direct;
+  }
+
+  const styled =
+    element?.props?.style?.[key];
+
+  if (
+    styled !== undefined &&
+    styled !== null
+  ) {
+    return styled;
+  }
+
+  return fallback;
+};
+
+// =====================================================
 // CONTAINER LAYOUT
 // =====================================================
 
@@ -140,17 +188,29 @@ const getContainerLayout = (element) => {
     return null;
   }
 
-  const layout = String(
-    element?.props?.layout || "free"
-  )
-    .toLowerCase()
-    .trim();
+  const layout =
+    getLayoutValue(
+      element,
+      "layout",
+      "free"
+    );
 
-  if (layout === "vertical") {
+  const normalisedLayout =
+    String(layout)
+      .toLowerCase()
+      .trim();
+
+  if (
+    normalisedLayout ===
+    "vertical"
+  ) {
     return "vertical";
   }
 
-  if (layout === "horizontal") {
+  if (
+    normalisedLayout ===
+    "horizontal"
+  ) {
     return "horizontal";
   }
 
@@ -194,7 +254,9 @@ const canDropIntoParent = (
     return true;
   }
 
-  if (parentType === "Container") {
+  if (
+    parentType === "Container"
+  ) {
     return true;
   }
 
@@ -272,8 +334,12 @@ const sanitizeProps = (
   };
 
   SYSTEM_LOCKED_KEYS.forEach((key) => {
-    if (systemProps[key] !== undefined) {
-      clean[key] = systemProps[key];
+    if (
+      systemProps[key] !==
+      undefined
+    ) {
+      clean[key] =
+        systemProps[key];
     }
   });
 
@@ -329,22 +395,6 @@ export default function Canvas({
 
   // ===================================================
   // PREVIEW / BUILDER MODE
-  // ===================================================
-  //
-  // IMPORTANT:
-  //
-  // forcePreview must be treated as the effective preview
-  // state. Previously the Canvas calculated editability
-  // independently from the effective preview state.
-  //
-  // This single value now controls:
-  //
-  //   - selection
-  //   - dragging
-  //   - resizing
-  //   - element drop
-  //   - layer selection
-  //
   // ===================================================
 
   const previewActive =
@@ -504,7 +554,8 @@ export default function Canvas({
     false;
 
   const effectiveLayout =
-    roleInspectorLayout === "floating"
+    roleInspectorLayout ===
+    "floating"
       ? "floating"
       : isSplitView
       ? "bottom"
@@ -612,6 +663,24 @@ export default function Canvas({
   // ===================================================
   // VISIBLE / CANONICAL ELEMENTS
   // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // In a single project the Builder must see the complete
+  // template hierarchy, including elements carrying host
+  // and client roles.
+  //
+  // Role filtering is a runtime concern, not a builder
+  // geometry concern.
+  //
+  // Previously single-project mode only retained client
+  // elements, which meant tree-based templates containing
+  // multiple role variants appeared to lose elements.
+  //
+  // Multi-project mode continues to filter according to
+  // the active role.
+  //
+  // ===================================================
 
   const visibleElements =
     useMemo(() => {
@@ -622,18 +691,27 @@ export default function Canvas({
                 return true;
               }
 
+              // ------------------------------------------------
+              // SINGLE PROJECT
+              // ------------------------------------------------
+              //
+              // Builder sees the complete canonical Canvas.
+              //
+              // Runtime visibility/authorisation belongs to the
+              // runtime role layer rather than Canvas geometry.
+              //
+              // ------------------------------------------------
+
               if (
                 projectType ===
                 "single"
               ) {
-                return (
-                  el.role ===
-                    "client" ||
-                  el.role === null ||
-                  el.role ===
-                    undefined
-                );
+                return true;
               }
+
+              // ------------------------------------------------
+              // MULTI PROJECT
+              // ------------------------------------------------
 
               if (!role) {
                 return true;
@@ -773,17 +851,17 @@ export default function Canvas({
     ]);
 
   console.log(
-  "[CANVAS DEBUG] RENDER PIPELINE",
-  {
-    projectType,
-    elementCount:
-      elements?.length ?? 0,
-    visibleCount:
-      visibleElements?.length ?? 0,
-    elements,
-    visibleElements,
-  }
-);
+    "[CANVAS DEBUG] RENDER PIPELINE",
+    {
+      projectType,
+      elementCount:
+        elements?.length ?? 0,
+      visibleCount:
+        visibleElements?.length ?? 0,
+      elements,
+      visibleElements,
+    }
+  );
 
   // ===================================================
   // ELEMENT MAP
@@ -1988,20 +2066,28 @@ export default function Canvas({
               "flex-start",
 
             gap:
-              parent?.props
-                ?.gap ?? 8,
+              getLayoutValue(
+                parent,
+                "gap",
+                8
+              ),
 
             padding:
-              parent?.props
-                ?.padding ?? 0,
+              getLayoutValue(
+                parent,
+                "padding",
+                0
+              ),
 
             boxSizing:
               "border-box",
 
             overflow:
-              parent?.props
-                ?.overflow ||
-              "auto",
+              getLayoutValue(
+                parent,
+                "overflow",
+                "auto"
+              ),
           }}
         >
           {children.map(
@@ -2233,10 +2319,6 @@ export default function Canvas({
                *
                * react-rnd needs the pointer/mousedown event
                * in order to initialise dragging/resizing.
-               *
-               * The previous inner wrapper used
-               * stopPropagation() during capture, which could
-               * prevent Rnd from receiving the event.
                */
 
               selectElement(
@@ -2491,6 +2573,10 @@ export default function Canvas({
 
             Rnd must be allowed to receive the original
             pointer event so the element can be moved.
+
+            Canvas background styling is deliberately NOT
+            applied here. The background belongs to the
+            Canvas stage, not every top-level element.
           */}
           <div
             data-canvas-element-id={
@@ -2545,8 +2631,6 @@ export default function Canvas({
                 ) !== "free"
                   ? "hidden"
                   : "visible",
-
-              ...canvasBackgroundStyle,
             }}
           >
             {/* =========================================
@@ -3074,6 +3158,7 @@ export default function Canvas({
               boxSizing:
                 "border-box",
 
+              // Canvas background belongs ONLY here.
               ...canvasBackgroundStyle,
             }}
           >
