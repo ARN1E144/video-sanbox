@@ -555,23 +555,96 @@ function loadElementsFromTree(
   tree
 ) {
 
+  console.log(
+    "[CanvasContext] TREE HYDRATION START",
+    {
+      treeExists:
+        !!tree,
+
+      treeType:
+        typeof tree,
+
+      treeId:
+        tree?.id,
+
+      treeTypeValue:
+        tree?.type,
+
+      treeChildren:
+        Array.isArray(
+          tree?.children
+        )
+          ? tree.children.length
+          : "NOT ARRAY",
+    }
+  );
+
   if (
     !tree ||
     typeof tree !== "object"
   ) {
+
+    console.warn(
+      "[CanvasContext] TREE HYDRATION ABORTED — INVALID TREE"
+    );
+
     return [];
   }
 
   try {
+
+    console.log(
+      "[CanvasContext] BEFORE projectTreeToElements"
+    );
 
     const loaded =
       projectTreeToElements(
         tree
       );
 
-    return validateHierarchy(
-      loaded
+    console.log(
+      "[CanvasContext] AFTER projectTreeToElements",
+      {
+        loadedType:
+          typeof loaded,
+
+        loadedIsArray:
+          Array.isArray(
+            loaded
+          ),
+
+        loadedLength:
+          Array.isArray(
+            loaded
+          )
+            ? loaded.length
+            : "NOT ARRAY",
+      }
     );
+
+    const validated =
+      validateHierarchy(
+        loaded
+      );
+
+    console.log(
+      "[CanvasContext] AFTER validateHierarchy",
+      {
+        validatedIsArray:
+          Array.isArray(
+            validated
+          ),
+
+        validatedLength:
+          Array.isArray(
+            validated
+          )
+            ? validated.length
+            : "NOT ARRAY",
+      }
+    );
+
+    return validated;
 
   } catch (
     error
@@ -579,7 +652,13 @@ function loadElementsFromTree(
 
     console.error(
       "[CanvasContext] Tree → Canvas hydration failed",
-      error
+      {
+        error,
+        message:
+          error?.message,
+        stack:
+          error?.stack,
+      }
     );
 
     return [];

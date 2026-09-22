@@ -8129,11 +8129,39 @@ const testUpdateControlStatus =
             Test Analyse Evidence
           </button>
 
-          <button onClick={testAcceptEvidence}>
+          <button
+            onClick={testAcceptEvidence}
+            disabled={runningActionRef.current}
+            style={{
+              width: "100%",
+              minHeight: 36,
+              marginBottom: 8,
+              cursor: runningActionRef.current
+                ? "not-allowed"
+                : "pointer",
+              opacity: runningActionRef.current
+                ? 0.55
+                : 1,
+            }}
+          >
             Accept Evidence
           </button>
 
-          <button onClick={testRejectEvidence}>
+          <button
+            onClick={testRejectEvidence}
+            disabled={runningActionRef.current}
+            style={{
+              width: "100%",
+              minHeight: 36,
+              marginBottom: 8,
+              cursor: runningActionRef.current
+                ? "not-allowed"
+                : "pointer",
+              opacity: runningActionRef.current
+                ? 0.55
+                : 1,
+            }}
+          >
             Reject Evidence
           </button>
 

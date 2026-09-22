@@ -175,7 +175,47 @@ export default function CanvasElementRenderer({
       elementProps
     );
 
+  if (
+  elementType === "Container" &&
+  elementId === "confo-chat-test-panel-container-0-6"
+) {
+  console.log(
+    "🔥 EXACT PANEL CONTAINER SOURCE",
+    JSON.stringify(
+      {
+        elementId,
+        elementType,
 
+        originalElement:
+          safeElement,
+
+        originalElementProps:
+          elementProps,
+
+        resolvedProps:
+          props,
+
+        resolvedStyle:
+          props?.style,
+
+        height:
+          props?.style?.height,
+
+        flex:
+          props?.style?.flex,
+
+        overflow:
+          props?.style?.overflow,
+
+        width:
+          props?.style?.width,
+
+      },
+      null,
+      2
+    )
+  );
+}
   // ===================================================
   // ACTION CONTEXT
   // ===================================================

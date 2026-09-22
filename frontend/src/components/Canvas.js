@@ -2529,7 +2529,8 @@ const renderChildComponent = (
 // =================================================
 
 const isParentComponent =
-  child.type === "ControlPanel";
+  child.type === "ControlPanel" ||
+  child.type === "Container";
 
 const nestedChildren =
   isParentComponent
@@ -3743,60 +3744,82 @@ if (
                 )
               : 100;
 
+          // =================================================
+          // CHILD HEIGHT
+          // =================================================
+          //
+          // Containers participating in vertical/horizontal
+          // flow should size themselves from their contents.
+          //
+          // Their persisted `height` is still useful for
+          // free-layout and explicitly sized elements, but
+          // using the default persisted Container height
+          // (currently 400px) in a flow layout causes every
+          // Container to consume an arbitrary 400px block.
+          //
+          // Non-Container components retain their persisted
+          // height.
+          //
+          // =================================================
+
           const childHeight =
-            Number.isFinite(
-              Number(
-                child.height
-              )
-            )
-              ? Number(
-                  child.height
-                )
-              : 40;
+            child.type === "Container"
+              ? "auto"
+              : (
+                  Number.isFinite(
+                    Number(
+                      child.height
+                    )
+                  )
+                    ? Number(
+                        child.height
+                      )
+                    : 40
+                );
 
           // =================================================
           // DIAGNOSTIC — NESTED CHILD GEOMETRY
           // =================================================
 
           console.log(
-            "🔥 VERTICAL CHILD GEOMETRY",
-            {
-              parentId:
-                parent?.id,
+        "🔥 VERTICAL CHILD GEOMETRY",
+        {
+          parentId:
+            parent?.id,
 
-              parentType:
-                parent?.type,
+          parentType:
+            parent?.type,
 
-              parentWidth:
-                parent?.width,
+          parentWidth:
+            parent?.width,
 
-              parentHeight:
-                parent?.height,
+          parentHeight:
+            parent?.height,
 
-              childId:
-                child?.id,
+          childId:
+            child?.id,
 
-              childType:
-                child?.type,
+          childType:
+            child?.type,
 
-              childWidth:
-                child?.width,
+          storedChildWidth:
+            child?.width,
 
-              childHeight:
-                child?.height,
+          storedChildHeight:
+            child?.height,
 
-              resolvedChildWidth:
-                childWidth,
+          resolvedChildWidth:
+            childWidth,
 
-              resolvedChildHeight:
-                childHeight,
+          resolvedChildHeight:
+            childHeight,
 
-              childProps:
-                child?.props,
+          childProps:
+            child?.props,
 
-              isHorizontal,
-            }
-          );
+          isHorizontal,
+        }
+      );
 
           // =================================================
 
@@ -3872,6 +3895,33 @@ if (
   // ===================================================
   // TOP LEVEL ELEMENT RENDERER
   // ===================================================
+  console.log(
+  "🔥 CANVAS ELEMENT MODEL",
+  elements
+    .filter(el =>
+      [
+        "confo-chat-test-root-0",
+        "confo-chat-test-create-section-0-2",
+        "confo-chat-test-conversation-section-0-3",
+        "confo-chat-test-invitation-actions-0-4",
+        "confo-chat-test-actions-0-5",
+        "confo-chat-test-panel-container-0-6",
+        "confo-chat-test-input-row-0-7",
+      ].includes(el.id)
+    )
+    .map(el => ({
+      id: el.id,
+      type: el.type,
+      parentId: el.parentId,
+      x: el.x,
+      y: el.y,
+      width: el.width,
+      height: el.height,
+      layout: el.props?.layout,
+      padding: el.props?.padding,
+      gap: el.props?.gap,
+    }))
+);
 
   const renderTopLevelElement =
     (rawElement) => {
@@ -3954,64 +4004,104 @@ if (
         el.type === "Container";
 
       if (isCanonicalRoot) {
-        const binding =
-          bindings[el.id] || {};
+      const isSelected =
+        selectedId === el.id;
 
-        const isSelected =
-          selectedId === el.id;
+      return (
+        <div
+          key={el.id}
 
-        return (
-          <div
-            key={el.id}
-            data-canvas-element-id={el.id}
-            style={{
-              position: "relative",
+          data-canvas-element-id={
+            el.id
+          }
 
-              width: "100%",
-              height: "100%",
+          style={{
+            position:
+              "relative",
 
-              minWidth: 0,
-              minHeight: 0,
+            width:
+              "100%",
 
-              boxSizing: "border-box",
+            height:
+              "100%",
 
-              overflow:
-                getContainerLayout(el) !== "free"
-                  ? "hidden"
-                  : "visible",
+            minWidth:
+              0,
 
-              zIndex:
-                isSelected
-                  ? 0
-                  : 0,
+            minHeight:
+              0,
 
-              ...getSelectionStyle(
-                isSelected
-              ),
-            }}
-            onClick={(event) => {
+            boxSizing:
+              "border-box",
+
+            overflow:
+              getContainerLayout(el) !==
+              "free"
+                ? "hidden"
+                : "visible",
+
+            zIndex:
+              0,
+
+            ...getSelectionStyle(
+              isSelected
+            ),
+          }}
+
+          onClick={
+            (event) => {
               event.stopPropagation();
 
-              if (!isBuilderEditable) {
+              if (
+                !isBuilderEditable
+              ) {
                 return;
               }
 
-              selectElement(el.id);
-            }}
-          >
-            <CanvasElementRenderer
-              Component={Comp}
-              element={el}
-              binding={binding}
-            />
+              selectElement(
+                el.id
+              );
+            }
+          }
+        >
+          {/*
+            =================================================
+            CANONICAL ROOT
+            =================================================
 
-            {renderChildren(
-              el.id,
-              new Set()
-            )}
-          </div>
-        );
-      }
+            The root Container is structural only.
+
+            It represents the Canvas stage and therefore
+            must NOT render its registered Container
+            component here.
+
+            Rendering the Container component would create
+            another full-height container before the
+            recursively rendered children.
+
+            The previous behaviour caused:
+
+                Canvas root
+                    ↓
+                Container component
+                    ↓
+                900px height
+                    ↓
+                renderChildren()
+                    ↓
+                children start below Canvas
+
+            The root now owns only the structural wrapper.
+            Its children are rendered directly into it.
+          */}
+
+          {renderChildren(
+            el.id,
+            new Set()
+          )}
+        </div>
+      );
+    }
 
       const binding =
         bindings[

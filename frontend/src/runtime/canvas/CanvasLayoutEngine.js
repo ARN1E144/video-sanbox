@@ -1223,6 +1223,26 @@ function layoutVerticalChildren(
   layout
 ) {
 
+  console.log(
+    "[CanvasLayoutEngine] VERTICAL ENTER",
+    {
+      parentId:
+        parent?.id,
+
+      parentType:
+        parent?.type,
+
+      layout,
+
+      childIds:
+        children.map(
+          child => child.id
+        ),
+
+    }
+  );
+
+
   const padding =
     toPositiveNumber(
       layout.padding,
@@ -1611,6 +1631,8 @@ function layoutGridChildren(
 }
 
 
+
+
 // =====================================================
 // LAYOUT CHILDREN
 // =====================================================
@@ -1620,15 +1642,57 @@ function layoutChildren(
   children
 ) {
 
+  console.log(
+    "[CanvasLayoutEngine] ENTER layoutChildren FUNCTION",
+    {
+      parentId:
+        parent?.id,
+
+      parentType:
+        parent?.type,
+
+      childCount:
+        Array.isArray(
+          children
+        )
+          ? children.length
+          : "NOT ARRAY",
+    }
+  );
+
+
+  // ---------------------------------------------------
+  // SAFETY
+  // ---------------------------------------------------
+  //
+  // layoutContainerTree() expects this function to
+  // ALWAYS return an array.
+  //
+  // Never allow an unsupported layout type to return
+  // undefined.
+  //
+  // ---------------------------------------------------
+
   if (
     !parent ||
+    !Array.isArray(
+      children
+    ) ||
     !children.length
   ) {
 
-    return children;
+    return Array.isArray(
+      children
+    )
+      ? children
+      : [];
 
   }
 
+
+  // ---------------------------------------------------
+  // RESOLVE DECLARED LAYOUT
+  // ---------------------------------------------------
 
   const layout =
     getElementLayout(
@@ -1636,9 +1700,41 @@ function layoutChildren(
     );
 
 
+  console.log(
+    "[CanvasLayoutEngine] layoutChildren",
+    {
+      parentId:
+        parent?.id,
+
+      parentType:
+        parent?.type,
+
+      parentLayoutProps:
+        parent?.props?.layout,
+
+      resolvedLayout:
+        layout,
+
+      childIds:
+        children.map(
+          child =>
+            child.id
+        ),
+    }
+  );
+
+
+  // ---------------------------------------------------
+  // DISPATCH
+  // ---------------------------------------------------
+
   switch (
     layout.type
   ) {
+
+    // -----------------------------------------------
+    // VERTICAL
+    // -----------------------------------------------
 
     case "vertical":
 
@@ -1649,6 +1745,10 @@ function layoutChildren(
       );
 
 
+    // -----------------------------------------------
+    // HORIZONTAL
+    // -----------------------------------------------
+
     case "horizontal":
 
       return layoutHorizontalChildren(
@@ -1657,6 +1757,10 @@ function layoutChildren(
         layout
       );
 
+
+    // -----------------------------------------------
+    // GRID
+    // -----------------------------------------------
 
     case "grid":
 
@@ -1667,9 +1771,53 @@ function layoutChildren(
       );
 
 
+    // -----------------------------------------------
+    // FREE
+    // -----------------------------------------------
+
     case "free":
 
+      console.log(
+        "[CanvasLayoutEngine] layoutChildren",
+        {
+          parentId:
+            parent?.id,
+
+          layoutType:
+            "free",
+
+          childIds:
+            children.map(
+              child =>
+                child.id
+            ),
+        }
+      );
+
+      return layoutFreeChildren(
+        parent,
+        children
+      );
+
+
+    // -----------------------------------------------
+    // UNKNOWN / UNSPECIFIED
+    // -----------------------------------------------
+
     default:
+
+      console.warn(
+        "[CanvasLayoutEngine] Unknown layout type — falling back to free layout",
+        {
+          parentId:
+            parent?.id,
+
+          parentType:
+            parent?.type,
+
+          layout,
+        }
+      );
 
       return layoutFreeChildren(
         parent,
@@ -1679,6 +1827,7 @@ function layoutChildren(
   }
 
 }
+
 
 
 // =====================================================
@@ -1914,11 +2063,42 @@ function layoutContainerTree(
   allElements
 ) {
 
+    console.log(
+    "[CanvasLayoutEngine] CONTAINER TREE",
+    {
+        parentId: parent?.id,
+        parentType: parent?.type,
+        parentLayoutProps: parent?.props?.layout,
+        parentLayoutMeta: parent?.meta?.layout,
+        parentLayout: getElementLayout(parent),
+    }
+    );
+
   const directChildren =
     getChildren(
       allElements,
       parent.id
     );
+
+    console.log(
+  "[CanvasLayoutEngine] DIRECT CHILDREN CHECK",
+  {
+    parentId: parent?.id,
+    parentType: parent?.type,
+    allElementsIsArray:
+      Array.isArray(allElements),
+    allElementsLength:
+      Array.isArray(allElements)
+        ? allElements.length
+        : "NOT ARRAY",
+    directChildrenIsArray:
+      Array.isArray(directChildren),
+    directChildrenLength:
+      Array.isArray(directChildren)
+        ? directChildren.length
+        : "NOT ARRAY",
+  }
+);
 
 
   if (
@@ -1969,10 +2149,38 @@ function layoutContainerTree(
       parent.id
     );
 
+    console.log(
+        "[CanvasLayoutEngine] BEFORE CHILD LAYOUT",
+        children.map(
+            child => ({
+            id: child.id,
+            x: child.x,
+            y: child.y,
+            width: child.width,
+            height: child.height,
+            layoutManaged:
+                child.meta?.layoutManaged,
+            })
+        )
+        );
+
 
   // ---------------------------------------------------
   // Auto-size parent.
   // ---------------------------------------------------
+  
+  console.log(
+  "[CanvasLayoutEngine] CHILDREN CHECK",
+  {
+    parentId: parent?.id,
+    childrenIsArray:
+      Array.isArray(children),
+    childrenLength:
+      Array.isArray(children)
+        ? children.length
+        : "NOT ARRAY",
+  }
+);
 
   const resizedParent =
     autoSizeContainer(
@@ -2009,11 +2217,28 @@ function layoutContainerTree(
   // Apply layout.
   // ---------------------------------------------------
 
-  children =
-    layoutChildren(
-      parent,
-      children
-    );
+  console.log(
+  "[CanvasLayoutEngine] BEFORE layoutChildren CALL",
+  {
+    parentId: parent?.id,
+    parentType: parent?.type,
+    childCount: children.length,
+  }
+);
+
+children =
+  layoutChildren(
+    parent,
+    children
+  );
+
+console.log(
+  "[CanvasLayoutEngine] AFTER layoutChildren CALL",
+  {
+    parentId: parent?.id,
+    childCount: children.length,
+  }
+);
 
 
   // ---------------------------------------------------
