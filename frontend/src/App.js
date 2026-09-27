@@ -73,6 +73,12 @@ import useGroupCallSync
 import GroupCallSocketRuntime
   from "./runtime/GroupCallSocketRuntime";
 
+import ConfoRuntimeTriggers
+  from "./runtime/confos/ConfoRuntimeTriggers";
+
+import InvitationAcceptance
+  from "./components/invitations/InvitationAcceptance";
+
 
 // =====================================================
 // LOADING
@@ -151,6 +157,9 @@ function RuntimeAuthDebug() {
 // Realtime invitation delivery can later move to
 // Socket.IO while this remains as reconciliation.
 //
+// This runtime only applies to authenticated users.
+// It is deliberately separate from the global invitation
+// acceptance flow.
 // =====================================================
 
 function GroupCallInvitationRuntime() {
@@ -289,6 +298,80 @@ function GroupCallRuntimeSync() {
 
 
 // =====================================================
+// ROOT INVITATION ROUTER
+// =====================================================
+//
+// Invitation URLs must be handled before AuthGate.
+//
+// An invitee may not have an authenticated session yet.
+//
+//
+//   /?invite=<token>
+//
+//
+// Therefore the invitation flow cannot live exclusively
+// inside AuthenticatedApp.
+//
+//
+// Architectural boundary:
+//
+//   URL
+//     ↓
+//   InvitationAcceptance
+//     ↓
+//   Resource-specific invitation acceptance
+//
+// The global component currently delegates tenant
+// invitations to TenantInvitationAcceptance.
+//
+// Future invitation types can be dispatched here without
+// changing AuthGate, AuthContext, ProjectContext or the
+// authenticated application runtime.
+// =====================================================
+
+function InvitationAwareRoot() {
+
+  const params =
+    new URLSearchParams(
+      window.location.search
+    );
+
+
+  const inviteToken =
+    params.get("invite");
+
+
+  // ---------------------------------------------------
+  // GLOBAL INVITATION ENTRY POINT
+  // ---------------------------------------------------
+
+  if (
+    inviteToken
+  ) {
+
+    return (
+      <InvitationAcceptance
+        token={
+          inviteToken
+        }
+      />
+    );
+
+  }
+
+
+  // ---------------------------------------------------
+  // NORMAL APPLICATION ENTRY
+  // ---------------------------------------------------
+
+  return (
+    <AuthGate />
+  );
+
+}
+
+
+// =====================================================
 // AUTH GATE
 // =====================================================
 
@@ -344,6 +427,20 @@ function AuthGate() {
 
 // =====================================================
 // AUTHENTICATED APPLICATION
+// =====================================================
+//
+// IMPORTANT:
+//
+// The invitation system does NOT own the authenticated
+// application.
+//
+// Once invitation acceptance establishes a valid session,
+// the normal AuthGate → AuthenticatedApp path takes over.
+//
+// ProjectContext discovers whatever projects/resources
+// the authenticated user can access.
+//
+// No invitation-specific logic is required here.
 // =====================================================
 
 function AuthenticatedApp() {
@@ -474,7 +571,7 @@ function App() {
 
     <AuthProvider>
 
-      <AuthGate />
+      <InvitationAwareRoot />
 
     </AuthProvider>
 

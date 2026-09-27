@@ -5,6 +5,8 @@ import mongoose from "mongoose";
 
 import Project from "../models/project.js";
 import ProjectMembership from "../models/projectMembership.js";
+import Membership from "../models/Membership.js";
+import User from "../models/User.js";
 
 import { requireAuth } from "../middleware/requireAuth.js";
 
@@ -1038,6 +1040,347 @@ router.get(
 
           message:
             "Failed to load projects.",
+
+        });
+
+    }
+
+  }
+);
+
+// =====================================================
+// GET TENANT PROJECTS FOR PROJECT ADMINISTRATION
+// =====================================================
+//
+// GET /api/projects/tenant
+//
+// Returns projects belonging to the current tenant that
+// the authenticated tenant owner/admin can assign to
+// another tenant member.
+//
+// This is intentionally different from:
+//
+// GET /api/projects
+//
+// which returns projects accessible to the current user.
+//
+// =====================================================
+
+router.get(
+  "/tenant",
+  requireAuth,
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const tenantId =
+        getTenantId(
+          req
+        );
+
+
+      const userId =
+        getUserId(
+          req
+        );
+
+
+      if (!userId) {
+
+        return res
+          .status(401)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "INVALID_AUTHENTICATED_USER",
+
+          });
+
+      }
+
+
+      if (!tenantId) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "TENANT_REQUIRED",
+
+          });
+
+      }
+
+
+      // =================================================
+      // VERIFY TENANT ADMINISTRATION ACCESS
+      // =================================================
+
+      const tenantMembership =
+        await Membership.findOne({
+
+          tenantId,
+
+          userId,
+
+        })
+          .select(
+            "role"
+          )
+          .lean();
+
+
+      if (
+        !tenantMembership ||
+        ![
+          "owner",
+          "admin",
+        ].includes(
+          tenantMembership.role
+        )
+      ) {
+
+        return res
+          .status(403)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "TENANT_PROJECT_ACCESS_DENIED",
+
+          });
+
+      }
+
+
+      // =================================================
+      // FIND TENANT USERS
+      // =================================================
+      //
+      // Project currently has ownerId rather than tenantId.
+      //
+      // Therefore a project belongs to this tenant when its
+      // owner is a member of this tenant.
+      // =================================================
+
+      const tenantMemberships =
+        await Membership.find({
+
+          tenantId,
+
+        })
+          .select(
+            "userId"
+          )
+          .lean();
+
+
+      const tenantUserIds =
+        tenantMemberships.map(
+          membership =>
+            membership.userId
+        );
+
+
+      if (
+        tenantUserIds.length ===
+        0
+      ) {
+
+        return res
+          .status(200)
+          .json({
+
+            success:
+              true,
+
+            projects:
+              [],
+
+          });
+
+      }
+
+
+      // =================================================
+      // LOAD PROJECTS
+      // =================================================
+
+      const projects =
+        await Project.find({
+
+          ownerId: {
+            $in:
+              tenantUserIds,
+          },
+
+        })
+          .sort({
+
+            updatedAt:
+              -1,
+
+          })
+          .lean();
+
+
+      // =================================================
+      // LOAD OWNER USERS
+      // =================================================
+
+      const ownerIds =
+        projects
+          .map(
+            project =>
+              project.ownerId
+          )
+          .filter(Boolean);
+
+
+      const owners =
+        await User.find({
+
+          _id: {
+            $in:
+              ownerIds,
+          },
+
+        })
+          .select(
+            "_id firstName lastName email"
+          )
+          .lean();
+
+
+      const ownerMap =
+        new Map(
+
+          owners.map(
+            owner => [
+
+              String(
+                owner._id
+              ),
+
+              owner,
+
+            ]
+          )
+
+        );
+
+
+      // =================================================
+      // RESPONSE
+      // =================================================
+
+      const result =
+        projects
+          .map(
+            project => {
+
+              const owner =
+                ownerMap.get(
+                  String(
+                    project.ownerId
+                  )
+                );
+
+
+              const normalised =
+                normaliseProject(
+                  project
+                );
+
+
+              if (
+                !normalised
+              ) {
+
+                return null;
+
+              }
+
+
+              return {
+
+                ...normalised,
+
+                owner: owner
+                  ? {
+
+                      id:
+                        owner._id,
+
+                      firstName:
+                        owner.firstName ||
+                        "",
+
+                      lastName:
+                        owner.lastName ||
+                        "",
+
+                      email:
+                        owner.email ||
+                        "",
+
+                    }
+                  : null,
+
+              };
+
+            }
+          )
+          .filter(Boolean);
+
+
+      return res
+        .status(200)
+        .json({
+
+          success:
+            true,
+
+          projects:
+            result,
+
+        });
+
+    }
+    catch (
+      error
+    ) {
+
+      console.error(
+        "[Projects] GET /tenant failed",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            "TENANT_PROJECT_LIST_FAILED",
+
+          message:
+            "Failed to load tenant projects.",
 
         });
 
