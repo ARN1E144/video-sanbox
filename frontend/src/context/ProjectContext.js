@@ -833,6 +833,9 @@ export function ProjectProvider({
               confoVersion:
                 null,
 
+              access:
+                null,
+
             }
           );
 
@@ -845,6 +848,7 @@ export function ProjectProvider({
         // ------------------------------------------------
         // EXISTING PROJECT
         // ------------------------------------------------
+        
 
         runtime.patch(
           "project",
@@ -875,6 +879,10 @@ export function ProjectProvider({
 
             interviewConfig:
               hydrated.interviewConfig,
+
+            access:
+              hydrated.access ||
+              null,
 
           }
         );
@@ -961,6 +969,9 @@ export function ProjectProvider({
               null,
 
             confoVersion:
+              null,
+
+            access:
               null,
 
           }

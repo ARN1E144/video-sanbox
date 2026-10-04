@@ -322,7 +322,7 @@ function GroupCallRuntimeSync() {
 //   Resource-specific invitation acceptance
 //
 // The global component currently delegates tenant
-// invitations to TenantInvitationAcceptance.
+// invitations to InvitationAcceptance.
 //
 // Future invitation types can be dispatched here without
 // changing AuthGate, AuthContext, ProjectContext or the
@@ -429,35 +429,73 @@ function AuthGate() {
 // AUTHENTICATED APPLICATION
 // =====================================================
 //
+// Provider dependency order:
+//
+//   RuntimeStateProvider
+//       ↓
+//   RuntimeAuthProvider
+//       ↓
+//   RuntimeEventProvider
+//       ↓
+//   RuntimeBootstrap
+//       ↓
+//   ActionProvider
+//       ↓
+//   RuntimeTriggersProvider
+//       ↓
+//   ProjectProvider
+//       ↓
+//   CanvasProvider
+//       ↓
+//   PreviewProvider
+//
 // IMPORTANT:
 //
-// The invitation system does NOT own the authenticated
-// application.
+// RuntimeAuthProvider depends on RuntimeStateProvider.
 //
-// Once invitation acceptance establishes a valid session,
-// the normal AuthGate → AuthenticatedApp path takes over.
+// ActionProvider depends on:
 //
-// ProjectContext discovers whatever projects/resources
-// the authenticated user can access.
+//   - RuntimeStateProvider
+//   - RuntimeEventProvider
+//   - RuntimeAuthProvider
 //
-// No invitation-specific logic is required here.
+// ProjectProvider synchronises the authoritative
+// project definition into RuntimeState:
+//
+//   ProjectProvider
+//        ↓
+//   runtime.patch("project", ...)
+//        ↓
+//   RuntimeState
+//        ↓
+//   RuntimeAuthProvider
+//        ↓
+//   project.access.role
+//
+// The invitation system remains outside this authenticated
+// runtime tree.
 // =====================================================
 
 function AuthenticatedApp() {
 
   return (
 
-    <RuntimeAuthProvider>
+    <RuntimeStateProvider>
 
-      <RuntimeAuthDebug />
+      <RuntimeAuthProvider>
 
-      <RuntimeEventProvider>
-
-        <RuntimeStateProvider>
+        <RuntimeEventProvider>
 
           <RuntimeBootstrap />
 
           <ActionProvider>
+
+            {/* =========================================
+                RUNTIME AUTH DEBUG
+            ========================================= */}
+
+            <RuntimeAuthDebug />
+
 
             {/* =========================================
                 GROUP INVITATION RUNTIME
@@ -550,11 +588,11 @@ function AuthenticatedApp() {
 
           </ActionProvider>
 
-        </RuntimeStateProvider>
+        </RuntimeEventProvider>
 
-      </RuntimeEventProvider>
+      </RuntimeAuthProvider>
 
-    </RuntimeAuthProvider>
+    </RuntimeStateProvider>
 
   );
 

@@ -22,59 +22,59 @@ export const ROLE_PERMISSIONS = {
 
     allowedElements: [
 
-  // -----------------------------------------------
-  // CORE
-  // -----------------------------------------------
+      // -----------------------------------------------
+      // CORE
+      // -----------------------------------------------
 
-  "Container",
-  "Text",
-  "ControlPanel",
-  "ControlButton",
+      "Container",
+      "Text",
+      "ControlPanel",
+      "ControlButton",
 
-  // -----------------------------------------------
-  // INPUT
-  // -----------------------------------------------
+      // -----------------------------------------------
+      // INPUT
+      // -----------------------------------------------
 
-  "FileUpload",
-  "Select",
+      "FileUpload",
+      "Select",
 
-  // -----------------------------------------------
-  // VIDEO
-  // -----------------------------------------------
+      // -----------------------------------------------
+      // VIDEO
+      // -----------------------------------------------
 
-  "AgoraFeed",
-  "RemoteVideoGrid",
-  "VideoFeed",
-  "MediaFeed",
+      "AgoraFeed",
+      "RemoteVideoGrid",
+      "VideoFeed",
+      "MediaFeed",
 
-  // -----------------------------------------------
-  // CALL
-  // -----------------------------------------------
+      // -----------------------------------------------
+      // CALL
+      // -----------------------------------------------
 
-  "ChatPanel",
-  "AvailabilityButton",
-  "FetchCallsDebug",
+      "ChatPanel",
+      "AvailabilityButton",
+      "FetchCallsDebug",
 
-  // -----------------------------------------------
-  // GROUP CALL
-  // -----------------------------------------------
+      // -----------------------------------------------
+      // GROUP CALL
+      // -----------------------------------------------
 
-  "ParticipantSelector",
-  "IncomingGroupCallAlert",
-  "GroupCallControls",
-  
+      "ParticipantSelector",
+      "IncomingGroupCallAlert",
+      "GroupCallControls",
 
-  // -----------------------------------------------
-  // REMOTE TRAINING
-  // -----------------------------------------------
+      // -----------------------------------------------
+      // REMOTE TRAINING
+      // -----------------------------------------------
 
-  "TrainingInvitation",
+      "TrainingInvitation",
 
-  // -----------------------------------------------
-  // COMPLIANCE
-  // -----------------------------------------------
+      // -----------------------------------------------
+      // COMPLIANCE
+      // -----------------------------------------------
 
-  "ComplianceEvidence",
+      "ComplianceEvidence",
+
     ],
 
 
@@ -85,27 +85,16 @@ export const ROLE_PERMISSIONS = {
       // =================================================
 
       "call.startCall",
-
       "call.acceptCall",
-
       "call.joinCall",
-
       "call.leaveCall",
-
       "call.endCall",
-
       "call.toggleMic",
-
       "call.toggleVideo",
-
       "call.spotlightUser",
-
       "call.fetchAvailableCalls",
-
       "call.setAvailability",
-
       "call.fetchPendingCalls",
-
       "call.joinInvitedCall",
 
 
@@ -114,45 +103,29 @@ export const ROLE_PERMISSIONS = {
       // =================================================
 
       "call.createGroupCall",
-
       "call.fetchPendingInvitations",
-
       "call.acceptInvitation",
-
       "call.declineInvitation",
-
       "call.joinGroupCall",
-
       "call.refreshGroupCall",
-
       "call.inviteGroupParticipants",
-
       "call.leaveGroupCall",
-
       "call.endGroupCall",
 
-       // =================================================
+
+      // =================================================
       // CHAT
       // =================================================
 
       "chat.sendMessage",
-
       "chat.loadMessages",
-
       "chat.createConversation",
-
       "chat.joinConversation",
-      
-      'chat.loadConversations',
-
+      "chat.loadConversations",
       "chat.leaveConversation",
-
-      'chat.markConversationRead',
-
-      'chat.editMessage',
-
+      "chat.markConversationRead",
+      "chat.editMessage",
       "chat.deleteMessage",
-
       "chat.closeConversation",
 
 
@@ -161,13 +134,9 @@ export const ROLE_PERMISSIONS = {
       // =================================================
 
       "interview.start",
-
       "interview.nextQuestion",
-
       "interview.submitAnswer",
-
       "interview.evaluate",
-
       "interview.complete",
 
 
@@ -176,13 +145,9 @@ export const ROLE_PERMISSIONS = {
       // =================================================
 
       "video.toggleMic",
-
       "video.toggleVideo",
-
       "video.startRecording",
-
       "video.stopRecording",
-
       "video.uploadRecording",
 
 
@@ -191,34 +156,24 @@ export const ROLE_PERMISSIONS = {
       // =================================================
 
       "training.createSession",
-
       "training.startSession",
-
       "training.fetchPendingSessions",
-
       "training.joinSession",
-
       "training.leaveSession",
-
       "training.endSession",
 
+
       // =================================================
-      // Compliance
+      // COMPLIANCE
       // =================================================
-      
+
       "compliance.load",
-
       "compliance.requestEvidence",
-
       "compliance.uploadEvidence",
-
       "compliance.analyseEvidence",
-
       "compliance.acceptEvidence",
-
       "compliance.rejectEvidence",
-
-      "compliance.updateControlStatus"
+      "compliance.updateControlStatus",
 
     ],
 
@@ -236,27 +191,28 @@ export const ROLE_PERMISSIONS = {
 
     allowedElements: [
 
-  "Container",
-  "Text",
-  "AgoraFeed",
-  "RemoteVideoGrid",
-  "VideoFeed",
-  "ControlPanel",
-  "ControlButton",
+      "Container",
+      "Text",
+      "AgoraFeed",
+      "RemoteVideoGrid",
+      "VideoFeed",
+      "ControlPanel",
+      "ControlButton",
 
-  // INPUT
-  "FileUpload",
-  "Select",
+      // INPUT
+      "FileUpload",
+      "Select",
 
-  "ChatPanel",
-  "AvailabilityButton",
-  "ParticipantSelector",
-  "IncomingGroupCallAlert",
-  "GroupCallControls",
-  "TrainingInvitation",
+      "ChatPanel",
+      "AvailabilityButton",
+      "ParticipantSelector",
+      "IncomingGroupCallAlert",
+      "GroupCallControls",
+      "TrainingInvitation",
 
-  // COMPLIANCE
-  "ComplianceEvidence"
+      // COMPLIANCE
+      "ComplianceEvidence",
+
     ],
 
 
@@ -267,27 +223,16 @@ export const ROLE_PERMISSIONS = {
       // -----------------------------------------------
 
       "call.startCall",
-
       "call.acceptCall",
-
       "call.joinCall",
-
       "call.leaveCall",
-
       "call.endCall",
-
       "call.toggleMic",
-
       "call.toggleVideo",
-
       "call.spotlightUser",
-
       "call.fetchAvailableCalls",
-
       "call.setAvailability",
-
       "call.fetchPendingCalls",
-
       "call.joinInvitedCall",
 
 
@@ -296,31 +241,22 @@ export const ROLE_PERMISSIONS = {
       // -----------------------------------------------
 
       "call.createGroupCall",
-
       "call.fetchPendingInvitations",
-
       "call.acceptInvitation",
-
       "call.declineInvitation",
-
       "call.joinGroupCall",
-
       "call.refreshGroupCall",
-
       "call.inviteGroupParticipants",
-
       "call.leaveGroupCall",
-
       "call.endGroupCall",
 
-       // =================================================
+
+      // =================================================
       // CHAT
       // =================================================
 
       "chat.sendMessage",
-
       "chat.loadMessages",
-
       "chat.createConversation",
 
 
@@ -329,15 +265,10 @@ export const ROLE_PERMISSIONS = {
       // =================================================
 
       "training.createSession",
-
       "training.startSession",
-
       "training.fetchPendingSessions",
-
       "training.joinSession",
-
       "training.leaveSession",
-
       "training.endSession",
 
     ],
@@ -351,34 +282,27 @@ export const ROLE_PERMISSIONS = {
 
   host: {
 
+    // Host represents a project Editor at runtime.
+    // Editors can modify the project and execute it.
     canBuild:
-      false,
+      true,
 
     allowedElements: [
 
       "AgoraFeed",
-
       "RemoteVideoGrid",
-
       "VideoFeed",
-
       "ControlPanel",
-
       "ControlButton",
-
       "ChatPanel",
-
       "Select",
-
 
       // -----------------------------------------------
       // GROUP CALL EXPERIENCE
       // -----------------------------------------------
 
       "ParticipantSelector",
-
       "IncomingGroupCallAlert",
-
       "GroupCallControls",
 
     ],
@@ -391,17 +315,11 @@ export const ROLE_PERMISSIONS = {
       // -----------------------------------------------
 
       "call.acceptCall",
-
       "call.joinCall",
-
       "call.leaveCall",
-
       "call.endCall",
-
       "call.toggleMic",
-
       "call.toggleVideo",
-
       "call.spotlightUser",
 
 
@@ -410,31 +328,22 @@ export const ROLE_PERMISSIONS = {
       // -----------------------------------------------
 
       "call.createGroupCall",
-
       "call.fetchPendingInvitations",
-
       "call.acceptInvitation",
-
       "call.declineInvitation",
-
       "call.joinGroupCall",
-
       "call.refreshGroupCall",
-
       "call.inviteGroupParticipants",
-
       "call.leaveGroupCall",
-
       "call.endGroupCall",
 
-       // =================================================
+
+      // =================================================
       // CHAT
       // =================================================
 
       "chat.sendMessage",
-
       "chat.loadMessages",
-
       "chat.createConversation",
 
 
@@ -443,16 +352,22 @@ export const ROLE_PERMISSIONS = {
       // =================================================
 
       "training.createSession",
-
       "training.startSession",
-
       "training.fetchPendingSessions",
-
       "training.joinSession",
-
       "training.leaveSession",
-
       "training.endSession",
+
+
+      // =================================================
+      // AI INTERVIEW
+      // =================================================
+
+      "interview.start",
+      "interview.nextQuestion",
+      "interview.submitAnswer",
+      "interview.evaluate",
+      "interview.complete",
 
     ],
 
@@ -471,33 +386,24 @@ export const ROLE_PERMISSIONS = {
     allowedElements: [
 
       "AgoraFeed",
-
       "RemoteVideoGrid",
-
       "VideoFeed",
-
       "ControlPanel",
-
       "ControlButton",
-
       "ChatPanel",
-
       "Text",
-      
-
 
       // -----------------------------------------------
       // GROUP CALL PARTICIPANT EXPERIENCE
       // -----------------------------------------------
 
       "IncomingGroupCallAlert",
-
       "GroupCallControls",
 
-       // -----------------------------------------------
+      // -----------------------------------------------
       // REMOTE TRAINING
       // -----------------------------------------------
-      
+
       "TrainingInvitation",
 
     ],
@@ -510,11 +416,8 @@ export const ROLE_PERMISSIONS = {
       // -----------------------------------------------
 
       "call.joinCall",
-
       "call.leaveCall",
-
       "call.toggleMic",
-
       "call.toggleVideo",
 
 
@@ -523,11 +426,8 @@ export const ROLE_PERMISSIONS = {
       // -----------------------------------------------
 
       "call.fetchPendingInvitations",
-
       "call.acceptInvitation",
-
       "call.declineInvitation",
-
       "call.joinGroupCall",
 
       // Used by realtime socket lifecycle reconciliation.
@@ -535,12 +435,12 @@ export const ROLE_PERMISSIONS = {
 
       "call.leaveGroupCall",
 
-       // =================================================
+
+      // =================================================
       // CHAT
       // =================================================
 
       "chat.sendMessage",
-
       "chat.loadMessages",
 
 
@@ -549,9 +449,7 @@ export const ROLE_PERMISSIONS = {
       // =================================================
 
       "training.fetchPendingSessions",
-
       "training.joinSession",
-
       "training.leaveSession",
 
     ],
@@ -565,17 +463,17 @@ export const ROLE_PERMISSIONS = {
 
   viewer: {
 
+    // Viewers cannot modify the project.
+    // They can still execute the application's
+    // permitted runtime behaviour.
     canBuild:
       false,
 
     allowedElements: [
 
       "AgoraFeed",
-
       "RemoteVideoGrid",
-
       "VideoFeed",
-
       "Text",
 
     ],
@@ -583,12 +481,35 @@ export const ROLE_PERMISSIONS = {
 
     allowedActions: [
 
-      "call.joinCall",
+      // -----------------------------------------------
+      // STANDARD CALL
+      // -----------------------------------------------
 
+      "call.joinCall",
       "call.leaveCall",
+
+      // =================================================
+      // VIDEO
+      // =================================================
+
+      "video.toggleMic",
+      "video.toggleVideo",
+      "video.startRecording",
+      "video.stopRecording",
+      "video.uploadRecording",
+
+
+      // =================================================
+      // AI INTERVIEW
+      // =================================================
+
+      "interview.start",
+      "interview.nextQuestion",
+      "interview.submitAnswer",
+      "interview.complete",
 
     ],
 
   },
 
-}; 
+};

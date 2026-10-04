@@ -1829,6 +1829,26 @@ try {
     }
   );
 
+  // =================================================
+  // RECORDING BLOB DEBUG
+  // =================================================
+
+  console.log(
+    "[VideoFeed] RECORDING BLOB DEBUG",
+    {
+      size:
+        blob.size,
+
+      type:
+        blob.type,
+
+      chunks:
+        recordingChunksRef.current.length,
+
+      durationSeconds,
+    }
+  );
+
 
   if (
     !blob.size
@@ -1893,6 +1913,7 @@ try {
 
     recordingUrl:
       objectUrl,
+      
 
     recordingMimeType:
       blob.type ||

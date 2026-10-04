@@ -56,11 +56,15 @@ function normaliseId(value) {
 //        ↓
 //   accept invitation
 //        ↓
-//   backend creates Membership
+//   backend creates/finds User
+//        ↓
+//   backend creates/finds Membership
 //        ↓
 //   backend creates ProjectMembership
 //        ↓
-//   adopt returned authentication session
+//   backend returns authentication session
+//        ↓
+//   adoptSession()
 //        ↓
 //   normal authenticated application
 //
@@ -81,7 +85,6 @@ export default function TenantInvitationAcceptance({
 }) {
 
   const {
-    session,
     adoptSession,
   } =
     useAuth();
@@ -212,14 +215,6 @@ export default function TenantInvitationAcceptance({
           data.invitation
         );
 
-
-        // If the preview endpoint tells us
-        // the invited email belongs to an existing
-        // account, we do not ask for a password.
-        //
-        // For a new account, the acceptance flow
-        // requires a password.
-
       }
       catch (err) {
 
@@ -238,6 +233,7 @@ export default function TenantInvitationAcceptance({
 
         setError(
           err?.response?.data?.message ||
+          err?.response?.data?.error ||
           err?.message ||
           "This invitation is invalid, expired, or no longer available."
         );
@@ -279,28 +275,14 @@ export default function TenantInvitationAcceptance({
   async function handleAccept() {
 
     if (
-      !token
+      !token ||
+      accepting
     ) {
       return;
     }
 
 
     setError("");
-
-
-    // New accounts need a password.
-    if (
-      invitation?.userExists === false &&
-      password.length < 8
-    ) {
-
-      setError(
-        "Your password must be at least 8 characters."
-      );
-
-      return;
-
-    }
 
 
     try {
@@ -313,12 +295,18 @@ export default function TenantInvitationAcceptance({
           "/tenant/invitations/accept",
           {
             token,
+
             firstName:
-              firstName.trim(),
+              firstName.trim() ||
+              undefined,
+
             lastName:
-              lastName.trim(),
+              lastName.trim() ||
+              undefined,
+
             password:
-              password || undefined,
+              password ||
+              undefined,
           }
         );
 
@@ -334,6 +322,7 @@ export default function TenantInvitationAcceptance({
 
         throw new Error(
           data?.message ||
+          data?.error ||
           "The invitation could not be accepted."
         );
 
@@ -343,6 +332,8 @@ export default function TenantInvitationAcceptance({
       console.log(
         "[TenantInvitationAcceptance] accepted",
         {
+          invitation:
+            data.invitation,
           user:
             data.user,
           membership:
@@ -353,6 +344,11 @@ export default function TenantInvitationAcceptance({
 
       // -------------------------------------------------
       // Establish the authenticated application session.
+      //
+      // AuthContext owns authentication state.
+      // ProjectContext will subsequently discover the
+      // user's accessible projects through its normal
+      // authenticated lifecycle.
       // -------------------------------------------------
 
       await adoptSession({
@@ -369,7 +365,6 @@ export default function TenantInvitationAcceptance({
 
       setAccepted(true);
 
-
     }
     catch (err) {
 
@@ -381,6 +376,7 @@ export default function TenantInvitationAcceptance({
 
       setError(
         err?.response?.data?.message ||
+        err?.response?.data?.error ||
         err?.message ||
         "The invitation could not be accepted."
       );
@@ -470,10 +466,20 @@ export default function TenantInvitationAcceptance({
   // ===================================================
   // ACCEPTED
   // ===================================================
+  //
+  // IMPORTANT:
+  //
+  // Do NOT use AuthContext session here.
+  //
+  // This component can be rendered before AuthGate and
+  // an already-authenticated user may open an invitation.
+  //
+  // The invitation should only display this state after
+  // this component has actually completed acceptance.
+  // ===================================================
 
   if (
-    accepted ||
-    session?.tokens?.accessToken
+    accepted
   ) {
 
     return (
@@ -520,6 +526,7 @@ export default function TenantInvitationAcceptance({
           <button
             type="button"
             onClick={() => {
+
               window.history.replaceState(
                 {},
                 "",
@@ -527,6 +534,7 @@ export default function TenantInvitationAcceptance({
               );
 
               window.location.reload();
+
             }}
             style={primaryButtonStyle}
           >
@@ -551,10 +559,6 @@ export default function TenantInvitationAcceptance({
     )
       ? invitation.projects
       : [];
-
-
-  const userExists =
-    invitation?.userExists === true;
 
 
   return (
@@ -630,6 +634,7 @@ export default function TenantInvitationAcceptance({
           </div>
 
           {invitation.inviter.email && (
+
             <div
               style={{
                 marginTop: "4px",
@@ -639,6 +644,7 @@ export default function TenantInvitationAcceptance({
             >
               {invitation.inviter.email}
             </div>
+
           )}
 
         </InvitationSection>
@@ -702,8 +708,9 @@ export default function TenantInvitationAcceptance({
 
                 const projectId =
                   normaliseId(
-                    project.projectId ??
-                    project.id
+                    project?.projectId ??
+                    project?.id ??
+                    project?._id
                   );
 
 
@@ -728,8 +735,8 @@ export default function TenantInvitationAcceptance({
                         fontWeight: 600,
                       }}
                     >
-                      {project.name ||
-                        project.projectName ||
+                      {project?.name ||
+                        project?.projectName ||
                         "Project"}
                     </div>
 
@@ -747,7 +754,7 @@ export default function TenantInvitationAcceptance({
                           color: "#e2e8f0",
                         }}
                       >
-                        {project.role ||
+                        {project?.role ||
                           "viewer"}
                       </span>
                     </div>
@@ -770,61 +777,63 @@ export default function TenantInvitationAcceptance({
       =============================================== */}
 
       <InvitationSection
-        title={
-          userExists
-            ? "Accept invitation"
-            : "Create your account"
-        }
+        title="Accept invitation"
       >
 
-        {!userExists && (
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "1fr 1fr",
-              gap: "12px",
-              marginBottom: "12px",
-            }}
-          >
-
-            <Input
-              label="First name"
-              value={firstName}
-              onChange={
-                setFirstName
-              }
-              placeholder="First name"
-            />
-
-            <Input
-              label="Last name"
-              value={lastName}
-              onChange={
-                setLastName
-              }
-              placeholder="Last name"
-            />
-
-          </div>
-
-        )}
+        <div
+          style={{
+            color: "#94a3b8",
+            fontSize: "14px",
+            lineHeight: 1.5,
+            marginBottom: "14px",
+          }}
+        >
+          If you are creating a new account, enter
+          your details below. Existing accounts can
+          leave these fields blank.
+        </div>
 
 
-        {!userExists && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "1fr 1fr",
+            gap: "12px",
+            marginBottom: "12px",
+          }}
+        >
 
           <Input
-            label="Password"
-            type="password"
-            value={password}
+            label="First name"
+            value={firstName}
             onChange={
-              setPassword
+              setFirstName
             }
-            placeholder="At least 8 characters"
+            placeholder="First name"
           />
 
-        )}
+          <Input
+            label="Last name"
+            value={lastName}
+            onChange={
+              setLastName
+            }
+            placeholder="Last name"
+          />
+
+        </div>
+
+
+        <Input
+          label="Password"
+          type="password"
+          value={password}
+          onChange={
+            setPassword
+          }
+          placeholder="Leave blank if you already have an account"
+        />
 
 
         {error && (

@@ -150,45 +150,93 @@ export default async function uploadRecording(
 
 
     // ===================================================
-    // VALIDATE BLOB
-    // ===================================================
+// VALIDATE RECORDING BINARY
+// ===================================================
 
-    if (
-      !blob
-    ) {
+const isBlob =
+  typeof Blob !== "undefined" &&
+  blob instanceof Blob;
 
-      console.warn(
-        "[uploadRecording] Recording Blob not available",
-        {
+const isArrayBuffer =
+  typeof ArrayBuffer !== "undefined" &&
+  blob instanceof ArrayBuffer;
 
-          id,
+const isUint8Array =
+  typeof Uint8Array !== "undefined" &&
+  blob instanceof Uint8Array;
 
-          sourceId,
-
-          hasParamBlob:
-            !!params?.recordingBlob,
-
-          hasInstalledBindingBlob:
-            !!recordingBinding?.recordingBlob,
-
-          hasSourceBindingBlob:
-            !!sourceBinding?.recordingBlob,
-
-        }
-      );
+const actualBinarySize =
+  isBlob
+    ? blob.size
+    : isArrayBuffer
+      ? blob.byteLength
+      : isUint8Array
+        ? blob.byteLength
+        : null;
 
 
-      return {
+console.log(
+  "[uploadRecording] BINARY VALIDATION",
+  {
+    isBlob,
+    isArrayBuffer,
+    isUint8Array,
 
-        ok:
-          false,
+    constructor:
+      blob?.constructor?.name || null,
 
-        error:
-          "RECORDING_BLOB_NOT_READY",
+    actualBinarySize,
 
-      };
+    metadataSize:
+      params?.recordingSizeBytes ??
+      recordingBinding?.recordingSizeBytes ??
+      sourceBinding?.recordingSizeBytes ??
+      null,
 
+    mimeType:
+      blob?.type || null,
+
+    hasBinary:
+      actualBinarySize !== null &&
+      actualBinarySize > 0,
+  }
+);
+
+
+if (
+  actualBinarySize === null ||
+  actualBinarySize <= 0
+) {
+
+  console.error(
+    "[uploadRecording] REFUSING S3 UPLOAD - INVALID RECORDING BINARY",
+    {
+      blob,
+      constructor:
+        blob?.constructor?.name || null,
+
+      actualBinarySize,
+
+      expectedSize:
+        params?.recordingSizeBytes ??
+        recordingBinding?.recordingSizeBytes ??
+        sourceBinding?.recordingSizeBytes ??
+        null,
     }
+  );
+
+
+  return {
+
+    ok:
+      false,
+
+    error:
+      "RECORDING_BINARY_INVALID",
+
+  };
+
+}
 
 
     // ===================================================
@@ -671,40 +719,119 @@ export default async function uploadRecording(
     // UPLOAD DIRECTLY TO S3
     // ===================================================
 
+    
     console.log(
       "[uploadRecording] Uploading Blob to S3",
       {
-
         s3Key,
-
         contentType,
-
         sizeBytes,
+
+        // ===============================================
+        // DEFINITIVE BLOB DEBUG
+        // ===============================================
+
+        blobExists:
+          !!blob,
+
+        blobType:
+          blob?.constructor?.name ||
+          null,
+
+        blobSize:
+          blob?.size ??
+          null,
+
+        blobMimeType:
+          blob?.type ??
+          null,
+
+        blobSizeMatchesMetadata:
+          blob?.size === sizeBytes,
 
       }
     );
+
+
+    console.log(
+  "[uploadRecording] FINAL BLOB DEBUG BEFORE S3 PUT",
+  {
+    isBlob:
+      blob instanceof Blob,
+
+    constructor:
+      blob?.constructor?.name,
+
+    size:
+      blob?.size,
+
+    type:
+      blob?.type,
+
+    expectedSize:
+      sizeBytes,
+
+    sizeMatches:
+      blob?.size === sizeBytes,
+
+    s3Key,
+
+    uploadUrlHost:
+      (() => {
+        try {
+          return new URL(uploadUrl).host;
+        } catch {
+          return null;
+        }
+      })(),
+  }
+);
 
 
     const uploadResponse =
       await fetch(
         uploadUrl,
         {
-
-          method:
-            "PUT",
+          method: "PUT",
 
           headers: {
-
-            "Content-Type":
-              contentType,
-
+            "Content-Type": contentType,
           },
 
-          body:
-            blob,
-
+          body: blob,
         }
       );
+
+    console.log(
+    "[uploadRecording] S3 PUT RESPONSE",
+    {
+      s3Key,
+
+      status:
+        uploadResponse.status,
+
+      statusText:
+        uploadResponse.statusText,
+
+      ok:
+        uploadResponse.ok,
+
+      responseType:
+        uploadResponse.type,
+
+      contentLength:
+        uploadResponse.headers.get(
+          "content-length"
+        ),
+
+      etag:
+        uploadResponse.headers.get(
+          "etag"
+        ),
+
+    }
+  );
+
 
 
     if (

@@ -108,6 +108,70 @@ function resolveRuntimeParams(
 
 
   // ---------------------------------------------------
+  // BINARY / NON-PLAIN OBJECTS
+  // ---------------------------------------------------
+  //
+  // Runtime actions may legitimately receive objects
+  // which must NOT be recursively converted into plain
+  // objects.
+  //
+  // In particular, recording uploads pass a Blob through
+  // the runtime action pipeline.
+  //
+  // Without these guards:
+  //
+  //   Blob
+  //      ↓
+  //   Object.entries(blob)
+  //      ↓
+  //   {}
+  //
+  // which destroys the recording before it reaches the
+  // upload action.
+  //
+  // ---------------------------------------------------
+
+  if (
+    typeof Blob !== "undefined" &&
+    params instanceof Blob
+  ) {
+
+    return params;
+
+  }
+
+
+  if (
+    typeof File !== "undefined" &&
+    params instanceof File
+  ) {
+
+    return params;
+
+  }
+
+
+  if (
+    typeof ArrayBuffer !== "undefined" &&
+    params instanceof ArrayBuffer
+  ) {
+
+    return params;
+
+  }
+
+
+  if (
+    typeof ArrayBuffer !== "undefined" &&
+    ArrayBuffer.isView?.(params)
+  ) {
+
+    return params;
+
+  }
+
+
+  // ---------------------------------------------------
   // Arrays
   // ---------------------------------------------------
 

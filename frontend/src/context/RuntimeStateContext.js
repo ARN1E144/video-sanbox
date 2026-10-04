@@ -110,36 +110,154 @@ export function RuntimeStateProvider({ children }) {
   // =====================================================
 
   const get = useCallback((key) => {
-  const active = activeComputedRef.current;
+
+  const active =
+    activeComputedRef.current;
+
+
+  // ===================================================
+  // DEPENDENCY TRACKING
+  // ===================================================
 
   if (active) {
-    if (!computedDepsRef.current[active]) {
-      computedDepsRef.current[active] = new Set();
+
+    if (
+      !computedDepsRef.current[active]
+    ) {
+
+      computedDepsRef.current[active] =
+        new Set();
+
     }
 
-    computedDepsRef.current[active].add(key);
 
-    if (!dependencyMapRef.current[key]) {
-      dependencyMapRef.current[key] = new Set();
+    computedDepsRef.current[active]
+      .add(key);
+
+
+    if (
+      !dependencyMapRef.current[key]
+    ) {
+
+      dependencyMapRef.current[key] =
+        new Set();
+
     }
 
-    dependencyMapRef.current[key].add(active);
+
+    dependencyMapRef.current[key]
+      .add(active);
+
   }
 
 
-  // 🔥 READ YOUR OWN TRANSACTION WRITES
-  const tx = transactionRef.current;
+  // ===================================================
+  // TRANSACTION-AWARE READ
+  // ===================================================
+  //
+  // A transaction may contain:
+  //
+  //   "project" → { ... }
+  //
+  // while a caller asks for:
+  //
+  //   "project.access"
+  //
+  // Therefore we must first resolve the
+  // most-specific pending root and then
+  // resolve the remaining nested path.
+  //
+  // ===================================================
 
-  if (tx?.pendingWrites?.has(key)) {
-  return tx.pendingWrites.get(key);
-}
+  const tx =
+    transactionRef.current;
 
 
-// 🔥 SUPPORT NESTED STATE PATHS
-return resolvePath(
-  stateRef.current,
-  key
-)}, []);
+  if (
+    tx?.pendingWrites
+  ) {
+
+    // -------------------------------------------------
+    // EXACT TRANSACTION WRITE
+    // -------------------------------------------------
+
+    if (
+      tx.pendingWrites.has(key)
+    ) {
+
+      return tx.pendingWrites.get(
+        key
+      );
+
+    }
+
+
+    // -------------------------------------------------
+    // NESTED TRANSACTION WRITE
+    // -------------------------------------------------
+
+    const keys =
+      key.split(".");
+
+
+    for (
+      let index = keys.length - 1;
+      index > 0;
+      index--
+    ) {
+
+      const rootKey =
+        keys
+          .slice(
+            0,
+            index
+          )
+          .join(".");
+
+
+      if (
+        !tx.pendingWrites.has(
+          rootKey
+        )
+      ) {
+
+        continue;
+
+      }
+
+
+      const pendingRoot =
+        tx.pendingWrites.get(
+          rootKey
+        );
+
+
+      const remainingPath =
+        keys
+          .slice(index)
+          .join(".");
+
+
+      return resolvePath(
+        pendingRoot,
+        remainingPath
+      );
+
+    }
+
+  }
+
+
+  // ===================================================
+  // COMMITTED STATE
+  // ===================================================
+
+  return resolvePath(
+    stateRef.current,
+    key
+  );
+
+}, []);
 
   const getAll = useCallback(
   () => structuredClone(stateRef.current),
