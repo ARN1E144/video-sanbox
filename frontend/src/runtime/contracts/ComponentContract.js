@@ -36,6 +36,10 @@ import chatPanel
 
   from "./components/ChatPanel.contract.js";
 
+import conversationList
+
+  from "./components/ConversationList.contract.js";
+
 import micButton
 
   from "./components/MicButton.contract.js";
@@ -72,14 +76,17 @@ import trainingInvitation
 
   from "./components/TrainingInvitation.contract.js";
 
-  import incomingGroupCallAlert
-    from "./components/IncomingGroupCallAlert.contract.js";
+import incomingGroupCallAlert
 
-  import fileUpload
-    from "./components/FileUpload.contract.js";
+  from "./components/IncomingGroupCallAlert.contract.js";
 
-  import select 
-    from "./components/Select.contract.js";
+import fileUpload
+
+  from "./components/FileUpload.contract.js";
+
+import select
+
+  from "./components/Select.contract.js";
 
 
 // =====================================================
@@ -101,10 +108,9 @@ import complianceEvidence
 
 const ComponentContract = {
 
+
   // ===================================================
-
   // MEDIA
-
   // ===================================================
 
   AgoraFeed:
@@ -126,13 +132,10 @@ const ComponentContract = {
   FilePreview:
 
     filePreview,
-  
 
 
   // ===================================================
-
   // CONTROLS
-
   // ===================================================
 
   ControlButton:
@@ -149,14 +152,16 @@ const ComponentContract = {
 
 
   // ===================================================
-
   // COMMUNICATION
-
   // ===================================================
 
   ChatPanel:
 
     chatPanel,
+
+  ConversationList:
+
+    conversationList,
 
   ParticipantSelector:
 
@@ -172,9 +177,7 @@ const ComponentContract = {
 
 
   // ===================================================
-
   // LAYOUT
-
   // ===================================================
 
   Container:
@@ -187,9 +190,7 @@ const ComponentContract = {
 
 
   // ===================================================
-
   // INPUTS
-
   // ===================================================
 
   TextBox:
@@ -203,7 +204,7 @@ const ComponentContract = {
   TextLabel:
 
     textLabel,
-  
+
   FileUpload:
 
     fileUpload,
@@ -214,9 +215,7 @@ const ComponentContract = {
 
 
   // ===================================================
-
   // AI
-
   // ===================================================
 
   InterviewPanel:
@@ -225,9 +224,7 @@ const ComponentContract = {
 
 
   // ===================================================
-
   // COMPLIANCE
-
   // ===================================================
 
   ComplianceEvidence:

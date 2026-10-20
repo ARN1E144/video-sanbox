@@ -1,5 +1,9 @@
 const TrainingInvitationContract = {
 
+  // =====================================================
+  // IDENTITY
+  // =====================================================
+
   name:
     "TrainingInvitation",
 
@@ -10,10 +14,10 @@ const TrainingInvitationContract = {
     1,
 
   category:
-    "call",
+    "training",
 
   description:
-    "A client-side runtime component that detects pending training invitations and provides an in-app option to join.",
+    "A client-side runtime component that detects pending training-session invitations and provides an in-app option to join.",
 
 
   // =====================================================
@@ -23,6 +27,7 @@ const TrainingInvitationContract = {
   props: {
 
     title: {
+
       type:
         "string",
 
@@ -31,9 +36,11 @@ const TrainingInvitationContract = {
 
       description:
         "Heading displayed when a training invitation is received.",
+
     },
 
     waitingText: {
+
       type:
         "string",
 
@@ -42,6 +49,7 @@ const TrainingInvitationContract = {
 
       description:
         "Text displayed while waiting for a training invitation.",
+
     },
 
   },
@@ -52,6 +60,12 @@ const TrainingInvitationContract = {
   // =====================================================
 
   builder: {
+
+    roles: [
+      "owner",
+      "admin",
+      "builder",
+    ],
 
     label:
       "Training Invitation",
@@ -66,23 +80,39 @@ const TrainingInvitationContract = {
 
 
   // =====================================================
-  // ACTIONS
-  // =====================================================
-
-  actions: [],
-
-
-  // =====================================================
   // RUNTIME
   // =====================================================
 
   runtime: {
 
+    roles: [
+      "owner",
+      "admin",
+      "builder",
+      "host",
+      "member",
+      "participant",
+      "viewer",
+    ],
+
     state: {
 
       reads: [
-        "call.pendingInvitation",
-        "call.hasPendingInvitation",
+
+        "training.pendingSessions",
+
+        "training.pendingSession",
+
+        "training.hasPendingSession",
+
+        "training.sessionId",
+
+        "training.status",
+
+        "training.channel",
+
+        "training.joined",
+
       ],
 
       writes: [],
@@ -90,9 +120,31 @@ const TrainingInvitationContract = {
     },
 
     actions: [
-      "call.fetchPendingCalls",
-      "call.joinInvitedCall",
+
+      "training.fetchPendingSessions",
+
+      "training.joinTrainingSession",
+
     ],
+
+  },
+
+
+  // =====================================================
+  // ACTIONS
+  // =====================================================
+
+  actions: {
+
+    outputs: [
+
+      "training.fetchPendingSessions",
+
+      "training.joinTrainingSession",
+
+    ],
+
+    inputs: [],
 
   },
 
@@ -101,9 +153,117 @@ const TrainingInvitationContract = {
   // TARGETS
   // =====================================================
 
-  targets: [
-    "call.joinInvitedCall",
-  ],
+  targets: {
+
+    accepts: [
+
+      "ControlButton",
+
+      "Text",
+
+      "TextLabel",
+
+      "Container",
+
+    ],
+
+    rejects: [],
+
+    runtime: [
+
+      "training",
+
+    ],
+
+  },
+
+
+  // =====================================================
+  // VALIDATION
+  // =====================================================
+
+  validation: {
+
+    required: [],
+
+  },
+
+
+  // =====================================================
+  // EDITABLE PROPERTIES
+  // =====================================================
+
+  editableProps: {
+
+    title: {
+
+      type:
+        "string",
+
+      label:
+        "Title",
+
+    },
+
+    waitingText: {
+
+      type:
+        "string",
+
+      label:
+        "Waiting Text",
+
+    },
+
+  },
+
+
+  // =====================================================
+  // BINDINGS
+  // =====================================================
+
+  bindings: {
+
+    pendingSessions:
+      true,
+
+    pendingSession:
+      true,
+
+    hasPendingSession:
+      true,
+
+    sessionId:
+      true,
+
+    status:
+      true,
+
+    joined:
+      true,
+
+  },
+
+
+  // =====================================================
+  // CAPABILITIES
+  // =====================================================
+
+  capabilities: {
+
+    training:
+      true,
+
+    invitations:
+      true,
+
+    realtime:
+      true,
+
+    agora:
+      true,
+
+  },
 
 };
 

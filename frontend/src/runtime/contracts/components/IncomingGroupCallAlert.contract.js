@@ -53,27 +53,30 @@ export default {
   },
 
 
-  // =====================================================
-  // ACTIONS
-  // =====================================================
+// =====================================================
+// ACTIONS
+// =====================================================
 
-  actions: {
+actions: {
 
-    outputs: [],
+  outputs: [
 
-    inputs: [
+    "call.acceptInvitation",
 
-      "call.fetchPendingInvitations",
+    "call.declineInvitation",
 
-      "call.acceptInvitation",
+    "call.joinGroupCall",
 
-      "call.declineInvitation",
+  ],
 
-      "call.joinGroupCall",
+  inputs: [
 
-    ],
+    "call.fetchPendingInvitations",
 
-  },
+  ],
+
+},
+
 
 
   // =====================================================

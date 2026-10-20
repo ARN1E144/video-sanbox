@@ -3,7 +3,7 @@
 "name": "Chat Test",
 "version": 1,
 "type": "confo",
-"description": "Runtime chat test application for project-scoped conversations, invitations, realtime messaging and chat lifecycle.",
+"description": "Runtime chat test application for project-scoped conversations, conversation invitations, realtime messaging and chat lifecycle.",
 "capabilities": [
 "chat"
 ],
@@ -21,7 +21,7 @@
 "gap": 12,
 "backgroundColor": "#111",
 "boxSizing": "border-box",
-"overflow": "hidden"
+"overflow": "auto"
 }
 },
 "children": [
@@ -41,7 +41,7 @@
 "id": "chat-test-description",
 "type": "TextLabel",
 "props": {
-"text": "Create or select a conversation, invite users, then test realtime messaging.",
+"text": "Create or select a conversation, manage invitations, then test realtime messaging.",
 "style": {
 "fontSize": 11,
 "color": "#777"
@@ -60,7 +60,8 @@
 "backgroundColor": "#151515",
 "border": "1px solid #292929",
 "borderRadius": 8,
-"boxSizing": "border-box"
+"boxSizing": "border-box",
+"flexShrink": 0
 }
 },
 "children": [
@@ -81,7 +82,7 @@
 "type": "TextBox",
 "props": {
 "placeholder": "Conversation title...",
-"bindKey": "chat.create.title",
+"bindTo": "chat.create.title",
 "style": {
 "width": "100%"
 }
@@ -91,13 +92,13 @@
 "id": "chat-test-participants",
 "type": "ParticipantSelector",
 "props": {
-"bindKey": "chat.create.participantIds",
-"multiSelect": true,
-"placeholder": "Select participants...",
-"style": {
-"width": "100%",
-"minHeight": 44
-}
+  "selectionPath": "chat.create.participantIds",
+  "multiple": true,
+  "placeholder": "Select participants...",
+  "style": {
+    "width": "100%",
+    "minHeight": 44
+  }
 }
 },
 {
@@ -123,7 +124,8 @@
 "width": "100%",
 "gap": 8,
 "alignItems": "center",
-"boxSizing": "border-box"
+"boxSizing": "border-box",
+"flexShrink": 0
 }
 },
 "children": [
@@ -131,12 +133,13 @@
 "id": "chat-test-conversation-select",
 "type": "Select",
 "props": {
-"bindKey": "chat.conversationId",
-"placeholder": "Select conversation...",
-"style": {
-"flex": 1,
-"minWidth": 0
-}
+ "bindTo": "chat.conversationId",
+  "options": "{{chat.conversations}}",
+  "placeholder": "Select conversation...",
+  "style": {
+    "flex": 1,
+    "minWidth": 0
+  }
 }
 },
 {
@@ -145,6 +148,39 @@
 "props": {
 "label": "Load Conversations",
 "action": "chat.loadConversations"
+}
+}
+]
+},
+{
+"id": "chat-test-conversation-list-section",
+"type": "Container",
+"props": {
+"layout": "vertical",
+"style": {
+"width": "100%",
+"height": 180,
+"minHeight": 180,
+"maxHeight": 180,
+"padding": 8,
+"gap": 6,
+"backgroundColor": "#151515",
+"border": "1px solid #292929",
+"borderRadius": 8,
+"boxSizing": "border-box",
+"overflow": "auto",
+"flexShrink": 0
+}
+},
+"children": [
+{
+"id": "chat-test-conversation-list",
+"type": "ConversationList",
+"props": {
+"title": "Conversations & Invitations",
+"style": {
+"width": "100%"
+}
 }
 }
 ]
@@ -159,7 +195,8 @@
 "gap": 8,
 "alignItems": "center",
 "flexWrap": "wrap",
-"boxSizing": "border-box"
+"boxSizing": "border-box",
+"flexShrink": 0
 }
 },
 "children": [
@@ -197,7 +234,8 @@
 "gap": 8,
 "alignItems": "center",
 "flexWrap": "wrap",
-"boxSizing": "border-box"
+"boxSizing": "border-box",
+"flexShrink": 0
 }
 },
 "children": [
@@ -253,16 +291,16 @@
 "props": {
 "layout": "vertical",
 "style": {
-  "width": "100%",
-  "flex": 1,
-  "minHeight": 0,
-  "minWidth": 0,
-  "backgroundColor": "#151515",
-  "border": "1px solid #292929",
-  "borderRadius": 8,
-  "padding": 8,
-  "boxSizing": "border-box",
-  "overflow": "hidden"
+"width": "100%",
+"flex": 1,
+"minHeight": 0,
+"minWidth": 0,
+"backgroundColor": "#151515",
+"border": "1px solid #292929",
+"borderRadius": 8,
+"padding": 8,
+"boxSizing": "border-box",
+"overflow": "hidden"
 }
 },
 "children": [
@@ -296,7 +334,8 @@
 "width": "100%",
 "gap": 8,
 "alignItems": "center",
-"boxSizing": "border-box"
+"boxSizing": "border-box",
+"flexShrink": 0
 }
 },
 "children": [
@@ -305,7 +344,7 @@
 "type": "TextBox",
 "props": {
 "placeholder": "Type a message...",
-"bindKey": "chat.input",
+"bindTo": "chat.input",
 "style": {
 "flex": 1,
 "minWidth": 0
@@ -321,32 +360,6 @@
 "params": {
 "conversationId": "{{chat.conversationId}}",
 "text": "{{chat.input}}"
-}
-}
-}
-]
-},
-{
-"id": "chat-test-typing",
-"type": "ControlPanel",
-"props": {
-"layout": "horizontal",
-"style": {
-"width": "100%",
-"height": 48,
-"minHeight": 48,
-"boxSizing": "border-box"
-}
-},
-"children": [
-{
-"id": "chat-test-lifecycle-label",
-"type": "TextLabel",
-"props": {
-"text": "Chat lifecycle: create → invite → accept → join → send → receive → edit → delete → typing → read → participant leave → reconnect → receive → close",
-"style": {
-"fontSize": 11,
-"color": "#888"
 }
 }
 }

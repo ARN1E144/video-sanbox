@@ -1512,6 +1512,26 @@ useEffect(
           );
 
         if (
+          targetId === "confo-chat-test-title-input-0-2-1" &&
+          existing.x !== normalized?.x
+        ) {
+          console.error(
+            "[TRACE] TextBox X coordinate changed",
+            {
+              previousX: existing.x,
+              incomingX: updates.x,
+              mergedX: nextElement.x,
+              normalizedX: normalized?.x,
+              updates,
+            }
+          );
+
+          console.trace(
+            "[TRACE] updateElement caller"
+          );
+        }
+
+        if (
           !normalized
         ) {
           return null;

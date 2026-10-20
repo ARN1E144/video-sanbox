@@ -1420,7 +1420,7 @@ export default function TrainingInvitation({
 
           const result =
             await runAction(
-              "training.joinSession",
+              "training.joinTrainingSession",
               {
 
                 sessionId:

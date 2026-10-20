@@ -14,6 +14,9 @@ import AgoraFeed
 import ChatPanel
   from "../components/elements/ChatPanel";
 
+import ConversationList
+  from "../components/elements/ConversationList";
+
 import TextBox
   from "../components/elements/TextBox";
 
@@ -65,12 +68,11 @@ import FilePreview
 import FileUpload
   from "../components/elements/FileUpload";
 
-import Select 
+import Select
   from "../components/elements/Select";
 
 import IncomingGroupCallAlert
   from "../components/elements/IncomingGroupCallAlert";
-
 
 
 // =====================================================
@@ -93,6 +95,9 @@ import agoraContract
 
 import chatContract
   from "../runtime/contracts/components/ChatPanel.contract.js";
+
+import conversationListContract
+  from "../runtime/contracts/components/ConversationList.contract.js";
 
 import textBoxContract
   from "../runtime/contracts/components/TextBox.contract.js";
@@ -145,7 +150,7 @@ import filePreviewContract
 import fileUploadContract
   from "../runtime/contracts/components/FileUpload.contract.js";
 
-import selectContract 
+import selectContract
   from "../runtime/contracts/components/Select.contract.js";
 
 
@@ -225,23 +230,26 @@ export const componentRegistry = {
 
   },
 
+
   FileUpload: {
 
-  component:
-    FileUpload,
+    component:
+      FileUpload,
 
-  contract:
-    fileUploadContract,
+    contract:
+      fileUploadContract,
 
   },
 
+
   Select: {
 
-    component: 
+    component:
       Select,
 
-    contract: 
-      selectContract
+    contract:
+      selectContract,
+
   },
 
 
@@ -256,6 +264,17 @@ export const componentRegistry = {
 
     contract:
       chatContract,
+
+  },
+
+
+  ConversationList: {
+
+    component:
+      ConversationList,
+
+    contract:
+      conversationListContract,
 
   },
 
@@ -281,13 +300,14 @@ export const componentRegistry = {
 
   },
 
+
   IncomingGroupCallAlert: {
 
     component:
-        IncomingGroupCallAlert,
+      IncomingGroupCallAlert,
 
-      contract:
-        incomingGroupCallAlertContract,
+    contract:
+      incomingGroupCallAlertContract,
 
   },
 

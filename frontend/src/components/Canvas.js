@@ -920,6 +920,192 @@ export default function Canvas({
     updateElement,
   } = useCanvasState();
 
+
+  // ===================================================
+  // CANVAS ELEMENT UPDATE HANDLER
+  // Preserve child geometry when a Container changes
+  // from Vertical/Horizontal layout to Free layout.
+  // ===================================================
+
+  const handleCanvasElementUpdate = (
+    id,
+    updates = {}
+  ) => {
+    const currentElement =
+      elements.find(
+        (element) =>
+          String(element.id) === String(id)
+      );
+
+    const previousLayout =
+      getContainerLayout(currentElement);
+
+    const requestedLayout =
+      updates.props?.layout;
+
+    const isFlowToFreeTransition =
+      currentElement?.type === "Container" &&
+      (previousLayout === "vertical" ||
+        previousLayout === "horizontal") &&
+      String(requestedLayout ?? "")
+        .toLowerCase()
+        .trim() === "free";
+
+    if (!isFlowToFreeTransition) {
+      return updateElement(id, updates);
+    }
+
+
+
+    const layoutWrapper =
+      Array.from(
+        document.querySelectorAll(
+          "[data-canvas-layout-parent-id]"
+        )
+      ).find(
+        (node) =>
+          node.dataset.canvasLayoutParentId ===
+          String(id)
+      );
+
+    if (!layoutWrapper?.parentElement) {
+      console.warn(
+        "[Canvas] Cannot convert layout: flex wrapper not found.",
+        id
+      );
+      return null;
+    }
+
+    // Rnd children use the Container component's root
+    // as their positioning context in Free layout.
+    const coordinateParent =
+      layoutWrapper.parentElement;
+
+    const parentRect =
+      coordinateParent.getBoundingClientRect();
+
+    const coordinateScale =
+      Number(scale) > 0
+        ? Number(scale)
+        : 1;
+
+    // Measure every direct child before changing layout.
+    // Store measurements first so React updates cannot
+    // affect the remaining measurements.
+    const childGeometry =
+      Array.from(layoutWrapper.children)
+        .filter(
+          (node) =>
+            node.hasAttribute(
+              "data-canvas-element-id"
+            )
+        )
+        .map((node) => {
+          const childId =
+            node.getAttribute(
+              "data-canvas-element-id"
+            );
+
+          const rect =
+            node.getBoundingClientRect();
+
+
+const child = elements.find(
+  (element) =>
+    String(element.id) === String(childId)
+);
+
+      return {
+        id: childId,
+
+        x:
+          (rect.left - parentRect.left) /
+            coordinateScale -
+          coordinateParent.clientLeft,
+
+        y:
+          (rect.top - parentRect.top) /
+            coordinateScale -
+          coordinateParent.clientTop,
+
+
+        width:
+          rect.width / coordinateScale,
+
+
+        height:
+          rect.height / coordinateScale,
+      };
+
+        });
+
+      console.table(
+      childGeometry.map(geometry => {
+        const child = elements.find(
+          element => String(element.id) === String(geometry.id)
+        );
+
+        return {
+          id: geometry.id,
+          measuredX: +geometry.x.toFixed(2),
+          measuredY: +geometry.y.toFixed(2),
+          measuredWidth: +geometry.width.toFixed(2),
+          measuredHeight: +geometry.height.toFixed(2),
+          savedX: child?.x,
+          savedY: child?.y,
+          savedWidth: child?.width,
+          savedHeight: child?.height,
+          parentId: child?.parentId,
+        };
+      })
+    );
+
+    // Persist the measured geometry first.
+    for (const geometry of childGeometry) {
+      updateElement(
+        geometry.id,
+        {
+          x: geometry.x,
+          y: geometry.y,
+          width: geometry.width,
+          height: geometry.height,
+        }
+      );
+    }
+
+    // Apply the new layout only after all child geometry
+    // has been measured and its updates submitted.
+
+    // Calculate the height needed to contain the converted
+    // children in Free layout.
+    const requiredHeight =
+      childGeometry.reduce(
+        (maxBottom, geometry) =>
+          Math.max(
+            maxBottom,
+            geometry.y + geometry.height
+          ),
+        0
+      );
+
+    const currentHeight =
+      Number(currentElement.height) || 0;
+
+    const parentUpdates = {
+      ...updates,
+      height: Math.max(
+        currentHeight,
+        Math.ceil(requiredHeight)
+      ),
+    };
+
+    // Apply the new layout and required height through
+    // the existing CanvasContext update path.
+    return updateElement(id, parentUpdates);
+
+  };
+
+
   const {
     projectType,
     backgroundConfigs,
@@ -1122,6 +1308,8 @@ export default function Canvas({
   // ===================================================
 
   const canvasRef = useRef(null);
+
+  const dragStartPointersRef = useRef({});
 
   // ===================================================
   // CANVAS SIZE
@@ -2648,23 +2836,35 @@ const nestedChildren =
         }}
       >
 
-        <CanvasElementRenderer
-          Component={
-            ChildComponent
-          }
+          <CanvasElementRenderer
+            Component={
+              ChildComponent
+            }
 
-          element={
-            child
-          }
+            element={
+              child.type === "Container" &&
+              getContainerLayout(child) === "free"
+                ? {
+                    ...child,
+                    props: {
+                      ...(child.props || {}),
+                      style: {
+                        ...(child.props?.style || {}),
+                        height: resolvedChildHeight,
+                      },
+                    },
+                  }
+                : child
+            }
 
-          binding={
-            childBinding
-          }
+            binding={
+              childBinding
+            }
 
-          children={
-            nestedChildren
-          }
-        />
+            children={
+              nestedChildren
+            }
+          />
 
       </div>
 
@@ -3198,12 +3398,9 @@ const nestedChildren =
             );
 
           const boundedX =
-            Math.min(
-              maxX,
-              Math.max(
-                0,
-                childX
-              )
+            Math.max(
+              0,
+              childX
             );
 
           const boundedY =
@@ -3246,11 +3443,39 @@ const nestedChildren =
             }
           );
 
+          if (
+            child.id ===
+            "confo-chat-test-title-input-0-2-1"
+          ) {
+            console.log(
+              "[TEXTBOX POSITION CHECK]",
+              {
+                savedX: child.x,
+                renderedX: boundedX,
+                savedY: child.y,
+                renderedY: boundedY,
+              }
+            );
+          }
+
+
           return (
             <Rnd
               key={
                 child.id
               }
+
+                  ref={
+                  (instance) => {
+                    if (
+                      child.id ===
+                      "confo-chat-test-title-input-0-2-1" &&
+                      instance
+                    ) {
+                      window.__textboxRndDebug = instance;
+                    }
+                  }
+                }
 
               bounds="parent"
 
@@ -3341,12 +3566,87 @@ const nestedChildren =
               }
 
               onDragStart={
-                () => {
+                (event, data) => {
+                  dragStartPointersRef.current[child.id] = {
+                    x: event.clientX,
+                    y: event.clientY,
+                  };
+
                   if (
                     !isBuilderEditable
                   ) {
                     return false;
                   }
+
+
+                  const debugNode = document.querySelector(
+                    '[data-canvas-element-id="confo-chat-test-title-input-0-2-1"].react-draggable'
+                  );
+
+                  const debugParent = debugNode?.parentElement;
+
+                  console.log(
+                    "[TEXTBOX PARENT DETAILS]",
+                    debugParent
+                      ? {
+                          tag: debugParent.tagName,
+                          className: debugParent.className,
+                          style: debugParent.getAttribute("style"),
+                          parentTag: debugParent.parentElement?.tagName,
+                          parentClass: debugParent.parentElement?.className,
+                          parentStyle: debugParent.parentElement?.getAttribute("style"),
+                        }
+                      : "Parent not found"
+                  );
+
+                  const debugRect = debugNode?.getBoundingClientRect();
+                  const debugParentRect = debugParent?.getBoundingClientRect();
+
+                  const debugCoordinateParent = debugNode?.parentElement;
+const debugWrapperRect = debugCoordinateParent?.getBoundingClientRect();
+
+                  console.log("[TEXTBOX DRAG-START GEOMETRY]", {
+                    controlledX: boundedX,
+                    controlledY: boundedY,
+                    dragStartX: data?.x,
+                    dragStartY: data?.y,
+                    scale,
+                    nodeTransform: debugNode
+                      ? getComputedStyle(debugNode).transform
+                      : null,
+                    nodeLeft: debugRect?.left,
+                    nodeTop: debugRect?.top,
+                    nodeWidth: debugRect?.width,
+                    parentLeft: debugParentRect?.left,
+                    parentTop: debugParentRect?.top,
+                    parentWidth: debugParent?.clientWidth,
+                    parentHeight: debugParent?.clientHeight,
+                    parentScrollLeft: debugParent?.scrollLeft,
+                    parentScrollTop: debugParent?.scrollTop,
+                    wrapperRectWidth: debugWrapperRect?.width,
+                    wrapperRectHeight: debugWrapperRect?.height,
+                    wrapperOffsetWidth: debugCoordinateParent?.offsetWidth,
+                    wrapperOffsetHeight: debugCoordinateParent?.offsetHeight,
+                    wrapperScrollHeight: debugCoordinateParent?.scrollHeight,
+                    wrapperChildCount: debugCoordinateParent?.children.length,
+                    rndInstance: debugNode
+                    ? Object.keys(debugNode).filter(
+                        key => key.toLowerCase().includes("react")
+                      )
+                    : [],
+                  });
+
+
+                  console.log(
+                    "[TEXTBOX RND INSTANCE CHECK]",
+                    {
+                      id: child.id,
+                      parentWidth: event.currentTarget.parentElement?.clientWidth,
+                      parentHeight: event.currentTarget.parentElement?.clientHeight,
+                      targetClass: event.target?.className,
+                      currentTargetClass: event.currentTarget?.className,
+                    }
+                  );
 
                   console.log(
                     "[CANVAS FREE CHILD DRAG START]",
@@ -3359,6 +3659,8 @@ const nestedChildren =
 
                       parentId:
                         parent?.id,
+
+
                     }
                   );
 
@@ -3377,14 +3679,35 @@ const nestedChildren =
                     return;
                   }
 
+                  const dragStartPointer =
+                  dragStartPointersRef.current[child.id];
+
+                  delete dragStartPointersRef.current[child.id];
+
+                  const pointerMoved =
+                    dragStartPointer !== undefined &&
+                    (
+                      Math.abs(
+                        event.clientX - dragStartPointer.x
+                      ) > 3 ||
+                      Math.abs(
+                        event.clientY - dragStartPointer.y
+                      ) > 3
+                    );
+
+                  if (!pointerMoved) {
+                    return;
+                  }
+
+                  if (!pointerMoved) {
+                    return;
+                  }
+
                   const nextX =
                     Math.round(
-                      Math.min(
-                        maxX,
-                        Math.max(
-                          0,
-                          data.x
-                        )
+                      Math.max(
+                        0,
+                        data.x
                       )
                     );
 
@@ -3443,7 +3766,7 @@ const nestedChildren =
               }
 
               onResizeStart={
-                () => {
+                (event) => {
                   if (
                     !isBuilderEditable
                   ) {
@@ -3453,14 +3776,11 @@ const nestedChildren =
                   console.log(
                     "[CANVAS FREE CHILD RESIZE START]",
                     {
-                      id:
-                        child.id,
-
-                      type:
-                        child.type,
-
-                      parentId:
-                        parent?.id,
+                      id: child.id,
+                      type: child.type,
+                      parentId: parent?.id,
+                      target: event?.target?.className,
+                      currentTarget: event?.currentTarget?.className,
                     }
                   );
 
@@ -3478,6 +3798,13 @@ const nestedChildren =
                 ) => {
                   if (
                     !isBuilderEditable
+                  ) {
+                    return;
+                  }
+
+                  if (
+                    Number(delta?.width) === 0 &&
+                    Number(delta?.height) === 0
                   ) {
                     return;
                   }
@@ -3566,6 +3893,28 @@ const nestedChildren =
                     }
                   );
 
+                    if (
+                      child.id ===
+                      "confo-chat-test-title-input-0-2-1"
+                    ) {
+                      console.trace(
+                      "[TRACE] TextBox resize-stop caller",
+                      {
+                        direction,
+                        delta,
+                        position,
+                        refWidth: ref.style.width,
+                        refHeight: ref.style.height,
+                        newX,
+                        newY,
+                        newWidth,
+                        newHeight,
+                        parentWidth,
+                        parentHeight,
+                      }
+                    );
+                    }
+
                   updateElement(
                     child.id,
                     {
@@ -3645,6 +3994,7 @@ const nestedChildren =
                     child
                   }
 
+
                   binding={
                     childBinding
                   }
@@ -3676,6 +4026,9 @@ if (
 
   return (
     <div
+      data-canvas-layout-parent-id={
+      parent.id
+    }
       style={{
         position:
           "relative",
@@ -3762,20 +4115,19 @@ if (
           //
           // =================================================
 
+
           const childHeight =
-            child.type === "Container"
+            child.type === "Container" &&
+            getContainerLayout(child) !== "free"
               ? "auto"
               : (
                   Number.isFinite(
-                    Number(
-                      child.height
-                    )
+                    Number(child.height)
                   )
-                    ? Number(
-                        child.height
-                      )
+                    ? Number(child.height)
                     : 40
                 );
+
 
           // =================================================
           // DIAGNOSTIC — NESTED CHILD GEOMETRY
@@ -3900,13 +4252,11 @@ if (
   elements
     .filter(el =>
       [
-        "confo-chat-test-root-0",
+       "confo-chat-test-root-0",
         "confo-chat-test-create-section-0-2",
-        "confo-chat-test-conversation-section-0-3",
-        "confo-chat-test-invitation-actions-0-4",
-        "confo-chat-test-actions-0-5",
-        "confo-chat-test-panel-container-0-6",
-        "confo-chat-test-input-row-0-7",
+        "confo-chat-test-participants-0-2-2",
+        "confo-chat-test-panel-container-0-7",
+        "confo-chat-test-panel-0-7-0",
       ].includes(el.id)
     )
     .map(el => ({
@@ -3975,7 +4325,7 @@ if (
       const Comp =
         entry.component;
 
-      
+
       // ===================================================
       // CANONICAL ROOT CONTAINER
       // ===================================================
@@ -4108,16 +4458,16 @@ if (
           el.id
         ] || {};
 
-      const isControlPanel = 
-        el.type === "ControlPanel"; 
-      
-      const isContainer = 
-         el.type === "Container"; 
-         
-      const isParentComponent = 
-        isControlPanel || isContainer; 
-      
-      const nestedChildren = 
+      const isControlPanel =
+        el.type === "ControlPanel";
+
+      const isContainer =
+         el.type === "Container";
+
+      const isParentComponent =
+        isControlPanel || isContainer;
+
+      const nestedChildren =
         isParentComponent
           ? renderChildren(
               el.id,
@@ -4212,29 +4562,6 @@ if (
             el.id
           }
 
-          onMouseDownCapture={
-            (event) => {
-              if (
-                !isBuilderEditable
-              ) {
-                return;
-              }
-
-              /*
-               * IMPORTANT:
-               *
-               * Do NOT stop propagation here.
-               *
-               * react-rnd needs the pointer/mousedown event
-               * in order to initialise dragging/resizing.
-               */
-
-              selectElement(
-                el.id
-              );
-            }
-          }
-
           onClick={
             (event) => {
               event.stopPropagation();
@@ -4244,6 +4571,7 @@ if (
               ) {
                 return;
               }
+
 
               selectElement(
                 el.id
@@ -4541,12 +4869,12 @@ if (
                   : "visible",
             }}
           >
-            
-          {/* ========================================= CANVAS ELEMENT ========================================= */} 
-          <CanvasElementRenderer 
-            Component={ Comp } 
-            element={ el } 
-            binding={ binding } 
+
+          {/* ========================================= CANVAS ELEMENT ========================================= */}
+          <CanvasElementRenderer
+            Component={ Comp }
+            element={ el }
+            binding={ binding }
             children={ nestedChildren } />
           </div>
         </Rnd>
@@ -5108,7 +5436,7 @@ if (
               }
 
               updateElement={
-                updateElement
+                handleCanvasElementUpdate
               }
 
               selectedMeta={
@@ -5185,7 +5513,7 @@ if (
               }
 
               updateElement={
-                updateElement
+                handleCanvasElementUpdate
               }
 
               selectedMeta={
@@ -5252,7 +5580,7 @@ if (
               }
 
               updateElement={
-                updateElement
+                handleCanvasElementUpdate
               }
 
               selectedMeta={

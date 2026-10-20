@@ -149,6 +149,95 @@ const actionContracts = {
   },
 
 
+  // ===================================================
+  // GROUP CALL INVITATIONS
+  // ===================================================
+
+  "call.fetchPendingInvitations": {
+
+    sourceTypes: [
+      "ControlButton",
+      "IncomingGroupCallAlert",
+    ],
+
+    targetTypes: [
+      "IncomingGroupCallAlert",
+    ],
+
+    category:
+      "call",
+
+    description:
+      "Loads actionable incoming group-call invitations.",
+
+  },
+
+
+  "call.acceptInvitation": {
+
+    sourceTypes: [
+      "ControlButton",
+      "IncomingGroupCallAlert",
+    ],
+
+    targetTypes: [
+      "IncomingGroupCallAlert",
+      "AgoraFeed",
+      "CallPanel",
+    ],
+
+    category:
+      "call",
+
+    description:
+      "Accepts a group-call invitation without joining Agora.",
+
+  },
+
+
+  "call.declineInvitation": {
+
+    sourceTypes: [
+      "ControlButton",
+      "IncomingGroupCallAlert",
+    ],
+
+    targetTypes: [
+      "IncomingGroupCallAlert",
+      "CallPanel",
+    ],
+
+    category:
+      "call",
+
+    description:
+      "Declines a pending group-call invitation.",
+
+  },
+
+
+  "call.joinGroupCall": {
+
+    sourceTypes: [
+      "ControlButton",
+      "IncomingGroupCallAlert",
+      "AgoraFeed",
+    ],
+
+    targetTypes: [
+      "IncomingGroupCallAlert",
+      "AgoraFeed",
+    ],
+
+    category:
+      "call",
+
+    description:
+      "Joins an accepted group call through the backend and Agora.",
+
+  },
+
+
   "call.spotlightUser": {
 
     sourceTypes: [
@@ -225,6 +314,96 @@ const actionContracts = {
 
     description:
       "Changes call availability.",
+
+  },
+
+
+  // ===================================================
+  // TRAINING
+  // ===================================================
+
+  "training.fetchPendingSessions": {
+
+    sourceTypes: [
+      "ControlButton",
+      "TrainingInvitation",
+    ],
+
+    targetTypes: [
+      "TrainingInvitation",
+    ],
+
+    category:
+      "training",
+
+    description:
+      "Loads actionable pending training-session invitations.",
+
+  },
+
+
+  "training.joinTrainingSession": {
+
+    sourceTypes: [
+      "ControlButton",
+      "TrainingInvitation",
+      "AgoraFeed",
+    ],
+
+    targetTypes: [
+      "TrainingInvitation",
+      "AgoraFeed",
+    ],
+
+    category:
+      "training",
+
+    description:
+      "Joins a training session through the backend and Agora.",
+
+  },
+
+
+  // ===================================================
+  // CHAT INVITATIONS
+  // ===================================================
+
+  "chat.acceptConversationInvitation": {
+
+    sourceTypes: [
+      "ControlButton",
+      "ChatPanel",
+    ],
+
+    targetTypes: [
+      "ChatPanel",
+    ],
+
+    category:
+      "chat",
+
+    description:
+      "Accepts a conversation invitation and joins the conversation.",
+
+  },
+
+
+  "chat.declineConversationInvitation": {
+
+    sourceTypes: [
+      "ControlButton",
+      "ChatPanel",
+    ],
+
+    targetTypes: [
+      "ChatPanel",
+    ],
+
+    category:
+      "chat",
+
+    description:
+      "Declines a conversation invitation.",
 
   },
 

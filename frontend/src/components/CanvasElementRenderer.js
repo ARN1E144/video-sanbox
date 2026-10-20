@@ -177,7 +177,7 @@ export default function CanvasElementRenderer({
 
   if (
   elementType === "Container" &&
-  elementId === "confo-chat-test-panel-container-0-6"
+  elementId === "confo-chat-test-create-section-0-2"
 ) {
   console.log(
     "🔥 EXACT PANEL CONTAINER SOURCE",

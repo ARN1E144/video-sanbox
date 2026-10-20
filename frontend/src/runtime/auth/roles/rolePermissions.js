@@ -52,6 +52,7 @@ export const ROLE_PERMISSIONS = {
       // -----------------------------------------------
 
       "ChatPanel",
+      "ConversationList",
       "AvailabilityButton",
       "FetchCallsDebug",
 
@@ -127,6 +128,8 @@ export const ROLE_PERMISSIONS = {
       "chat.editMessage",
       "chat.deleteMessage",
       "chat.closeConversation",
+      "chat.acceptConversationInvitation",
+      "chat.declineConversationInvitation",
 
 
       // =================================================
@@ -203,11 +206,17 @@ export const ROLE_PERMISSIONS = {
       "FileUpload",
       "Select",
 
+      // CHAT
       "ChatPanel",
+      "ConversationList",
       "AvailabilityButton",
+
+      // GROUP CALL
       "ParticipantSelector",
       "IncomingGroupCallAlert",
       "GroupCallControls",
+
+      // TRAINING
       "TrainingInvitation",
 
       // COMPLIANCE
@@ -258,6 +267,9 @@ export const ROLE_PERMISSIONS = {
       "chat.sendMessage",
       "chat.loadMessages",
       "chat.createConversation",
+      "chat.loadConversations",
+      "chat.acceptConversationInvitation",
+      "chat.declineConversationInvitation",
 
 
       // =================================================
@@ -295,6 +307,7 @@ export const ROLE_PERMISSIONS = {
       "ControlPanel",
       "ControlButton",
       "ChatPanel",
+      "ConversationList",
       "Select",
 
       // -----------------------------------------------
@@ -345,6 +358,9 @@ export const ROLE_PERMISSIONS = {
       "chat.sendMessage",
       "chat.loadMessages",
       "chat.createConversation",
+      "chat.loadConversations",
+      "chat.acceptConversationInvitation",
+      "chat.declineConversationInvitation",
 
 
       // =================================================
@@ -391,6 +407,7 @@ export const ROLE_PERMISSIONS = {
       "ControlPanel",
       "ControlButton",
       "ChatPanel",
+      "ConversationList",
       "Text",
 
       // -----------------------------------------------
@@ -442,6 +459,9 @@ export const ROLE_PERMISSIONS = {
 
       "chat.sendMessage",
       "chat.loadMessages",
+      "chat.loadConversations",
+      "chat.acceptConversationInvitation",
+      "chat.declineConversationInvitation",
 
 
       // =================================================
@@ -487,6 +507,7 @@ export const ROLE_PERMISSIONS = {
 
       "call.joinCall",
       "call.leaveCall",
+
 
       // =================================================
       // VIDEO

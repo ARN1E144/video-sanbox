@@ -90,30 +90,43 @@ export default function Select(props) {
 
         {options.map((option, index) => {
           const item =
-            typeof option === "object"
+            typeof option === "object" && option !== null
               ? option
               : {
                   value: option,
                   label: option,
                 };
 
+          const titleLabel = [
+            item.label,
+            item.name,
+            item.title,
+          ].find(
+            candidate =>
+              candidate !== null &&
+              candidate !== undefined &&
+              String(candidate).trim() !== ""
+          );
+
+          const displayLabel =
+            titleLabel ??
+            (
+              item.type === "group"
+                ? "Group conversation"
+                : item.type === "direct"
+                  ? "Direct conversation"
+                  : item.value ?? item.id ?? `Conversation ${index + 1}`
+            );
+
+          const optionValue =
+            item.value ?? item.id ?? "";
+
           return (
             <option
-              key={
-                item.value ??
-                item.id ??
-                index
-              }
-              value={
-                item.value ??
-                item.id ??
-                ""
-              }
+              key={optionValue || index}
+              value={optionValue}
             >
-              {item.label ??
-                item.name ??
-                item.title ??
-                item.value}
+              {displayLabel}
             </option>
           );
         })}

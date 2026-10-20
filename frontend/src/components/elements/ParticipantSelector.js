@@ -1437,6 +1437,21 @@ export default function ParticipantSelector({
         boxSizing:
           "border-box",
 
+        height:
+          "100%",
+
+        minHeight:
+          0,
+
+        overflow:
+          "hidden",
+
+        display:
+          "flex",
+
+        flexDirection:
+          "column",
+
         padding:
           12,
 
@@ -1719,7 +1734,15 @@ export default function ParticipantSelector({
 
       {!collapsed && (
 
-        <>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              flex: 1,
+              minHeight: 0,
+              overflow: "hidden",
+            }}
+          >
 
           {/* =========================================
               SEARCH
@@ -2076,21 +2099,22 @@ export default function ParticipantSelector({
               AVAILABLE PARTICIPANTS
           ========================================= */}
 
-          <div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              flex: "1 1 0%",
+              minHeight: 0,
+              overflow: "hidden",
+            }}
+          >
 
             <div
               style={{
-                display:
-                  "flex",
-
-                alignItems:
-                  "center",
-
-                justifyContent:
-                  "space-between",
-
-                marginBottom:
-                  6,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 6,
               }}
             >
 
@@ -2142,11 +2166,9 @@ export default function ParticipantSelector({
 
             <div
               style={{
-                maxHeight:
-                  250,
-
-                overflowY:
-                  "auto",
+                flex: 1,
+                minHeight: 0,
+                overflowY: "auto",
 
                 border:
                   "1px solid #293548",
@@ -2621,7 +2643,7 @@ export default function ParticipantSelector({
 
           </div>
 
-        </>
+        </div>
 
       )}
 
