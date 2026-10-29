@@ -927,183 +927,227 @@ export default function Canvas({
   // from Vertical/Horizontal layout to Free layout.
   // ===================================================
 
-  const handleCanvasElementUpdate = (
-    id,
-    updates = {}
-  ) => {
-    const currentElement =
-      elements.find(
-        (element) =>
-          String(element.id) === String(id)
-      );
 
-    const previousLayout =
-      getContainerLayout(currentElement);
-
-    const requestedLayout =
-      updates.props?.layout;
-
-    const isFlowToFreeTransition =
-      currentElement?.type === "Container" &&
-      (previousLayout === "vertical" ||
-        previousLayout === "horizontal") &&
-      String(requestedLayout ?? "")
-        .toLowerCase()
-        .trim() === "free";
-
-    if (!isFlowToFreeTransition) {
-      return updateElement(id, updates);
-    }
-
-
-
-    const layoutWrapper =
-      Array.from(
-        document.querySelectorAll(
-          "[data-canvas-layout-parent-id]"
-        )
-      ).find(
-        (node) =>
-          node.dataset.canvasLayoutParentId ===
-          String(id)
-      );
-
-    if (!layoutWrapper?.parentElement) {
-      console.warn(
-        "[Canvas] Cannot convert layout: flex wrapper not found.",
-        id
-      );
-      return null;
-    }
-
-    // Rnd children use the Container component's root
-    // as their positioning context in Free layout.
-    const coordinateParent =
-      layoutWrapper.parentElement;
-
-    const parentRect =
-      coordinateParent.getBoundingClientRect();
-
-    const coordinateScale =
-      Number(scale) > 0
-        ? Number(scale)
-        : 1;
-
-    // Measure every direct child before changing layout.
-    // Store measurements first so React updates cannot
-    // affect the remaining measurements.
-    const childGeometry =
-      Array.from(layoutWrapper.children)
-        .filter(
-          (node) =>
-            node.hasAttribute(
-              "data-canvas-element-id"
-            )
-        )
-        .map((node) => {
-          const childId =
-            node.getAttribute(
-              "data-canvas-element-id"
-            );
-
-          const rect =
-            node.getBoundingClientRect();
-
-
-const child = elements.find(
-  (element) =>
-    String(element.id) === String(childId)
-);
-
-      return {
-        id: childId,
-
-        x:
-          (rect.left - parentRect.left) /
-            coordinateScale -
-          coordinateParent.clientLeft,
-
-        y:
-          (rect.top - parentRect.top) /
-            coordinateScale -
-          coordinateParent.clientTop,
-
-
-        width:
-          rect.width / coordinateScale,
-
-
-        height:
-          rect.height / coordinateScale,
-      };
-
-        });
-
-      console.table(
-      childGeometry.map(geometry => {
-        const child = elements.find(
-          element => String(element.id) === String(geometry.id)
-        );
-
-        return {
-          id: geometry.id,
-          measuredX: +geometry.x.toFixed(2),
-          measuredY: +geometry.y.toFixed(2),
-          measuredWidth: +geometry.width.toFixed(2),
-          measuredHeight: +geometry.height.toFixed(2),
-          savedX: child?.x,
-          savedY: child?.y,
-          savedWidth: child?.width,
-          savedHeight: child?.height,
-          parentId: child?.parentId,
-        };
-      })
+const handleCanvasElementUpdate = (
+  id,
+  updates = {}
+) => {
+  const currentElement =
+    elements.find(
+      (element) =>
+        String(element.id) === String(id)
     );
 
-    // Persist the measured geometry first.
-    for (const geometry of childGeometry) {
-      updateElement(
-        geometry.id,
-        {
-          x: geometry.x,
-          y: geometry.y,
-          width: geometry.width,
-          height: geometry.height,
-        }
-      );
-    }
+  const previousLayout =
+    getContainerLayout(currentElement);
 
-    // Apply the new layout only after all child geometry
-    // has been measured and its updates submitted.
+  const requestedLayout =
+    updates.props?.layout;
 
-    // Calculate the height needed to contain the converted
-    // children in Free layout.
-    const requiredHeight =
-      childGeometry.reduce(
-        (maxBottom, geometry) =>
-          Math.max(
-            maxBottom,
-            geometry.y + geometry.height
-          ),
+  const isFlowToFreeTransition =
+    currentElement?.type === "Container" &&
+    (
+      previousLayout === "vertical" ||
+      previousLayout === "horizontal"
+    ) &&
+    String(requestedLayout ?? "")
+      .toLowerCase()
+      .trim() === "free";
+
+  const isHorizontalToFreeTransition =
+    isFlowToFreeTransition &&
+    previousLayout === "horizontal";
+
+  if (!isFlowToFreeTransition) {
+    return updateElement(id, updates);
+  }
+
+  const layoutWrapper =
+    Array.from(
+      document.querySelectorAll(
+        "[data-canvas-layout-parent-id]"
+      )
+    ).find(
+      (node) =>
+        node.dataset.canvasLayoutParentId ===
+        String(id)
+    );
+
+  if (!layoutWrapper?.parentElement) {
+    console.warn(
+      "[Canvas] Cannot convert layout: flex wrapper not found.",
+      id
+    );
+
+    return null;
+  }
+
+  // Rnd children use the Container root as their
+  // positioning context in Free layout.
+  const coordinateParent =
+    layoutWrapper.parentElement;
+
+  const coordinateParentRect =
+    coordinateParent.getBoundingClientRect();
+
+  const coordinateScale =
+    Number(scale) > 0
+      ? Number(scale)
+      : 1;
+
+  // Capture the current rendered height before changing
+  // the layout. Convert it to Canvas coordinate units.
+  const renderedContainerHeight =
+    coordinateParentRect.height /
+    coordinateScale;
+
+  // Measure every direct child before changing layout.
+  // Complete all measurements before submitting updates.
+  const horizontalToFreePadding =
+    Number(
+      getLayoutValue(
+        currentElement,
+        "padding",
         0
-      );
+      )
+    ) || 0;
 
-    const currentHeight =
-      Number(currentElement.height) || 0;
+  const horizontalToFreeGap =
+    Number(
+      getLayoutValue(
+        currentElement,
+        "gap",
+        8
+      )
+    ) || 0;
 
-    const parentUpdates = {
-      ...updates,
-      height: Math.max(
-        currentHeight,
-        Math.ceil(requiredHeight)
-      ),
-    };
+  const parentInnerWidth =
+    coordinateParent.clientWidth /
+    coordinateScale;
 
-    // Apply the new layout and required height through
-    // the existing CanvasContext update path.
-    return updateElement(id, parentUpdates);
+  const horizontalToFreeChildWidth =
+    Math.max(
+      1,
+      parentInnerWidth -
+        horizontalToFreePadding * 2
+    );
 
+  let horizontalToFreeNextY =
+    horizontalToFreePadding;
+
+  const childGeometry =
+    Array.from(layoutWrapper.children)
+      .filter(
+        (node) =>
+          node.hasAttribute(
+            "data-canvas-element-id"
+          )
+      )
+      .map((node) => {
+        const childId =
+          node.getAttribute(
+            "data-canvas-element-id"
+          );
+
+        const child =
+          elements.find(
+            (element) =>
+              String(element.id) ===
+              String(childId)
+          );
+
+        const rect =
+          node.getBoundingClientRect();
+
+        const measuredX =
+          (rect.left - coordinateParentRect.left) /
+            coordinateScale -
+          coordinateParent.clientLeft;
+
+        const measuredY =
+          (rect.top - coordinateParentRect.top) /
+            coordinateScale -
+          coordinateParent.clientTop;
+
+        const savedHeight =
+          Number.isFinite(Number(child?.height)) &&
+          Number(child.height) > 0
+            ? Number(child.height)
+            : rect.height / coordinateScale;
+
+        const targetY =
+          isHorizontalToFreeTransition
+            ? horizontalToFreeNextY
+            : measuredY;
+
+        if (isHorizontalToFreeTransition) {
+          horizontalToFreeNextY +=
+            savedHeight + horizontalToFreeGap;
+        }
+
+        return {
+          id: childId,
+
+          x: isHorizontalToFreeTransition
+            ? horizontalToFreePadding
+            : measuredX,
+
+          y: targetY,
+
+          width: isHorizontalToFreeTransition
+            ? horizontalToFreeChildWidth
+            : rect.width / coordinateScale,
+
+          height: isHorizontalToFreeTransition
+            ? savedHeight
+            : rect.height / coordinateScale,
+
+          measuredX,
+          measuredY,
+        };
+      });
+  // Persist the measured child geometry first.
+  for (const geometry of childGeometry) {
+    updateElement(
+      geometry.id,
+      {
+        x: geometry.x,
+        y: geometry.y,
+        width: geometry.width,
+        height: geometry.height,
+      }
+    );
+  }
+
+  // Find the minimum height needed to contain all
+  // converted children.
+  const requiredHeight =
+    childGeometry.reduce(
+      (maxBottom, geometry) =>
+        Math.max(
+          maxBottom,
+          geometry.y + geometry.height
+        ),
+      0
+    );
+
+  // Preserve the rendered height where possible, while
+  // ensuring every converted child fits inside the parent.
+  const finalContainerHeight =
+    Math.max(
+      Math.ceil(renderedContainerHeight),
+      Math.ceil(requiredHeight)
+    );
+
+  const parentUpdates = {
+    ...updates,
+    height: finalContainerHeight,
   };
+
+  // Use the existing CanvasContext update path.
+  return updateElement(id, parentUpdates);
+};
+
 
 
   const {
@@ -4171,7 +4215,7 @@ if (
 
           isHorizontal,
         }
-      );
+          );
 
           // =================================================
 
@@ -4195,14 +4239,16 @@ if (
 
                   width:
                     isHorizontal
-                      ? childWidth
+                      ? 0
                       : "100%",
 
                   height:
                     childHeight,
 
                   flex:
-                    "0 0 auto",
+                    isHorizontal
+                      ? "1 1 0"
+                      : "1 1 auto",
 
                   maxWidth:
                     "100%",
@@ -4247,64 +4293,14 @@ if (
   // ===================================================
   // TOP LEVEL ELEMENT RENDERER
   // ===================================================
-  console.log(
-  "🔥 CANVAS ELEMENT MODEL",
-  elements
-    .filter(el =>
-      [
-       "confo-chat-test-root-0",
-        "confo-chat-test-create-section-0-2",
-        "confo-chat-test-participants-0-2-2",
-        "confo-chat-test-panel-container-0-7",
-        "confo-chat-test-panel-0-7-0",
-      ].includes(el.id)
-    )
-    .map(el => ({
-      id: el.id,
-      type: el.type,
-      parentId: el.parentId,
-      x: el.x,
-      y: el.y,
-      width: el.width,
-      height: el.height,
-      layout: el.props?.layout,
-      padding: el.props?.padding,
-      gap: el.props?.gap,
-    }))
-);
 
   const renderTopLevelElement =
     (rawElement) => {
 
-          console.log(
-          "🔥 TOP LEVEL ELEMENT",
-          {
-            id: rawElement?.id,
-            type: rawElement?.type,
-            parentId: rawElement?.parentId,
-          }
-        );
       const el =
         clampTopLevelElement(
           rawElement
         );
-
-      console.log(
-        "🔥 TOP LEVEL ELEMENT BEFORE RESOLVE",
-        {
-          id: el.id,
-          type: el.type,
-          props: el.props,
-          parentId:
-            el.parentId,
-          x: el.x,
-          y: el.y,
-          width:
-            el.width,
-          height:
-            el.height,
-        }
-      );
 
       const entry =
         componentRegistry[
