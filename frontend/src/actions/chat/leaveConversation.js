@@ -62,6 +62,11 @@ export default async function leaveConversation(
       false
     );
 
+    ctx?.set?.(
+      "chat.joinedConversationId",
+      null
+    );
+
 
     if (
       conversation

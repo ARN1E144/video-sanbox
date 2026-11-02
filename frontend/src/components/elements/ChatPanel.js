@@ -230,6 +230,27 @@ export default function ChatPanel({
       null
     );
 
+    const [
+    joined,
+    setJoined,
+  ] =
+  useState(
+    runtimeState?.get?.(
+      "chat.joined"
+    ) === true
+  );
+
+
+  const [
+    joinedConversationId,
+    setJoinedConversationId,
+  ] =
+  useState(
+    runtimeState?.get?.(
+      "chat.joinedConversationId"
+    ) || ""
+  );
+
 
   // ===================================================
   // RUNTIME MESSAGE STATE
@@ -372,6 +393,49 @@ export default function ChatPanel({
           "chat.conversationId",
           updateConversation
         );
+
+            const joinedUnsubscribe =
+        runtimeState.subscribe?.(
+          "chat.joined",
+          value => {
+            setJoined(
+              value === true
+            );
+          }
+        );
+
+
+      if (
+        typeof joinedUnsubscribe ===
+        "function"
+      ) {
+        unsubscribers.push(
+          joinedUnsubscribe
+        );
+      }
+
+
+      const joinedConversationIdUnsubscribe =
+        runtimeState.subscribe?.(
+          "chat.joinedConversationId",
+          value => {
+            setJoinedConversationId(
+              value
+                ? String(value)
+                : ""
+            );
+          }
+        );
+
+
+      if (
+        typeof joinedConversationIdUnsubscribe ===
+        "function"
+      ) {
+        unsubscribers.push(
+          joinedConversationIdUnsubscribe
+        );
+      }
 
 
       if (
@@ -651,6 +715,19 @@ export default function ChatPanel({
     conversation?.name ||
     title;
 
+    const conversationStatus =
+    conversation?.status ||
+    runtimeState?.get?.(
+      "chat.conversationStatus"
+    );
+
+
+  const canSend =
+    joined &&
+    joinedConversationId ===
+      conversationId &&
+    conversationStatus === "active";
+
 
   // ===================================================
   // SEND MESSAGE
@@ -684,11 +761,11 @@ export default function ChatPanel({
 
 
       if (
-        !conversationId
+        !canSend
       ) {
 
         setError(
-          "Select or join a conversation before sending a message."
+                    "Join an active conversation before sending a message."
         );
 
         return;
@@ -1264,13 +1341,17 @@ export default function ChatPanel({
           }
 
           placeholder={
-            conversationId
-              ? "Type a message..."
-              : "Select a conversation..."
+            !conversationId
+              ? "Select a conversation..."
+              : canSend
+                ? "Type a message..."
+                : conversationStatus === "closed"
+                  ? "This conversation is closed."
+                  : "Join this conversation to send messages."
           }
 
           disabled={
-            !conversationId ||
+            !canSend ||
             sending
           }
 
@@ -1330,7 +1411,7 @@ export default function ChatPanel({
           }
 
           disabled={
-            !conversationId ||
+            !canSend ||
             !draft.trim() ||
             sending
           }
@@ -1359,7 +1440,7 @@ export default function ChatPanel({
 
             cursor:
               (
-                !conversationId ||
+                !canSend ||
                 !draft.trim() ||
                 sending
               )
@@ -1368,7 +1449,7 @@ export default function ChatPanel({
 
             opacity:
               (
-                !conversationId ||
+                !canSend ||
                 !draft.trim() ||
                 sending
               )

@@ -733,7 +733,20 @@ export default async function createConversation(
   // currently active.
   //
   // ==========================================================
-
+  console.log(
+  "[createConversation] DUPLICATE GUARD STATE",
+  {
+    currentChat,
+    existingConversationId:
+      normaliseId(currentChat?.conversationId) ||
+      normaliseId(currentChat?.id),
+    existingStatus:
+      currentChat?.status,
+    requestedParticipantIds:
+      filteredParticipantIds,
+    projectId,
+  }
+);
   const existingConversationId =
     normaliseId(
       currentChat?.conversationId
@@ -848,6 +861,15 @@ export default async function createConversation(
       "[createConversation] BACKEND RESPONSE",
       data
     );
+
+    console.log(
+    "[createConversation] BACKEND PARTICIPANTS",
+    JSON.stringify(
+      data?.conversation?.participants,
+      null,
+      2
+    )
+  );
 
 
     // ========================================================

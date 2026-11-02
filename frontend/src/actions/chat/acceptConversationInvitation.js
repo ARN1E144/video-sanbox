@@ -87,6 +87,11 @@ export default async function acceptConversationInvitation(
       true
     );
 
+    ctx?.set?.(
+      "chat.joinedConversationId",
+      conversationId
+    );
+
 
     ctx?.emit?.(
       "chat.invitationAccepted",

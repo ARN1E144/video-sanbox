@@ -73,7 +73,10 @@ export default async function closeConversation(
       "chat.joined",
       false
     );
-
+    ctx?.set?.(
+      "chat.joinedConversationId",
+      null
+    );
 
     ctx?.emit?.(
       "chat.conversationClosed",

@@ -386,6 +386,11 @@ export default async function joinConversation(
       true
     );
 
+    ctx?.set?.(
+      "chat.joinedConversationId",
+      conversationId
+    );
+
 
     // =================================================
     // RUNTIME EVENT

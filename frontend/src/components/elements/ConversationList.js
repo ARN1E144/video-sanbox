@@ -374,6 +374,17 @@ export default function ConversationList({
       )
     );
 
+    const initialJoined =
+    runtime.get?.(
+      "chat.joined"
+    ) === true;
+
+  const initialJoinedConversationId =
+    normaliseId(
+      runtime.get?.(
+        "chat.joinedConversationId"
+      )
+    );
 
   // ===================================================
   // LOCAL STATE
@@ -401,6 +412,22 @@ export default function ConversationList({
   ] =
   useState(
     initialProjectId
+  );
+
+    const [
+    joined,
+    setJoined,
+  ] =
+  useState(
+    initialJoined
+  );
+
+  const [
+    joinedConversationId,
+    setJoinedConversationId,
+  ] =
+  useState(
+    initialJoinedConversationId
   );
 
   const [
@@ -505,6 +532,35 @@ export default function ConversationList({
         }
       );
 
+    // -------------------------------------------------
+    // CHAT JOINED
+    // -------------------------------------------------
+
+    const unsubscribeJoined =
+      runtime.subscribe?.(
+        "chat.joined",
+        value => {
+          setJoined(
+            value === true
+          );
+        }
+      );
+
+
+    // -------------------------------------------------
+    // JOINED CONVERSATION ID
+    // -------------------------------------------------
+
+    const unsubscribeJoinedConversationId =
+      runtime.subscribe?.(
+        "chat.joinedConversationId",
+        value => {
+          setJoinedConversationId(
+            normaliseId(value)
+          );
+        }
+      );
+
 
     // -------------------------------------------------
     // PROJECT
@@ -537,6 +593,10 @@ export default function ConversationList({
       unsubscribeConversations?.();
 
       unsubscribeConversationId?.();
+
+      unsubscribeJoined?.();
+
+      unsubscribeJoinedConversationId?.();
 
       unsubscribeProjectId?.();
 
@@ -1459,6 +1519,11 @@ export default function ConversationList({
                 conversationId ===
                 selectedId;
 
+              const conversationJoined =
+                joined &&
+                joinedConversationId ===
+                  conversationId;
+
               const busy =
                 actionConversationId ===
                 conversationId;
@@ -1587,9 +1652,11 @@ export default function ConversationList({
 
                         {invited
                           ? "Invitation"
-                          : selected
-                            ? "Selected"
-                            : "Open"}
+                          : conversationJoined
+                            ? "Joined"
+                            : selected
+                              ? "Viewing"
+                              : "Open"}
 
                       </span>
 

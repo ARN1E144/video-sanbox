@@ -7,6 +7,9 @@ import ChatConversation
 import ChatMessage
   from "../models/chatMessage.js";
 
+import User
+  from "../models/user.js";
+
 import {
   requireAuth,
   getProjectAccess,
@@ -179,36 +182,37 @@ async function requireChatProject(
 // CURRENT USER
 // =====================================================
 
-function getCurrentUser(
-  req
-) {
+async function getCurrentUser(req) {
+  const user = req.user || {};
 
-  const user =
-    req.user ||
-    {};
+  const userId = normaliseId(
+    user.userId || user.id
+  );
 
+  const profile = userId
+    ? await User.findById(userId)
+        .select("firstName lastName email")
+        .lean()
+    : null;
+
+  const fullName = [
+    profile?.firstName,
+    profile?.lastName,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
 
   return {
-
-    userId:
-      normaliseId(
-        user.userId ||
-        user.id
-      ),
-
+    userId,
     name:
-      user.name ||
-      user.displayName ||
-      user.fullName ||
-      user.email ||
-      "Unknown user",
-
+      fullName ||
+      profile?.email ||
+      "Participant",
     email:
-      user.email ||
+      profile?.email ||
       "",
-
   };
-
 }
 
 
@@ -324,7 +328,10 @@ function emitChatEvent(
   conversationId,
   payload = {}
 ) {
-
+  console.log("[CHAT DEBUG] emitChatEvent ENTERED", {
+    event,
+    conversationId,
+  });
   const namespace =
     getChatNamespace(
       req
@@ -338,29 +345,37 @@ function emitChatEvent(
     return;
 
   }
+  const room =
+  getChatRoom(conversationId);
 
+  console.log(
+    "[CHAT DEBUG] Broadcast",
+    {
+      namespace: namespace.name,
+      conversationId: normaliseId(conversationId),
+      room,
+      roomMembers: [
+        ...(namespace.adapter.rooms.get(room) || [])
+      ],
+      connectedSockets: namespace.sockets.size,
+    }
+  );
 
   namespace
-    .to(
-      getChatRoom(
-        conversationId
-      )
-    )
+    .to(room)
     .emit(
       event,
       {
-
         ...payload,
 
         conversationId:
           normaliseId(
             conversationId
           ),
-
       }
     );
 
-}
+  }
 
 
 // =====================================================
@@ -508,7 +523,7 @@ router.get(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
@@ -630,7 +645,7 @@ router.post(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
@@ -942,7 +957,7 @@ router.get(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
@@ -1051,7 +1066,7 @@ router.get(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
@@ -1165,7 +1180,7 @@ router.post(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
@@ -1321,9 +1336,9 @@ router.post(
 
         req,
 
-        conversation._id,
-
         "chat:message",
+
+        conversation._id,
 
         {
 
@@ -1393,7 +1408,7 @@ router.patch(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
@@ -1655,7 +1670,7 @@ router.delete(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
@@ -1855,7 +1870,7 @@ router.post(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
@@ -2031,7 +2046,7 @@ router.post(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
@@ -2153,7 +2168,7 @@ router.post(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
@@ -2324,7 +2339,7 @@ router.post(
 
 
       const currentUser =
-        getCurrentUser(
+        await getCurrentUser(
           req
         );
 
